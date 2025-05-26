@@ -1,0 +1,78 @@
+const express = require("express");
+const {
+    getDashboardStats,
+    getReports,
+    downloadReport,
+    getAllBookings,
+    getBookingById,
+    updateBooking, // Handles ticket upload
+    deleteBooking,
+    sendTicket,
+    getAllUsers,
+    getUserById,
+    createUser,
+    updateUser,
+    deleteUser,
+    createDestination, // Handles image upload
+    updateDestination, // Handles image upload
+    deleteDestination,
+    getSubscribers,
+    sendNewsletter,
+    getAdminProfile,
+    updateAdminProfile
+} = require("../controllers/adminController");
+
+const { protect, authorize } = require("../middleware/auth");
+const upload = require("../middleware/upload"); // Import upload middleware
+
+const router = express.Router();
+
+// All routes below are protected and require admin role
+router.use(protect);
+router.use(authorize("admin"));
+
+// Dashboard & Reports
+router.get("/stats", getDashboardStats);
+router.get("/reports", getReports);
+router.get("/reports/download", downloadReport);
+
+// Booking Management
+router.route("/bookings")
+    .get(getAllBookings);
+router.route("/bookings/:id")
+    .get(getBookingById)
+    // Use upload middleware for the PUT request to handle potential ticket PDF upload
+    // It expects the file field name to be 'ticketPdf'
+    .put(upload.single("ticketPdf"), updateBooking) 
+    .delete(deleteBooking);
+router.post("/bookings/:id/send-ticket", sendTicket);
+
+// User Management
+router.route("/users")
+    .get(getAllUsers)
+    .post(createUser);
+router.route("/users/:id")
+    .get(getUserById)
+    .put(updateUser)
+    .delete(deleteUser);
+
+// Destination Management (CRUD operations)
+router.route("/destinations")
+    // Use upload middleware for POST request to handle potential destination image upload
+    // It expects the file field name to be 'destinationImage'
+    .post(upload.single("destinationImage"), createDestination); 
+router.route("/destinations/:id")
+    // Use upload middleware for PUT request to handle potential destination image upload
+    .put(upload.single("destinationImage"), updateDestination)
+    .delete(deleteDestination); 
+
+// Newsletter Management
+router.get("/newsletter/subscribers", getSubscribers);
+router.post("/newsletter/send", sendNewsletter);
+
+// Admin Profile Management
+router.route("/profile")
+    .get(getAdminProfile)
+    .put(updateAdminProfile);
+
+module.exports = router;
