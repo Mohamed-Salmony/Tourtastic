@@ -77,11 +77,18 @@ app.get("/", (req, res) => {
 
 // Health check endpoint
 app.get("/health", (req, res) => {
-  res.json({
-    status: "healthy",
-    timestamp: new Date().toISOString(),
-    database: mongoose.connection.readyState === 1 ? "connected" : "disconnected"
-  });
+  const healthcheck = {
+    uptime: process.uptime(),
+    status: "UP",
+    timestamp: Date.now()
+  };
+  try {
+    res.send(healthcheck);
+  } catch (e) {
+    healthcheck.status = "DOWN";
+    healthcheck.error = e;
+    res.status(503).send();
+  }
 });
 
 // Error handling middleware
