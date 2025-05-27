@@ -70,24 +70,56 @@ app.use("/api/cart", cartRoutes); // Cart routes
 // Make sure the path is correct relative to where server.js is run
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
+// Serve static files from client build in production
+if (process.env.NODE_ENV === 'production') {
+  // Try serving from client/dist first
+  const clientBuildPath = path.join(__dirname, '..', 'client', 'dist');
+  const publicPath = path.join(__dirname, 'public');
+  
+  console.log('Serving static files from:', clientBuildPath);
+  console.log('Fallback static files from:', publicPath);
+  
+  app.use(express.static(clientBuildPath));
+  app.use(express.static(publicPath)); // Fallback to public directory
+  
+  // Handle SPA routing
+  app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api')) {
+      // Try client/dist/index.html first
+      const clientIndexPath = path.join(clientBuildPath, 'index.html');
+      const publicIndexPath = path.join(publicPath, 'index.html');
+      
+      // Check if client/dist/index.html exists, otherwise use public/index.html
+      if (require('fs').existsSync(clientIndexPath)) {
+        console.log('Serving index.html from:', clientIndexPath);
+        res.sendFile(clientIndexPath);
+      } else {
+        console.log('Serving index.html from:', publicIndexPath);
+        res.sendFile(publicIndexPath);
+      }
+    }
+  });
+}
+
 // Basic route for testing API is running
 app.get("/", (req, res) => {
   res.json({ message: "Welcome to Tourtastic API", status: "running" });
 });
 
 // Health check endpoint
-app.get("/health", (req, res) => {
+app.get("/healthz", (req, res) => {
   const healthcheck = {
     uptime: process.uptime(),
     status: "UP",
-    timestamp: Date.now()
+    timestamp: Date.now(),
+    mongoStatus: mongoose.connection.readyState === 1 ? "Connected" : "Disconnected"
   };
   try {
     res.send(healthcheck);
   } catch (e) {
     healthcheck.status = "DOWN";
     healthcheck.error = e;
-    res.status(503).send();
+    res.status(503).send(healthcheck);
   }
 });
 
