@@ -6,9 +6,7 @@ services:
       npm install && 
       npm run build &&
       cd ../server && 
-      npm install &&
-      mkdir -p public &&
-      cp -r ../client/dist/* public/
+      npm install
     startCommand: NODE_ENV=production cd server && npm start
     envVars:
       - key: NODE_ENV
