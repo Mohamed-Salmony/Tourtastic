@@ -1,28 +1,29 @@
 services:
   - type: web
     name: tourtastic
-    env: node    buildCommand: |
-      cd client &&
-      npm install &&
-      npm run build &&
-      cd ../server &&
-      npm install &&
-      mkdir -p public &&
-      cp -r ../client/dist/* public/
+    env: node
+    buildCommand: |
+      # Install and build client
+      cd client
+      npm install
+      npm run build
+      # Install server dependencies
+      cd ../server
+      npm install
     startCommand: cd server && NODE_ENV=production npm start
-    buildFilter:
-      paths:
-        - server/**/*
-        - client/**/*
-    startCommand: NODE_ENV=production cd server && npm start
     envVars:
       - key: NODE_ENV
         value: production
-    healthCheckPath: /healthz
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+    healthCheckPath: /api/health
     buildFilter:
       paths:
         - client/**/*.{js,jsx,ts,tsx}
         - server/**/*.js
+        - client/public/**/*
     routes:
       - type: rewrite
         source: /*
