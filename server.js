@@ -51,6 +51,11 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 // Basic route for testing API is running
 app.get("/", (req, res) => res.send("Tourtastic API Running"));
 
+// Health check endpoint for Render
+app.get("/healthz", (req, res) => {
+  res.status(200).json({ status: "healthy" });
+});
+
 // Use error handler middleware - MUST be after mounting routes
 app.use(errorHandler);
 
