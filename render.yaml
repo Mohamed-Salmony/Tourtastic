@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: tourtastic
+    env: node    buildCommand: |
+      cd client && 
+      npm install && 
+      npm run build &&
+      cd ../server && 
+      npm install &&
+      mkdir -p public &&
+      cp -r ../client/dist/* public/
+    startCommand: NODE_ENV=production cd server && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+    healthCheckPath: /healthz
+    buildFilter:
+      paths:
+        - client/**/*.{js,jsx,ts,tsx}
+        - server/**/*.js
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
