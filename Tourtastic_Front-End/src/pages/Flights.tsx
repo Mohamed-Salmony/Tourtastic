@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -17,6 +17,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Flight, searchFlights, getSearchResults } from '@/services/flightService';
 import { toast } from '@/hooks/use-toast';
+import { api } from '@/config/api';
 
 // Form schema
 const searchFormSchema = z.object({
@@ -32,6 +33,7 @@ type SearchFormValues = z.infer<typeof searchFormSchema>;
 const Flights = () => {
   const { t } = useTranslation();
   const location = useLocation();
+  const navigate = useNavigate();
   const [hasSearched, setHasSearched] = useState(false);
   const [flights, setFlights] = useState<Flight[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -409,7 +411,56 @@ const Flights = () => {
                           <div>
                             <h4 className="font-medium mb-2">{t('availableSeats', 'Available Seats')}</h4>
                             <p className="text-sm">{flight.availableSeats} {t('seatsLeft', 'seats left')}</p>
-                            <Button className="mt-4 w-full" onClick={() => {/* Add booking logic */}}>
+                            <Button 
+                              className="mt-4 w-full" 
+                              onClick={async () => {
+                                try {
+                                  const bookingData = {
+                                    flightDetails: {
+                                      from: watch('from'),
+                                      to: watch('to'),
+                                      departureDate: watch('departureDate'),
+                                      returnDate: watch('returnDate'),
+                                      passengers: {
+                                        adults: parseInt(watch('passengers')),
+                                        children: 0,
+                                        infants: 0
+                                      },
+                                      selectedFlight: {
+                                        ...flight,
+                                        price: {
+                                          total: flight.price.total,
+                                          currency: 'USD'
+                                        }
+                                      }
+                                    }
+                                  };
+                                  
+                                  // Use the configured api client to create the booking
+                                  const response = await api.post('/flights/book', bookingData);
+                                  
+                                  if (response.data.success) {
+                                    // Show success message
+                                    toast({
+                                      title: t('success', 'Success'),
+                                      description: t('flightAddedToCart', 'Flight added to cart successfully!'),
+                                      variant: 'default',
+                                    });
+                                    
+                                    // Redirect to cart page
+                                    navigate('/cart');
+                                  } else {
+                                    throw new Error(response.data.message || 'Failed to create booking');
+                                  }
+                                } catch (error) {
+                                  console.error('Error creating booking:', error);
+                                  toast({
+                                    title: t('error', 'Error'),
+                                    description: t('bookingError', 'Failed to add flight to cart. Please try again.'),
+                                    variant: 'destructive',
+                                  });
+                                }
+                              }}>
                               {t('continueToBooking', 'Continue to Booking')}
                             </Button>
                           </div>
