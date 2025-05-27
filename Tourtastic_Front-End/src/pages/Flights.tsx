@@ -36,6 +36,7 @@ const Flights = () => {
   const [flights, setFlights] = useState<Flight[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
+  const [selectedFlight, setSelectedFlight] = useState<Flight | null>(null);
 
   const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm<SearchFormValues>({
     resolver: zodResolver(searchFormSchema),
@@ -315,7 +316,13 @@ const Flights = () => {
             <h2 className="text-2xl font-bold mb-6">{t('flightResults', 'Flight Results')}</h2>
             <div className="space-y-4">
               {flights.map((flight) => (
-                <Card key={flight.flightId} className="overflow-hidden hover:shadow-lg transition-shadow">
+                <Card 
+                  key={flight.flightId} 
+                  className={cn(
+                    "overflow-hidden transition-shadow hover:shadow-lg",
+                    selectedFlight?.flightId === flight.flightId && "ring-2 ring-tourtastic-blue"
+                  )}
+                >
                   <CardContent className="p-0">
                     <div className="grid grid-cols-1 md:grid-cols-5 gap-4 p-6">
                       {/* Airline */}
@@ -341,11 +348,6 @@ const Flights = () => {
                             <div className="absolute top-1/2 left-1/2 transform -translate-y-1/2 -translate-x-1/2 bg-white px-2 text-xs text-gray-500">
                               {flight.duration}
                             </div>
-                            {flight.layovers.length > 0 && (
-                              <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 text-xs text-gray-500">
-                                {flight.layovers.length} stop ({flight.layovers.map(l => l.airport).join(', ')})
-                              </div>
-                            )}
                           </div>
                           
                           <div className="text-center">
@@ -355,8 +357,13 @@ const Flights = () => {
                             <p className="text-sm text-gray-500">{flight.arrivalAirport}</p>
                           </div>
                         </div>
-                        <div className="mt-2 text-center text-sm text-gray-500">
-                          {flight.class} {flight.layovers.length === 0 ? t('directFlight', 'Direct Flight') : `${flight.layovers.length} ${t('stop', 'Stop')}`}
+                        <div className="mt-4 text-center space-y-1">
+                          <div className="text-sm text-gray-500">{flight.class}</div>
+                          {flight.layovers.length > 0 && (
+                            <div className="text-xs text-gray-500">
+                              {flight.layovers.length} {t('stop', 'Stop')} ({flight.layovers.map(l => l.airport).join(', ')})
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -368,9 +375,47 @@ const Flights = () => {
 
                       {/* Select Button */}
                       <div className="flex items-center justify-center">
-                        <Button>{t('select', 'Select')}</Button>
+                        <Button 
+                          variant={selectedFlight?.flightId === flight.flightId ? "secondary" : "default"}
+                          onClick={() => setSelectedFlight(selectedFlight?.flightId === flight.flightId ? null : flight)}
+                        >
+                          {selectedFlight?.flightId === flight.flightId ? t('selected', 'Selected') : t('select', 'Select')}
+                        </Button>
                       </div>
                     </div>
+
+                    {/* Booking Details Section */}
+                    {selectedFlight?.flightId === flight.flightId && (
+                      <div className="border-t border-gray-200 p-6 bg-gray-50">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                          <div>
+                            <h4 className="font-medium mb-2">{t('flightDetails', 'Flight Details')}</h4>
+                            <div className="text-sm space-y-1">
+                              <p><span className="text-gray-500">{t('airline', 'Airline')}:</span> {flight.airline}</p>
+                              <p><span className="text-gray-500">{t('flightNumber', 'Flight Number')}:</span> {flight.flightId}</p>
+                              <p><span className="text-gray-500">{t('class', 'Class')}:</span> {flight.class}</p>
+                            </div>
+                          </div>
+                          <div>
+                            <h4 className="font-medium mb-2">{t('priceBreakdown', 'Price Breakdown')}</h4>
+                            <div className="text-sm space-y-1">
+                              <p><span className="text-gray-500">{t('adultPrice', 'Adult Price')}:</span> ${flight.price.adult}</p>
+                              {flight.price.child > 0 && (
+                                <p><span className="text-gray-500">{t('childPrice', 'Child Price')}:</span> ${flight.price.child}</p>
+                              )}
+                              <p className="font-medium pt-1">{t('total', 'Total')}: ${flight.price.total}</p>
+                            </div>
+                          </div>
+                          <div>
+                            <h4 className="font-medium mb-2">{t('availableSeats', 'Available Seats')}</h4>
+                            <p className="text-sm">{flight.availableSeats} {t('seatsLeft', 'seats left')}</p>
+                            <Button className="mt-4 w-full" onClick={() => {/* Add booking logic */}}>
+                              {t('continueToBooking', 'Continue to Booking')}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}

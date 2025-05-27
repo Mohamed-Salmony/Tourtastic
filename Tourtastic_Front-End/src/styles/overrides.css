@@ -1,4 +1,3 @@
-/* Override any unwanted antd styles */
 body :where(.css-5wnjas).ant-popover .ant-popover-content,
 body .ant-popover .ant-popover-content,
 body div[class*='ant-popover'] {
