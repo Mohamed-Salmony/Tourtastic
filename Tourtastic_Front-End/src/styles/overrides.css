@@ -1,0 +1,9 @@
+/* Override any unwanted antd styles */
+body :where(.css-5wnjas).ant-popover .ant-popover-content,
+body .ant-popover .ant-popover-content,
+body div[class*='ant-popover'] {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}

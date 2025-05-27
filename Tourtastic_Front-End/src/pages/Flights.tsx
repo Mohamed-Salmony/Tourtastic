@@ -1,97 +1,22 @@
-import React, { useState } from 'react';
-import Layout from '@/components/layout/Layout';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format } from 'date-fns';
 import { CalendarIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { useTranslation } from 'react-i18next';
-
-// Mock flight data
-const mockFlights = [
-  {
-    id: 'FL001',
-    airline: 'Tourtastic Airlines',
-    logo: 'https://cdn-icons-png.flaticon.com/512/1701/1701211.png',
-    flightNumber: 'TA1234',
-    from: 'New York',
-    to: 'Paris',
-    departureDate: '2023-07-15',
-    departureTime: '08:30',
-    arrivalDate: '2023-07-15',
-    arrivalTime: '20:15',
-    duration: '7h 45m',
-    stops: 0,
-    price: 549,
-  },
-  {
-    id: 'FL002',
-    airline: 'SkyHigh Airways',
-    logo: 'https://cdn-icons-png.flaticon.com/512/3125/3125713.png',
-    flightNumber: 'SH5678',
-    from: 'New York',
-    to: 'Paris',
-    departureDate: '2023-07-15',
-    departureTime: '10:45',
-    arrivalDate: '2023-07-15',
-    arrivalTime: '23:00',
-    duration: '8h 15m',
-    stops: 1,
-    stopCity: 'London',
-    price: 499,
-  },
-  {
-    id: 'FL003',
-    airline: 'Global Connect',
-    logo: 'https://cdn-icons-png.flaticon.com/512/1086/1086215.png',
-    flightNumber: 'GC7890',
-    from: 'New York',
-    to: 'Paris',
-    departureDate: '2023-07-15',
-    departureTime: '14:20',
-    arrivalDate: '2023-07-16',
-    arrivalTime: '02:10',
-    duration: '7h 50m',
-    stops: 0,
-    price: 589,
-  },
-  {
-    id: 'FL004',
-    airline: 'Air Velocity',
-    logo: 'https://cdn-icons-png.flaticon.com/512/3125/3125819.png',
-    flightNumber: 'AV2345',
-    from: 'New York',
-    to: 'Paris',
-    departureDate: '2023-07-15',
-    departureTime: '16:30',
-    arrivalDate: '2023-07-16',
-    arrivalTime: '05:15',
-    duration: '8h 45m',
-    stops: 1,
-    stopCity: 'Amsterdam',
-    price: 475,
-  },
-];
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Flight, searchFlights, getSearchResults } from '@/services/flightService';
+import { toast } from '@/hooks/use-toast';
 
 // Form schema
 const searchFormSchema = z.object({
@@ -106,11 +31,13 @@ type SearchFormValues = z.infer<typeof searchFormSchema>;
 
 const Flights = () => {
   const { t } = useTranslation();
+  const location = useLocation();
   const [hasSearched, setHasSearched] = useState(false);
-  const [flights, setFlights] = useState<typeof mockFlights>([]);
+  const [flights, setFlights] = useState<Flight[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isPolling, setIsPolling] = useState(false);
 
-  const { register, handleSubmit, formState: { errors }, control, setValue, watch } = useForm<SearchFormValues>({
+  const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm<SearchFormValues>({
     resolver: zodResolver(searchFormSchema),
     defaultValues: {
       from: '',
@@ -122,17 +49,111 @@ const Flights = () => {
   const departureDate = watch('departureDate');
   const returnDate = watch('returnDate');
 
-  const onSubmit = async (data: SearchFormValues) => {
-    setIsLoading(true);
-    console.log('Search form data:', data);
+  const pollSearchResults = useCallback(async (searchId: string, maxAttempts = 5) => {
+    setIsPolling(true);
+    let attempts = 0;
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    setFlights(mockFlights);
-    setHasSearched(true);
-    setIsLoading(false);
-  };
+    const poll = async () => {
+      try {
+        const results = await getSearchResults(searchId);
+        if (results.success && results.data.flights.length > 0) {
+          setFlights(results.data.flights);
+          setHasSearched(true);
+          setIsPolling(false);
+          setIsLoading(false);
+        } else if (attempts < maxAttempts) {
+          attempts++;
+          setTimeout(poll, 2000); // Wait 2 seconds before trying again
+        } else {
+          throw new Error('Could not get flight results after multiple attempts');
+        }
+      } catch (error) {
+        setIsPolling(false);
+        setIsLoading(false);
+        toast({
+          title: t('error', 'Error'),
+          description: t('flightSearchError', 'Failed to fetch flight results. Please try again.'),
+          variant: 'destructive',
+        });
+      }
+    };
+
+    await poll();
+  }, [t]);
+
+  const onSubmit = useCallback(async (data: SearchFormValues) => {
+    try {
+      setIsLoading(true);
+      
+      const searchParams = {
+        from: data.from,
+        to: data.to,
+        departureDate: data.departureDate.toISOString(),
+        returnDate: data.returnDate?.toISOString(),
+        adults: parseInt(data.passengers),
+        children: 0,
+        infants: 0,
+      };
+
+      const response = await searchFlights(searchParams);
+      
+      if (response.success && response.data.searchId) {
+        await pollSearchResults(response.data.searchId);
+      } else {
+        throw new Error('Search initialization failed');
+      }
+    } catch (error) {
+      setIsLoading(false);
+      toast({
+        title: t('error', 'Error'),
+        description: t('flightSearchError', 'Failed to search for flights. Please try again.'),
+        variant: 'destructive',
+      });
+    }
+  }, [pollSearchResults, t]);
+
+  // Handle search params from home page
+  useEffect(() => {
+    if (location.state) {
+      const { from, to, departureDate: departureDateParam, returnDate: returnDateParam, passengers } = location.state;
+      if (from) setValue('from', from);
+      if (to) setValue('to', to);
+      if (departureDateParam) setValue('departureDate', new Date(departureDateParam));
+      if (returnDateParam) setValue('returnDate', new Date(returnDateParam));
+      if (passengers) setValue('passengers', passengers);
+
+      // Auto submit if we have all required fields
+      if (from && to && departureDateParam) {
+        const formData = {
+          from,
+          to,
+          departureDate: new Date(departureDateParam),
+          returnDate: returnDateParam ? new Date(returnDateParam) : undefined,
+          passengers: passengers || '1',
+        };
+        onSubmit(formData);
+      }
+    }
+  }, [location.state, setValue, onSubmit]);
+
+  useEffect(() => {
+    // Check if there are saved search parameters in the URL
+    const params = new URLSearchParams(location.search);
+    const from = params.get('from');
+    const to = params.get('to');
+    const departureDateParam = params.get('departureDate');
+    const returnDateParam = params.get('returnDate');
+    const passengers = params.get('passengers');
+
+    if (from && to && departureDateParam && passengers) {
+      // If all required parameters are present, set them in the form
+      setValue('from', from);
+      setValue('to', to);
+      setValue('departureDate', new Date(departureDateParam));
+      setValue('returnDate', returnDateParam ? new Date(returnDateParam) : null);
+      setValue('passengers', passengers);
+    }
+  }, [location.search, setValue]);
 
   return (
     <Layout>
@@ -263,7 +284,7 @@ const Flights = () => {
                 )}
               </div>
 
-              {/* Search Button (full width on mobile, normal on desktop) */}
+              {/* Search Button */}
               <div className="mt-6 col-span-1 md:col-span-2 lg:col-span-5">
                 <Button 
                   type="submit" 
@@ -283,26 +304,25 @@ const Flights = () => {
         {isLoading ? (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-tourtastic-blue mx-auto mb-4"></div>
-            <p className="text-lg font-medium">{t('searchingForBestFlights', 'Searching for the best flights...')}</p>
+            <p className="text-lg font-medium">
+              {isPolling 
+                ? t('processingResults', 'Processing your search results...')
+                : t('searchingForBestFlights', 'Searching for the best flights...')}
+            </p>
           </div>
         ) : hasSearched ? (
           <>
             <h2 className="text-2xl font-bold mb-6">{t('flightResults', 'Flight Results')}</h2>
             <div className="space-y-4">
               {flights.map((flight) => (
-                <Card key={flight.id} className="overflow-hidden hover:shadow-lg transition-shadow">
+                <Card key={flight.flightId} className="overflow-hidden hover:shadow-lg transition-shadow">
                   <CardContent className="p-0">
                     <div className="grid grid-cols-1 md:grid-cols-5 gap-4 p-6">
                       {/* Airline */}
                       <div className="flex items-center">
-                        <img 
-                          src={flight.logo} 
-                          alt={flight.airline} 
-                          className="h-10 w-10 mr-3" 
-                        />
                         <div>
                           <p className="font-bold">{flight.airline}</p>
-                          <p className="text-sm text-gray-500">{flight.flightNumber}</p>
+                          <p className="text-sm text-gray-500">{flight.flightId}</p>
                         </div>
                       </div>
 
@@ -310,8 +330,10 @@ const Flights = () => {
                       <div className="col-span-2 flex flex-col justify-center">
                         <div className="flex justify-between items-center">
                           <div className="text-center">
-                            <p className="font-bold text-lg">{flight.departureTime}</p>
-                            <p className="text-sm text-gray-500">{flight.from}</p>
+                            <p className="font-bold text-lg">
+                              {new Date(flight.departureTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                            <p className="text-sm text-gray-500">{flight.departureAirport}</p>
                           </div>
                           
                           <div className="flex-1 mx-4 relative">
@@ -319,26 +341,28 @@ const Flights = () => {
                             <div className="absolute top-1/2 left-1/2 transform -translate-y-1/2 -translate-x-1/2 bg-white px-2 text-xs text-gray-500">
                               {flight.duration}
                             </div>
-                            {flight.stops > 0 && (
-                              <div className="absolute bottom-0 left-1/2 transform translate-x(-50%) text-xs text-gray-500">
-                                {flight.stops} stop ({flight.stopCity})
+                            {flight.layovers.length > 0 && (
+                              <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 text-xs text-gray-500">
+                                {flight.layovers.length} stop ({flight.layovers.map(l => l.airport).join(', ')})
                               </div>
                             )}
                           </div>
                           
                           <div className="text-center">
-                            <p className="font-bold text-lg">{flight.arrivalTime}</p>
-                            <p className="text-sm text-gray-500">{flight.to}</p>
+                            <p className="font-bold text-lg">
+                              {new Date(flight.arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                            <p className="text-sm text-gray-500">{flight.arrivalAirport}</p>
                           </div>
                         </div>
                         <div className="mt-2 text-center text-sm text-gray-500">
-                          {flight.stops === 0 ? t('directFlight', 'Direct Flight') : `${flight.stops} ${t('stop', 'Stop')}`}
+                          {flight.class} {flight.layovers.length === 0 ? t('directFlight', 'Direct Flight') : `${flight.layovers.length} ${t('stop', 'Stop')}`}
                         </div>
                       </div>
 
                       {/* Price */}
                       <div className="flex flex-col justify-center items-center">
-                        <p className="font-bold text-lg text-tourtastic-blue">${flight.price}</p>
+                        <p className="font-bold text-lg text-tourtastic-blue">${flight.price.total}</p>
                         <p className="text-sm text-gray-500">{t('perPerson', 'per person')}</p>
                       </div>
 
