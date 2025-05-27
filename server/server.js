@@ -50,7 +50,7 @@ app.use(express.json({ limit: '10mb' }));
 // Enable CORS with specific options
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
-    ? 'https://tourtastic-vxo1.onrender.com'
+    ? process.env.CORS_ORIGIN
     : ['http://localhost:5173', 'http://localhost:8080', 'http://127.0.0.1:8080'], // Development ports
   credentials: true, // Allow cookies if you're using sessions
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -78,29 +78,9 @@ app.use("/api/cart", cartRoutes); // Cart routes
 // Serve static files from the uploads directory (e.g., for destination images)
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Serve static files in production
+// In production, the frontend will be served from a different service
 if (process.env.NODE_ENV === 'production') {
-  // Define paths for static files
-  const clientBuildPath = path.join(__dirname, '../client/dist');
-  
-  console.log('Attempting to serve static files from:', clientBuildPath);
-  
-  // Configure security for static files
-  app.use(
-    helmet({
-      contentSecurityPolicy: false,
-      crossOriginEmbedderPolicy: false,
-      crossOriginResourcePolicy: false
-    })
-  );
-  
-  // Serve static files from the client build directory
-  app.use(express.static(clientBuildPath));
-  
-  // Handle client-side routing - make sure this route doesn't conflict with API routes
-  app.get(/^(?!\/api|\/healthz|\/uploads).*/, (req, res) => {
-    res.sendFile(path.join(clientBuildPath, 'index.html'));
-  });
+  logger.info('Running in production mode - API only');
 }
 
 // Health check endpoint
