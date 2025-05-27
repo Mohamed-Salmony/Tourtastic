@@ -72,25 +72,49 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Serve static files from client build in production
 if (process.env.NODE_ENV === 'production') {
-  const clientBuildPath = path.resolve(__dirname, '..', 'client', 'dist');
+  // Define paths for static files
+  const publicPath = path.join(__dirname, 'public');
+  const indexPath = path.join(publicPath, 'index.html');
   
-  console.log('Serving static files from:', clientBuildPath);
+  // Check if public directory exists
+  if (!require('fs').existsSync(publicPath)) {
+    console.error('Public directory not found at:', publicPath);
+    throw new Error('Public directory not found. Please check the deployment configuration.');
+  }
+  
+  console.log('Serving static files from:', publicPath);
+  
+  // Configure security for static files
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false,
+      crossOriginResourcePolicy: false
+    })
+  );
   
   // Serve static files
-  app.use(express.static(clientBuildPath));
+  app.use(express.static(publicPath, {
+    maxAge: '1d',
+    index: false // Don't serve index.html automatically
+  }));
   
-  // API routes are handled above
-  // For all non-API routes, serve index.html
-  app.use((req, res, next) => {
-    if (req.url.startsWith('/api/')) {
+  // Handle all non-API routes
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/')) {
       return next();
     }
     
-    const indexPath = path.join(clientBuildPath, 'index.html');
+    // Check if index.html exists
+    if (!require('fs').existsSync(indexPath)) {
+      console.error('index.html not found at:', indexPath);
+      return res.status(404).send('Application files not found. Please check the deployment.');
+    }
+    
     res.sendFile(indexPath, err => {
       if (err) {
-        console.error('Error serving index.html:', err);
-        res.status(500).send('Internal server error');
+        console.error('Error serving index.html:', err, 'Path:', indexPath);
+        res.status(500).send('Error loading application');
       }
     });
   });
