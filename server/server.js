@@ -57,6 +57,15 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
 // Mount routers
 app.use("/api/auth", authRoutes);
 app.use("/api/destinations", destinationRoutes);
@@ -67,22 +76,14 @@ app.use("/api/admin", adminRoutes); // Admin routes
 app.use("/api/cart", cartRoutes); // Cart routes
 
 // Serve static files from the uploads directory (e.g., for destination images)
-// Make sure the path is correct relative to where server.js is run
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Serve static files from client build in production
+// Serve static files in production
 if (process.env.NODE_ENV === 'production') {
   // Define paths for static files
-  const publicPath = path.join(__dirname, 'public');
-  const indexPath = path.join(publicPath, 'index.html');
+  const clientBuildPath = path.join(__dirname, '../client/dist');
   
-  // Check if public directory exists
-  if (!require('fs').existsSync(publicPath)) {
-    console.error('Public directory not found at:', publicPath);
-    throw new Error('Public directory not found. Please check the deployment configuration.');
-  }
-  
-  console.log('Serving static files from:', publicPath);
+  console.log('Attempting to serve static files from:', clientBuildPath);
   
   // Configure security for static files
   app.use(
@@ -93,30 +94,12 @@ if (process.env.NODE_ENV === 'production') {
     })
   );
   
-  // Serve static files
-  app.use(express.static(publicPath, {
-    maxAge: '1d',
-    index: false // Don't serve index.html automatically
-  }));
+  // Serve static files from the client build directory
+  app.use(express.static(clientBuildPath));
   
-  // Handle all non-API routes
-  app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api/')) {
-      return next();
-    }
-    
-    // Check if index.html exists
-    if (!require('fs').existsSync(indexPath)) {
-      console.error('index.html not found at:', indexPath);
-      return res.status(404).send('Application files not found. Please check the deployment.');
-    }
-    
-    res.sendFile(indexPath, err => {
-      if (err) {
-        console.error('Error serving index.html:', err, 'Path:', indexPath);
-        res.status(500).send('Error loading application');
-      }
-    });
+  // Handle client-side routing
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(clientBuildPath, 'index.html'));
   });
 }
 
