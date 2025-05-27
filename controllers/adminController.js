@@ -436,3 +436,238 @@ exports.updateAdminProfile = asyncHandler(async (req, res, next) => {
 
     res.status(200).json({ success: true, data: userResponse });
 });
+
+// --- Flight Booking Management ---
+
+// @desc    Get all flight bookings (Admin)
+// @route   GET /api/admin/flight-bookings
+// @access  Private/Admin
+exports.getAllFlightBookings = asyncHandler(async (req, res, next) => {
+  const { status, search } = req.query;
+  
+  let query = {};
+  
+  // Filter by status if provided
+  if (status) {
+    query.status = status;
+  }
+
+  // Search by booking ID, customer name, or email
+  if (search) {
+    query.$or = [
+      { bookingId: { $regex: search, $options: 'i' } },
+      { customerName: { $regex: search, $options: 'i' } },
+      { customerEmail: { $regex: search, $options: 'i' } }
+    ];
+  }
+
+  const bookings = await FlightBooking.find(query)
+    .sort({ createdAt: -1 });
+
+  res.status(200).json({
+    success: true,
+    count: bookings.length,
+    data: bookings
+  });
+});
+
+// @desc    Get single flight booking (Admin)
+// @route   GET /api/admin/flight-bookings/:bookingId
+// @access  Private/Admin
+exports.getFlightBookingById = asyncHandler(async (req, res, next) => {
+  const booking = await FlightBooking.findOne({ bookingId: req.params.bookingId });
+
+  if (!booking) {
+    return res.status(404).json({
+      success: false,
+      message: "Booking not found"
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    data: booking
+  });
+});
+
+// @desc    Update flight booking (Admin)
+// @route   PUT /api/admin/flight-bookings/:bookingId
+// @access  Private/Admin
+exports.updateFlightBooking = asyncHandler(async (req, res, next) => {
+  const booking = await FlightBooking.findOne({ bookingId: req.params.bookingId });
+
+  if (!booking) {
+    return res.status(404).json({
+      success: false,
+      message: "Booking not found"
+    });
+  }
+
+  const {
+    status,
+    adminData,
+    ticketDetails,
+    paymentDetails
+  } = req.body;
+
+  // Update admin data if provided
+  if (adminData) {
+    booking.adminData = {
+      ...booking.adminData,
+      ...adminData
+    };
+  }
+
+  // Update ticket details if provided
+  if (ticketDetails) {
+    booking.ticketDetails = {
+      ...booking.ticketDetails,
+      ...ticketDetails
+    };
+  }
+
+  // Update payment details if provided
+  if (paymentDetails) {
+    booking.paymentDetails = {
+      ...booking.paymentDetails,
+      ...paymentDetails
+    };
+  }
+
+  // Update status and add to timeline if status changed
+  if (status && status !== booking.status) {
+    booking.status = status;
+    booking.timeline.push({
+      status,
+      date: new Date(),
+      notes: req.body.notes || `Status updated to ${status}`,
+      updatedBy: req.user.name
+    });
+  }
+
+  booking.updatedAt = Date.now();
+  await booking.save();
+
+  res.status(200).json({
+    success: true,
+    data: booking
+  });
+});
+
+// @desc    Upload ticket document
+// @route   POST /api/admin/flight-bookings/:bookingId/upload-ticket
+// @access  Private/Admin
+exports.uploadFlightTicket = asyncHandler(async (req, res, next) => {
+  const booking = await FlightBooking.findOne({ bookingId: req.params.bookingId });
+
+  if (!booking) {
+    return res.status(404).json({
+      success: false,
+      message: "Booking not found"
+    });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      message: "Please upload a ticket file"
+    });
+  }
+
+  // Store the ticket file path
+  booking.ticketDetails.eTicketPath = req.file.path.replace(/^\.\//, '');
+  
+  // Add to additional documents if specified
+  if (req.body.addToDocuments) {
+    booking.ticketDetails.additionalDocuments.push({
+      name: req.file.originalname,
+      path: req.file.path.replace(/^\.\//, ''),
+      uploadedAt: new Date()
+    });
+  }
+
+  // Update timeline
+  booking.timeline.push({
+    status: booking.status,
+    date: new Date(),
+    notes: "E-ticket uploaded",
+    updatedBy: req.user.name
+  });
+
+  await booking.save();
+
+  res.status(200).json({
+    success: true,
+    data: booking
+  });
+});
+
+// @desc    Send ticket to customer
+// @route   POST /api/admin/flight-bookings/:bookingId/send-ticket
+// @access  Private/Admin
+exports.sendFlightTicket = asyncHandler(async (req, res, next) => {
+  const booking = await FlightBooking.findOne({ bookingId: req.params.bookingId });
+
+  if (!booking) {
+    return res.status(404).json({
+      success: false,
+      message: "Booking not found"
+    });
+  }
+
+  if (!booking.ticketDetails.eTicketPath) {
+    return res.status(400).json({
+      success: false,
+      message: "No e-ticket found for this booking"
+    });
+  }
+
+  const emailContent = `Dear ${booking.customerName},
+
+Your flight ticket for booking ${booking.bookingId} is attached.
+
+Flight Details:
+From: ${booking.flightDetails.from}
+To: ${booking.flightDetails.to}
+Date: ${new Date(booking.flightDetails.departureDate).toLocaleDateString()}
+${booking.flightDetails.returnDate ? `Return: ${new Date(booking.flightDetails.returnDate).toLocaleDateString()}` : ''}
+
+If you have any questions, please contact us.
+
+Best regards,
+Tourtastic Team`;
+
+  try {
+    await sendEmail({
+      to: booking.customerEmail,
+      subject: `Your Flight Ticket - Booking ${booking.bookingId}`,
+      text: emailContent,
+      attachments: [{
+        filename: `ticket_${booking.bookingId}.pdf`,
+        path: path.join(__dirname, '..', booking.ticketDetails.eTicketPath)
+      }]
+    });
+
+    // Update timeline
+    booking.timeline.push({
+      status: booking.status,
+      date: new Date(),
+      notes: "Ticket sent to customer",
+      updatedBy: req.user.name
+    });
+
+    await booking.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Ticket sent successfully",
+      data: booking
+    });
+  } catch (error) {
+    console.error("Send Flight Ticket Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to send ticket email"
+    });
+  }
+});

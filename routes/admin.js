@@ -19,7 +19,12 @@ const {
     getSubscribers,
     sendNewsletter,
     getAdminProfile,
-    updateAdminProfile
+    updateAdminProfile,
+    getAllFlightBookings,
+    getFlightBookingById,
+    updateFlightBooking,
+    uploadFlightTicket,
+    sendFlightTicket
 } = require("../controllers/adminController");
 
 const { protect, authorize } = require("../middleware/auth");
@@ -74,5 +79,21 @@ router.post("/newsletter/send", sendNewsletter);
 router.route("/profile")
     .get(getAdminProfile)
     .put(updateAdminProfile);
+
+// Flight Booking Management
+router.route("/flight-bookings")
+    .get(getAllFlightBookings);
+
+router.route("/flight-bookings/:bookingId")
+    .get(getFlightBookingById)
+    .put(updateFlightBooking);
+
+router.post(
+    "/flight-bookings/:bookingId/upload-ticket",
+    upload.single("ticketFile"),
+    uploadFlightTicket
+);
+
+router.post("/flight-bookings/:bookingId/send-ticket", sendFlightTicket);
 
 module.exports = router;

@@ -18,15 +18,21 @@ const bookingRoutes = require("./routes/bookings");
 const newsletterRoutes = require("./routes/newsletter");
 const flightRoutes = require("./routes/flights");
 const adminRoutes = require("./routes/admin");
-const webhookRoutes = require("./routes/webhook");
 
 const app = express();
 
 // Body parser middleware
 app.use(express.json());
 
-// Enable CORS - Configure appropriately for your frontend URL in production
-app.use(cors());
+// Enable CORS with specific options
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? 'https://your-production-domain.com'  // Replace with your production domain
+    : ['http://localhost:8080', 'http://127.0.0.1:8080'], // Vite dev server ports
+  credentials: true, // Allow cookies if you're using sessions
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 // Mount routers
 app.use("/api/auth", authRoutes);
@@ -35,7 +41,6 @@ app.use("/api/bookings", bookingRoutes);
 app.use("/api/newsletter", newsletterRoutes);
 app.use("/api/flights", flightRoutes); // Seeru Proxy
 app.use("/api/admin", adminRoutes); // Admin routes
-app.use("/api/webhook", webhookRoutes);
 
 // Serve static files from the uploads directory (e.g., for destination images)
 // Make sure the path is correct relative to where server.js is run
