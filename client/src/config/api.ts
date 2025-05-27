@@ -1,9 +1,7 @@
 import axios from 'axios';
 
 // Define base URL based on environment
-export const baseURL = import.meta.env.PROD 
-  ? 'https://your-production-domain.com/api'  // Replace with your production API URL
-  : '/api'; // Will use Vite's proxy in development
+export const baseURL = import.meta.env.VITE_API_BASE_URL || '/api'; // Use environment variable or fallback to proxy in development
 
 // Create axios instance with default config
 export const api = axios.create({
