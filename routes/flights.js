@@ -2,15 +2,24 @@ const express = require("express");
 const {
   searchFlights,
   getSearchResults,
+  createFlightBooking,
+  getUserFlightBookings,
+  getFlightBooking,
+  cancelFlightBooking
 } = require("../controllers/flightController");
 
-// Optional: Add protect middleware if flight search should be restricted to logged-in users
-// const { protect } = require("../middleware/auth");
+const { protect } = require("../middleware/auth");
 
 const router = express.Router();
 
-// Example: Making search public, but could add protect middleware
+// Public routes for searching flights
 router.get("/search", searchFlights);
 router.get("/results/:search_id", getSearchResults);
+
+// Protected routes for managing bookings
+router.post("/book", protect, createFlightBooking);
+router.get("/bookings", protect, getUserFlightBookings);
+router.get("/bookings/:bookingId", protect, getFlightBooking);
+router.put("/bookings/:bookingId/cancel", protect, cancelFlightBooking);
 
 module.exports = router;
