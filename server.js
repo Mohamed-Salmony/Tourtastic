@@ -27,9 +27,9 @@ app.use(express.json());
 
 // Enable CORS with specific options
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? 'https://your-production-domain.com'  // Replace with your production domain
-    : ['http://localhost:8080', 'http://127.0.0.1:8080'], // Vite dev server ports
+  origin: process.env.NODE_ENV === 'production'
+    ? ['https://tourtastic-frontend.onrender.com', 'https://tourtastic.onrender.com']
+    : ['http://localhost:5173', 'http://localhost:8080', 'http://127.0.0.1:8080'], // Development ports
   credentials: true, // Allow cookies if you're using sessions
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
