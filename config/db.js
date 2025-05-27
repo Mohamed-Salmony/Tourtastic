@@ -3,11 +3,7 @@ require('dotenv').config();
 
 const connectDB = async () => {
   try {
-    await mongoose.connect(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      // Mongoose 6 doesn't require useCreateIndex or useFindAndModify
-    });
+    await mongoose.connect(process.env.MONGODB_URI);
     console.log('MongoDB Connected...');
   } catch (err) {
     console.error('MongoDB connection error:', err.message);
