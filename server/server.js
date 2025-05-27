@@ -50,7 +50,7 @@ app.use(express.json({ limit: '10mb' }));
 // Enable CORS with specific options
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
-    ? ['https://tourtastic-vxo1.onrender.com', 'https://tourtastic-vxo1.onrender.com']
+    ? 'https://tourtastic-vxo1.onrender.com'
     : ['http://localhost:5173', 'http://localhost:8080', 'http://127.0.0.1:8080'], // Development ports
   credentials: true, // Allow cookies if you're using sessions
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -72,31 +72,34 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Serve static files from client build in production
 if (process.env.NODE_ENV === 'production') {
-  // Try serving from client/dist first
   const clientBuildPath = path.join(__dirname, '..', 'client', 'dist');
   const publicPath = path.join(__dirname, 'public');
   
   console.log('Serving static files from:', clientBuildPath);
   console.log('Fallback static files from:', publicPath);
   
+  // Serve static files
   app.use(express.static(clientBuildPath));
-  app.use(express.static(publicPath)); // Fallback to public directory
+  app.use(express.static(publicPath));
   
-  // Handle SPA routing
-  app.get('*', (req, res) => {
-    if (!req.path.startsWith('/api')) {
-      // Try client/dist/index.html first
-      const clientIndexPath = path.join(clientBuildPath, 'index.html');
-      const publicIndexPath = path.join(publicPath, 'index.html');
-      
-      // Check if client/dist/index.html exists, otherwise use public/index.html
-      if (require('fs').existsSync(clientIndexPath)) {
-        console.log('Serving index.html from:', clientIndexPath);
-        res.sendFile(clientIndexPath);
-      } else {
-        console.log('Serving index.html from:', publicIndexPath);
-        res.sendFile(publicIndexPath);
-      }
+  // API routes are handled above
+  // For all other routes, serve the index.html
+  app.get('/*', (req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+    
+    try {
+      const indexPath = path.join(clientBuildPath, 'index.html');
+      res.sendFile(indexPath, (err) => {
+        if (err) {
+          console.error('Error sending index.html:', err);
+          res.status(500).send('Error loading application');
+        }
+      });
+    } catch (err) {
+      console.error('Error in catch block:', err);
+      res.status(500).send('Error loading application');
     }
   });
 }
