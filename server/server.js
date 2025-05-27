@@ -97,8 +97,8 @@ if (process.env.NODE_ENV === 'production') {
   // Serve static files from the client build directory
   app.use(express.static(clientBuildPath));
   
-  // Handle client-side routing
-  app.get('*', (req, res) => {
+  // Handle client-side routing - make sure this route doesn't conflict with API routes
+  app.get(/^(?!\/api|\/healthz|\/uploads).*/, (req, res) => {
     res.sendFile(path.join(clientBuildPath, 'index.html'));
   });
 }
