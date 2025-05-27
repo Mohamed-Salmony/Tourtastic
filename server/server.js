@@ -72,42 +72,29 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Serve static files from client build in production
 if (process.env.NODE_ENV === 'production') {
-  const clientBuildPath = path.join(__dirname, '..', 'client', 'dist');
-  const publicPath = path.join(__dirname, 'public');
+  const clientBuildPath = path.resolve(__dirname, '..', 'client', 'dist');
   
   console.log('Serving static files from:', clientBuildPath);
-  console.log('Fallback static files from:', publicPath);
   
   // Serve static files
   app.use(express.static(clientBuildPath));
-  app.use(express.static(publicPath));
   
   // API routes are handled above
-  // For all other routes, serve the index.html
-  app.get('/*', (req, res, next) => {
-    if (req.path.startsWith('/api')) {
+  // For all non-API routes, serve index.html
+  app.use((req, res, next) => {
+    if (req.url.startsWith('/api/')) {
       return next();
     }
     
-    try {
-      const indexPath = path.join(clientBuildPath, 'index.html');
-      res.sendFile(indexPath, (err) => {
-        if (err) {
-          console.error('Error sending index.html:', err);
-          res.status(500).send('Error loading application');
-        }
-      });
-    } catch (err) {
-      console.error('Error in catch block:', err);
-      res.status(500).send('Error loading application');
-    }
+    const indexPath = path.join(clientBuildPath, 'index.html');
+    res.sendFile(indexPath, err => {
+      if (err) {
+        console.error('Error serving index.html:', err);
+        res.status(500).send('Internal server error');
+      }
+    });
   });
 }
-
-// Basic route for testing API is running
-app.get("/", (req, res) => {
-  res.json({ message: "Welcome to Tourtastic API", status: "running" });
-});
 
 // Health check endpoint
 app.get("/healthz", (req, res) => {
