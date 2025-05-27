@@ -18,6 +18,7 @@ const bookingRoutes = require("./routes/bookings");
 const newsletterRoutes = require("./routes/newsletter");
 const flightRoutes = require("./routes/flights");
 const adminRoutes = require("./routes/admin");
+const cartRoutes = require("./routes/cart");
 
 const app = express();
 
@@ -41,6 +42,7 @@ app.use("/api/bookings", bookingRoutes);
 app.use("/api/newsletter", newsletterRoutes);
 app.use("/api/flights", flightRoutes); // Seeru Proxy
 app.use("/api/admin", adminRoutes); // Admin routes
+app.use("/api/cart", cartRoutes); // Cart routes
 
 // Serve static files from the uploads directory (e.g., for destination images)
 // Make sure the path is correct relative to where server.js is run
