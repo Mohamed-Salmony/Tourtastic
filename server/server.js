@@ -50,7 +50,7 @@ app.use(express.json({ limit: '10mb' }));
 // Enable CORS with specific options
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
-    ? ['https://tourtastic-frontend.onrender.com', 'https://tourtastic.onrender.com']
+    ? ['https://tourtastic-vxo1.onrender.com', 'https://tourtastic-vxo1.onrender.com']
     : ['http://localhost:5173', 'http://localhost:8080', 'http://127.0.0.1:8080'], // Development ports
   credentials: true, // Allow cookies if you're using sessions
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
