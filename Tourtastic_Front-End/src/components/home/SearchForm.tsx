@@ -26,9 +26,18 @@ const SearchForm: React.FC = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Here we'd normally handle the form data
-    // For demo purposes, just navigate to the flights page
-    handleAuthenticatedAction(() => navigate('/flights'));
+    // Navigate to flights page with search params using authenticated action
+    handleAuthenticatedAction(() => {
+      navigate('/flights', {
+        state: {
+          from,
+          to,
+          departureDate,
+          returnDate,
+          passengers
+        }
+      });
+    });
   };
 
   return (
