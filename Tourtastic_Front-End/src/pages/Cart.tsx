@@ -1,11 +1,11 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Loader2 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,61 +15,50 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { toast } from 'sonner';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cartService, CartItem } from '@/services/cartService';
 
-// Mock cart data
-const mockCartItems = [
-  {
-    id: 'item1',
-    type: 'flight',
-    name: 'Round Trip Flight: New York to Paris',
-    image: 'https://cdn-icons-png.flaticon.com/512/3125/3125713.png',
-    details: 'SkyHigh Airways - May 15, 2023',
-    price: 549,
-    quantity: 2,
-  },
-  {
-    id: 'item2',
-    type: 'hotel',
-    name: 'Grand Hotel Paris',
-    image: 'https://cdn-icons-png.flaticon.com/512/2933/2933772.png',
-    details: '4 nights, Deluxe Room - May 15-19, 2023',
-    price: 899,
-    quantity: 1,
-  },
-  {
-    id: 'item3',
-    type: 'tour',
-    name: 'Paris City Tour',
-    image: 'https://cdn-icons-png.flaticon.com/512/3774/3774073.png',
-    details: 'Full Day Tour - May 16, 2023',
-    price: 89,
-    quantity: 2,
-  },
-];
-
-// Payment form schema
-const paymentSchema = z.object({
-  cardholderName: z.string().min(3, { message: "Cardholder name is required" }),
-  cardNumber: z.string().regex(/^\d{16}$/, { message: "Card number must be 16 digits" }),
-  expiryDate: z.string().regex(/^\d{2}\/\d{2}$/, { message: "Expiry date must be in MM/YY format" }),
-  cvc: z.string().regex(/^\d{3,4}$/, { message: "CVC must be 3 or 4 digits" }),
-});
-
-type PaymentFormValues = z.infer<typeof paymentSchema>;
+// Remove payment schema since we're not using it anymore
 
 const Cart = () => {
-  const [cartItems, setCartItems] = useState(mockCartItems);
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   
-  const handleRemoveItem = (id: string) => {
-    setCartItems(cartItems.filter(item => item.id !== id));
+  useEffect(() => {
+    loadCartItems();
+  }, []);
+
+  const loadCartItems = async () => {
+    try {
+      const items = await cartService.getCartItems();
+      setCartItems(items);
+    } catch (error) {
+      toast.error('Failed to load cart items');
+    } finally {
+      setIsLoading(false);
+    }
   };
   
-  const handleUpdateQuantity = (id: string, newQuantity: number) => {
+  const handleRemoveItem = async (id: string) => {
+    try {
+      await cartService.removeFromCart(id);
+      setCartItems(cartItems.filter(item => item.id !== id));
+      toast.success('Item removed from cart');
+    } catch (error) {
+      toast.error('Failed to remove item');
+    }
+  };
+
+  const handleUpdateQuantity = async (id: string, newQuantity: number) => {
     if (newQuantity < 1) return;
-    setCartItems(cartItems.map(item => 
-      item.id === id ? { ...item, quantity: newQuantity } : item
-    ));
+    try {
+      await cartService.updateQuantity(id, newQuantity);
+      setCartItems(cartItems.map(item => 
+        item.id === id ? { ...item, quantity: newQuantity } : item
+      ));
+    } catch (error) {
+      toast.error('Failed to update quantity');
+    }
   };
   
   // Calculate totals
@@ -79,24 +68,6 @@ const Cart = () => {
   
   // Check if cart is empty
   const isCartEmpty = cartItems.length === 0;
-
-  // Payment form
-  const form = useForm<PaymentFormValues>({
-    resolver: zodResolver(paymentSchema),
-    defaultValues: {
-      cardholderName: '',
-      cardNumber: '',
-      expiryDate: '',
-      cvc: '',
-    },
-  });
-
-  const onSubmit = (data: PaymentFormValues) => {
-    console.log('Payment data:', data);
-    toast.success('Payment processed successfully!');
-    setIsCheckoutOpen(false);
-    // In a real app, you would process the payment here
-  };
   
   return (
     <Layout>
@@ -110,7 +81,11 @@ const Cart = () => {
       </div>
       
       <div className="py-12 container-custom">
-        {isCartEmpty ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="h-8 w-8 animate-spin text-tourtastic-blue" />
+          </div>
+        ) : isCartEmpty ? (
           <div className="text-center py-16 bg-white rounded-lg shadow-sm">
             <div className="max-w-md mx-auto">
               <h2 className="text-2xl font-bold mb-4">Your cart is empty</h2>
@@ -225,127 +200,21 @@ const Cart = () => {
                       <span className="text-tourtastic-blue">${total.toFixed(2)}</span>
                     </div>
                     
-                    <Popover open={isCheckoutOpen} onOpenChange={setIsCheckoutOpen}>
-                      <PopoverTrigger asChild>
-                        <Button className="w-full mt-6" size="lg">
-                          Proceed to Checkout
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-full p-0" align="end" sideOffset={5}>
-                        <div className="p-6 space-y-4">
-                          <h3 className="text-lg font-bold mb-2">Payment Details</h3>
-                          <Form {...form}>
-                            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                              <FormField
-                                control={form.control}
-                                name="cardholderName"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Cardholder Name</FormLabel>
-                                    <FormControl>
-                                      <Input placeholder="John Smith" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              
-                              <FormField
-                                control={form.control}
-                                name="cardNumber"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Card Number</FormLabel>
-                                    <FormControl>
-                                      <Input placeholder="1234 5678 9012 3456" 
-                                        {...field} 
-                                        onChange={(e) => {
-                                          // Only allow digits
-                                          const value = e.target.value.replace(/\D/g, '');
-                                          if (value.length <= 16) {
-                                            field.onChange(value);
-                                          }
-                                        }}
-                                      />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              
-                              <div className="grid grid-cols-2 gap-4">
-                                <FormField
-                                  control={form.control}
-                                  name="expiryDate"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>Expiration Date</FormLabel>
-                                      <FormControl>
-                                        <Input 
-                                          placeholder="MM/YY" 
-                                          {...field} 
-                                          onChange={(e) => {
-                                            let { value } = e.target;
-                                            value = value.replace(/\D/g, '');
-                                            
-                                            if (value.length > 0) {
-                                              // Format as MM/YY
-                                              if (value.length <= 2) {
-                                                field.onChange(value);
-                                              } else {
-                                                field.onChange(`${value.slice(0, 2)}/${value.slice(2, 4)}`);
-                                              }
-                                            } else {
-                                              field.onChange(value);
-                                            }
-                                          }}
-                                        />
-                                      </FormControl>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                                
-                                <FormField
-                                  control={form.control}
-                                  name="cvc"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>CVC</FormLabel>
-                                      <FormControl>
-                                        <Input 
-                                          placeholder="123" 
-                                          {...field} 
-                                          onChange={(e) => {
-                                            // Only allow digits
-                                            const value = e.target.value.replace(/\D/g, '');
-                                            if (value.length <= 4) {
-                                              field.onChange(value);
-                                            }
-                                          }}
-                                        />
-                                      </FormControl>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                              </div>
-                              
-                              <div className="flex justify-between pt-2">
-                                <Button 
-                                  type="button" 
-                                  variant="outline"
-                                  onClick={() => setIsCheckoutOpen(false)}
-                                >
-                                  Cancel
-                                </Button>
-                                <Button type="submit">Pay Now</Button>
-                              </div>
-                            </form>
-                          </Form>
-                        </div>
-                      </PopoverContent>
-                    </Popover>
+                    <Button 
+                      className="w-full mt-6" 
+                      size="lg"
+                      onClick={async () => {
+                        try {
+                          await cartService.checkout();
+                          toast.success('Booking confirmed successfully!');
+                          setCartItems([]); // Clear cart after successful booking
+                        } catch (error) {
+                          toast.error('Failed to confirm booking');
+                        }
+                      }}
+                    >
+                      Confirm Booking
+                    </Button>
                     
                     <p className="text-xs text-gray-500 text-center pt-4">
                       By proceeding, you agree to our Terms of Service and Privacy Policy.
