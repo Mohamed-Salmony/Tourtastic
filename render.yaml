@@ -2,10 +2,11 @@ services:
   - type: web
     name: tourtastic
     env: node    buildCommand: |
-      cd client && 
-      npm install && 
+      npm install &&
+      cd client &&
+      npm install &&
       npm run build &&
-      cd ../server && 
+      cd ../server &&
       npm install
     startCommand: NODE_ENV=production cd server && npm start
     envVars:
