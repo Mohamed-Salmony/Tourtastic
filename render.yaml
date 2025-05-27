@@ -17,8 +17,7 @@ services:
       - key: MONGODB_URI
         sync: false
       - key: JWT_SECRET
-        sync: false
-    healthCheckPath: /api/health
+        sync: false    healthCheckPath: /healthz
     buildFilter:
       paths:
         - client/**/*.{js,jsx,ts,tsx}
