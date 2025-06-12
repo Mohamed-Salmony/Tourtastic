@@ -11,22 +11,46 @@ const DestinationSchema = new mongoose.Schema({
     required: [true, "Please add a country"],
     trim: true,
   },
-  imageUrl: {
+  description: {
     type: String,
-    // Add validation if needed, e.g., using a regex for URL format
+    required: [true, "Please add a description"],
   },
   rating: {
     type: Number,
+    required: [true, "Please add a rating"],
     min: 0,
     max: 5,
   },
-  featured: {
+  image: {
+    type: String,
+    required: [true, "Please add an image URL"],
+  },
+  topAttractions: [{
+    type: String,
+  }],
+  localCuisine: [{
+    type: String,
+  }],
+  shopping: [{
+    type: String,
+  }],
+  bestTimeToVisit: {
+    type: String,
+    required: [true, "Please add best time to visit"],
+  },
+  quickInfo: {
+    airport: {
+      type: String,
+      required: [true, "Please add airport code"],
+    },
+    timeZone: {
+      type: String,
+      required: [true, "Please add time zone"],
+    },
+  },
+  popular: {
     type: Boolean,
     default: false,
-  },
-  description: {
-    // Optional: Add a description field if needed for destination pages
-    type: String,
   },
   createdAt: {
     type: Date,

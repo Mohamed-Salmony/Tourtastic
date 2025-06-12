@@ -68,7 +68,7 @@ exports.removeFromCart = asyncHandler(async (req, res) => {
     });
   }
 
-  await booking.deleteOne(); // Using deleteOne instead of remove as it's more modern
+  await booking.deleteOne();
 
   res.status(200).json({
     success: true,
@@ -88,6 +88,7 @@ exports.updateCartItem = asyncHandler(async (req, res) => {
       message: "Invalid quantity"
     });
   }
+
   // Try to find in regular bookings first
   let booking = await Booking.findOne({
     bookingId: req.params.id,
@@ -109,11 +110,20 @@ exports.updateCartItem = asyncHandler(async (req, res) => {
     });
   }
 
-  // Update quantity
-  if (booking.details) {
-    booking.details.quantity = quantity;
+  // Update quantity based on booking type
+  if (booking.flightDetails) {
+    // For flight bookings, update the number of passengers
+    booking.flightDetails.passengers = {
+      ...booking.flightDetails.passengers,
+      adults: quantity
+    };
   } else {
-    booking.details = { quantity };
+    // For regular bookings, update the quantity in details
+    if (booking.details) {
+      booking.details.quantity = quantity;
+    } else {
+      booking.details = { quantity };
+    }
   }
   
   await booking.save();

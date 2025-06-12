@@ -1,6 +1,6 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
-const asyncHandler = require("./asyncHandler"); // Assuming asyncHandler middleware exists
+const asyncHandler = require("./asyncHandler");
 
 // Protect routes
 exports.protect = asyncHandler(async (req, res, next) => {

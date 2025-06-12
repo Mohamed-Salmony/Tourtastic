@@ -22,6 +22,16 @@ const UserSchema = new mongoose.Schema({
     minlength: 6,
     select: false, // Don't return password by default
   },
+  phone: {
+    type: String,
+    match: [/^\+?[\d\s-]{10,}$/, "Please add a valid phone number"],
+  },
+  address: {
+    type: String,
+  },
+  birthdate: {
+    type: Date,
+  },
   role: {
     type: String,
     enum: ["user", "admin"],
@@ -32,6 +42,9 @@ const UserSchema = new mongoose.Schema({
     enum: ["active", "inactive"],
     default: "active",
   },
+  wishlist: [{
+    type: String
+  }],
   createdAt: {
     type: Date,
     default: Date.now,
@@ -39,7 +52,7 @@ const UserSchema = new mongoose.Schema({
   lastLogin: {
     type: Date,
   },
-});
+}, { versionKey: false }); // Disable version key
 
 // Encrypt password using bcrypt before saving
 UserSchema.pre("save", async function (next) {

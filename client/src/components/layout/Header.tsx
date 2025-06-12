@@ -7,6 +7,7 @@ import Logo from '@/assets/logo';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Header: React.FC = () => {
   const { t } = useTranslation();
@@ -15,15 +16,17 @@ const Header: React.FC = () => {
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(true);
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
+  const { user, logout } = useAuth();
+
+  // Add this temporary debug log
+  console.log('Header render - user state:', user);
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
   };
 
   const handleSignOut = () => {
-    localStorage.removeItem('token');
-    setIsAuthenticated(false);
+    logout();
     toast({
       title: "Success",
       description: "Successfully signed out",
@@ -73,7 +76,7 @@ const Header: React.FC = () => {
 
         {/* Auth Buttons & Utilities Desktop */}
         <div className="hidden md:flex items-center space-x-3">
-          {isAuthenticated ? (
+          {user ? (
             <>
               {/* Notifications */}
               <Button
@@ -209,46 +212,39 @@ const Header: React.FC = () => {
                 {t('contact')}
               </NavLink>
               
-              <div className="border-t border-gray-200 my-2" />
-
-              {isAuthenticated ? (
+              {/* Mobile Auth Buttons */}
+              {user ? (
                 <>
-                  <NavLink 
+                  <Link 
                     to="/notifications" 
-                    className={({isActive}) => `py-2 px-4 ${isActive ? 'text-tourtastic-blue font-semibold' : 'text-gray-800'} flex items-center`}
+                    className="py-2 px-4 text-gray-800 flex items-center"
                     onClick={toggleMenu}
                   >
                     <Bell className="h-5 w-5 mr-2" />
                     {t('notifications')}
-                    {hasUnreadNotifications && (
-                      <span className="ml-2 inline-block h-2 w-2 rounded-full bg-red-500" />
-                    )}
-                  </NavLink>
-
-                  <NavLink 
+                  </Link>
+                  <Link 
                     to="/cart" 
-                    className={({isActive}) => `py-2 px-4 ${isActive ? 'text-tourtastic-blue font-semibold' : 'text-gray-800'} flex items-center`}
+                    className="py-2 px-4 text-gray-800 flex items-center"
                     onClick={toggleMenu}
                   >
                     <ShoppingBasket className="h-5 w-5 mr-2" />
                     {t('cart')}
-                  </NavLink>
-
-                  <NavLink 
+                  </Link>
+                  <Link 
                     to="/profile" 
-                    className={({isActive}) => `py-2 px-4 ${isActive ? 'text-tourtastic-blue font-semibold' : 'text-gray-800'} flex items-center`}
+                    className="py-2 px-4 text-gray-800 flex items-center"
                     onClick={toggleMenu}
                   >
                     <User className="h-5 w-5 mr-2" />
                     {t('myAccount')}
-                  </NavLink>
-                  
-                  <button
-                    className="py-2 px-4 text-gray-800 w-full text-left flex items-center"
+                  </Link>
+                  <button 
                     onClick={() => {
-                      toggleMenu();
                       handleSignOut();
+                      toggleMenu();
                     }}
+                    className="py-2 px-4 text-red-600 flex items-center"
                   >
                     <LogOut className="h-5 w-5 mr-2" />
                     {t('signOut')}
@@ -256,39 +252,22 @@ const Header: React.FC = () => {
                 </>
               ) : (
                 <>
-                  <NavLink 
+                  <Link 
                     to="/login" 
-                    className="py-2 px-4 text-tourtastic-blue hover:text-tourtastic-dark-blue w-full text-left flex items-center"
+                    className="py-2 px-4 text-tourtastic-blue"
                     onClick={toggleMenu}
                   >
                     {t('signIn')}
-                  </NavLink>
-                  
-                  <NavLink 
+                  </Link>
+                  <Link 
                     to="/register" 
-                    className="py-2 px-4 bg-tourtastic-blue hover:bg-tourtastic-dark-blue text-white w-full text-center"
+                    className="py-2 px-4 bg-tourtastic-blue text-white rounded-md"
                     onClick={toggleMenu}
                   >
                     {t('register')}
-                  </NavLink>
+                  </Link>
                 </>
               )}
-              
-              <div className="border-t border-gray-200 my-2" />
-              
-              <div className="flex items-center justify-between py-2 px-4">
-                <span className="text-gray-800">{currentLocale === 'en' ? 'Language' : 'اللغة'}</span>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => {
-                    toggleLocale();
-                    toggleMenu();
-                  }}
-                >
-                  {currentLocale === 'en' ? 'العربية' : 'English'}
-                </Button>
-              </div>
             </div>
           </div>
         )}

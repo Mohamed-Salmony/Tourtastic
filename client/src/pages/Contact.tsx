@@ -3,7 +3,6 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import Layout from '@/components/layout/Layout';
 import { Mail, Phone, MapPin, Send } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -53,12 +52,12 @@ const Contact: React.FC = () => {
   };
 
   return (
-    <Layout>
+    <>
       <div className="bg-gradient-to-r from-gray-50 to-gray-100 py-12">
         <div className="container-custom">
-          <h1 className="text-4xl font-bold mb-4">{t('contactUs', 'Contact Us')}</h1>
-          <p className="text-gray-600 max-w-2xl">
-            {t('contactIntro', "Get in touch with our team for inquiries or support. We're here to help you plan your perfect trip.")}
+          <h1 className="text-4xl font-bold mb-4">Contact Us</h1>
+          <p className="text-gray-600">
+            Have questions? We're here to help. Reach out to our team for assistance.
           </p>
         </div>
       </div>
@@ -208,7 +207,7 @@ const Contact: React.FC = () => {
           </div>
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

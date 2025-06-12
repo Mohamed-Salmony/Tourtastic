@@ -57,3 +57,6 @@ export const getSearchResults = async (searchId: string): Promise<FlightSearchRe
   const response = await api.get(`/flights/results/${searchId}`);
   return response.data;
 };
+
+
+

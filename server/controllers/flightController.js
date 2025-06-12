@@ -76,83 +76,91 @@ function generateMockFlightResults(flight) {
   const airlines = ["Emirates", "Qatar Airways", "Turkish Airlines", "Egypt Air", "Saudi Airlines"];
   const results = [];
 
-  // Generate 3-5 random flight options
-  const numResults = Math.floor(Math.random() * 3) + 3;
+  // Generate flights for each day in the range
+  const startDate = new Date(flight.departureDate);
+  const endDate = new Date(flight.returnDate || flight.departureDate);
   
-  for (let i = 0; i < numResults; i++) {
-    const airline = airlines[Math.floor(Math.random() * airlines.length)];
-    const basePrice = Math.floor(Math.random() * 1000) + 500; // Random price between 500-1500
+  // Generate 2-3 flights per day
+  for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
+    const flightsPerDay = Math.floor(Math.random() * 2) + 2; // 2-3 flights per day
     
-    results.push({
-      flightId: `FL-${Math.floor(Math.random() * 10000)}`,
-      airline,
-      departureAirport: flight.from,
-      arrivalAirport: flight.to,
-      departureTime: new Date(flight.departureDate).toISOString(),
-      arrivalTime: new Date(new Date(flight.departureDate).getTime() + Math.random() * 86400000).toISOString(), // Random arrival within 24h
-      duration: `${Math.floor(Math.random() * 8) + 2}h ${Math.floor(Math.random() * 60)}m`,
-      price: {
-        adult: basePrice,
-        child: Math.floor(basePrice * 0.75),
-        infant: Math.floor(basePrice * 0.1),
-        total: basePrice * flight.adults + 
-               (basePrice * 0.75) * flight.children + 
-               (basePrice * 0.1) * flight.infants
-      },
-      availableSeats: Math.floor(Math.random() * 50) + 10,
-      class: ["Economy", "Business"][Math.floor(Math.random() * 2)],
-      layovers: Math.random() > 0.5 ? [{
-        airport: ["DXB", "DOH", "IST"][Math.floor(Math.random() * 3)],
-        duration: `${Math.floor(Math.random() * 3) + 1}h`
-      }] : []
-    });
+    for (let i = 0; i < flightsPerDay; i++) {
+      const airline = airlines[Math.floor(Math.random() * airlines.length)];
+      const basePrice = Math.floor(Math.random() * 1000) + 500; // Random price between 500-1500
+      
+      // Generate random departure time between 6 AM and 10 PM
+      const departureHour = Math.floor(Math.random() * 16) + 6; // 6-22
+      const departureMinute = Math.floor(Math.random() * 4) * 15; // 0, 15, 30, 45
+      
+      const departureTime = new Date(date);
+      departureTime.setHours(departureHour, departureMinute, 0, 0);
+      
+      // Calculate arrival time (2-12 hours later)
+      const flightDuration = Math.floor(Math.random() * 10) + 2; // 2-12 hours
+      const arrivalTime = new Date(departureTime);
+      arrivalTime.setHours(arrivalTime.getHours() + flightDuration);
+      
+      results.push({
+        flightId: `FL-${Math.floor(Math.random() * 10000)}`,
+        airline,
+        departureAirport: flight.from,
+        arrivalAirport: flight.to,
+        departureTime: departureTime.toISOString(),
+        arrivalTime: arrivalTime.toISOString(),
+        duration: `${flightDuration}h ${Math.floor(Math.random() * 60)}m`,
+        price: {
+          adult: basePrice,
+          child: Math.floor(basePrice * 0.75),
+          infant: Math.floor(basePrice * 0.1),
+          total: basePrice * flight.adults + 
+                 (basePrice * 0.75) * flight.children + 
+                 (basePrice * 0.1) * flight.infants
+        },
+        availableSeats: Math.floor(Math.random() * 50) + 10,
+        class: ["Economy", "Business"][Math.floor(Math.random() * 2)],
+        layovers: Math.random() > 0.5 ? [{
+          airport: ["DXB", "DOH", "IST"][Math.floor(Math.random() * 3)],
+          duration: `${Math.floor(Math.random() * 3) + 1}h`
+        }] : []
+      });
+    }
   }
 
   return results;
 }
 
-// @desc    Create a new flight booking request
-// @route   POST /api/flights/book
+// @desc    Create a new flight booking
+// @route   POST /api/flights
 // @access  Private
 exports.createFlightBooking = asyncHandler(async (req, res, next) => {
   const {
     flightDetails,
-    customerPhone
+    passengers,
+    amount
   } = req.body;
 
-  if (!flightDetails || !flightDetails.selectedFlight) {
-    return res.status(400).json({ success: false, message: "Selected flight details are required" });
-  }
-
-  // Generate a booking ID (FB for Flight Booking)
-  const bookingId = `FB-${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 1000)}`;
+  // Generate a unique booking ID
+  const bookingId = `FL-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
   const booking = await FlightBooking.create({
-    bookingId,
     userId: req.user.id,
+    bookingId,
     customerName: req.user.name,
     customerEmail: req.user.email,
-    customerPhone,
     flightDetails,
-    status: "pending",
-    timeline: [{
-      status: "pending",
-      date: new Date(),
-      notes: "Booking request submitted",
-      updatedBy: req.user.name
-    }]
+    passengers,
+    amount,
+    status: 'pending',
+    paymentStatus: 'pending'
   });
-
-  // Here you might want to send notifications to admins about new booking
 
   res.status(201).json({
     success: true,
-    message: "Flight booking request submitted successfully",
     data: booking
   });
 });
 
-// @desc    Get user's flight bookings
+// @desc    Get all flight bookings for the logged-in user
 // @route   GET /api/flights/bookings
 // @access  Private
 exports.getUserFlightBookings = asyncHandler(async (req, res, next) => {
@@ -166,17 +174,20 @@ exports.getUserFlightBookings = asyncHandler(async (req, res, next) => {
   });
 });
 
-// @desc    Get a specific flight booking
-// @route   GET /api/flights/bookings/:bookingId
+// @desc    Get single flight booking
+// @route   GET /api/flights/bookings/:id
 // @access  Private
-exports.getFlightBooking = asyncHandler(async (req, res, next) => {
-  const booking = await FlightBooking.findOne({ 
-    bookingId: req.params.bookingId,
+exports.getFlightBookingById = asyncHandler(async (req, res, next) => {
+  const booking = await FlightBooking.findOne({
+    _id: req.params.id,
     userId: req.user.id
   });
 
   if (!booking) {
-    return res.status(404).json({ success: false, message: "Booking not found" });
+    return res.status(404).json({
+      success: false,
+      error: 'Booking not found'
+    });
   }
 
   res.status(200).json({
@@ -185,40 +196,74 @@ exports.getFlightBooking = asyncHandler(async (req, res, next) => {
   });
 });
 
-// @desc    Cancel a flight booking
-// @route   PUT /api/flights/bookings/:bookingId/cancel
+// @desc    Update flight booking
+// @route   PUT /api/flights/bookings/:id
 // @access  Private
-exports.cancelFlightBooking = asyncHandler(async (req, res, next) => {
-  const booking = await FlightBooking.findOne({ 
-    bookingId: req.params.bookingId,
+exports.updateFlightBooking = asyncHandler(async (req, res, next) => {
+  let booking = await FlightBooking.findOne({
+    _id: req.params.id,
     userId: req.user.id
   });
 
   if (!booking) {
-    return res.status(404).json({ success: false, message: "Booking not found" });
-  }
-
-  // Only allow cancellation of pending bookings
-  if (booking.status !== "pending") {
-    return res.status(400).json({ 
-      success: false, 
-      message: "Only pending bookings can be cancelled" 
+    return res.status(404).json({
+      success: false,
+      error: 'Booking not found'
     });
   }
 
-  booking.status = "cancelled";
-  booking.timeline.push({
-    status: "cancelled",
-    date: new Date(),
-    notes: "Cancelled by user",
-    updatedBy: req.user.name
-  });
+  // Only allow updating certain fields
+  const allowedUpdates = ['passengers', 'flightDetails'];
+  const updates = Object.keys(req.body)
+    .filter(key => allowedUpdates.includes(key))
+    .reduce((obj, key) => {
+      obj[key] = req.body[key];
+      return obj;
+    }, {});
 
-  await booking.save();
+  booking = await FlightBooking.findByIdAndUpdate(
+    req.params.id,
+    updates,
+    {
+      new: true,
+      runValidators: true
+    }
+  );
 
   res.status(200).json({
     success: true,
-    message: "Booking cancelled successfully",
     data: booking
+  });
+});
+
+// @desc    Delete flight booking
+// @route   DELETE /api/flights/bookings/:id
+// @access  Private
+exports.deleteFlightBooking = asyncHandler(async (req, res, next) => {
+  const booking = await FlightBooking.findOne({
+    _id: req.params.id,
+    userId: req.user.id
+  });
+
+  if (!booking) {
+    return res.status(404).json({
+      success: false,
+      error: 'Booking not found'
+    });
+  }
+
+  // Only allow deletion if booking is pending
+  if (booking.status !== 'pending') {
+    return res.status(400).json({
+      success: false,
+      error: 'Can only delete pending bookings'
+    });
+  }
+
+  await booking.remove();
+
+  res.status(200).json({
+    success: true,
+    data: {}
   });
 });

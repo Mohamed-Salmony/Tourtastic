@@ -4,8 +4,9 @@ const {
   getSearchResults,
   createFlightBooking,
   getUserFlightBookings,
-  getFlightBooking,
-  cancelFlightBooking
+  getFlightBookingById,
+  updateFlightBooking,
+  deleteFlightBooking
 } = require("../controllers/flightController");
 
 const { protect } = require("../middleware/auth");
@@ -17,9 +18,12 @@ router.get("/search", searchFlights);
 router.get("/results/:search_id", getSearchResults);
 
 // Protected routes for managing bookings
-router.post("/book", protect, createFlightBooking);
-router.get("/bookings", protect, getUserFlightBookings);
-router.get("/bookings/:bookingId", protect, getFlightBooking);
-router.put("/bookings/:bookingId/cancel", protect, cancelFlightBooking);
+router.use(protect); // Apply protection to all routes below
+
+router.post("/book", createFlightBooking);
+router.get("/bookings", getUserFlightBookings);
+router.get("/bookings/:id", getFlightBookingById);
+router.put("/bookings/:id", updateFlightBooking);
+router.delete("/bookings/:id", deleteFlightBooking);
 
 module.exports = router;

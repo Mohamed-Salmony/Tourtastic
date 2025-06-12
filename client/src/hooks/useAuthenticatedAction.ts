@@ -1,19 +1,17 @@
-import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from './useAuth';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { toast } from 'sonner';
 
 export const useAuthenticatedAction = () => {
-  const { isAuthenticated } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
 
-  const handleAuthenticatedAction = (action: () => void) => {
-    if (!isAuthenticated) {
-      // Save the current location for redirect after login
-      navigate('/login', { state: { from: location } });
+  return (action: () => void) => {
+    if (!user) {
+      toast.error('Please log in to continue');
+      navigate('/login');
       return;
     }
     action();
   };
-
-  return handleAuthenticatedAction;
 };

@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import Layout from '@/components/layout/Layout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -133,7 +132,7 @@ const Notifications = () => {
   };
   
   return (
-    <Layout>
+    <>
       <div className="bg-gradient-to-r from-gray-50 to-gray-100 py-12">
         <div className="container-custom">
           <div className="flex justify-between items-center">
@@ -181,7 +180,7 @@ const Notifications = () => {
           </TabsContent>
         </Tabs>
       </div>
-    </Layout>
+    </>
   );
 };
 
