@@ -1,7 +1,9 @@
 import axios from 'axios';
 
 // Define base URL based on environment
-export const baseURL = import.meta.env.VITE_API_BASE_URL || '/api'; // Use environment variable or fallback to proxy in development
+export const baseURL = import.meta.env.PROD 
+  ? 'https://your-production-domain.com/api'  // Replace with your production API URL
+  : 'http://localhost:5000/api'; // Direct connection to backend in development
 
 // Create axios instance with default config
 export const api = axios.create({
@@ -33,6 +35,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       // Handle unauthorized access (e.g., redirect to login)
       localStorage.removeItem('token');
+      localStorage.removeItem('user');
       window.location.href = '/login';
     }
     return Promise.reject(error);

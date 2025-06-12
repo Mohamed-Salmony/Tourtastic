@@ -1,50 +1,97 @@
-
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { Star } from 'lucide-react';
-
-interface Destination {
-  id: number;
-  name: string;
-  country: string;
-  image: string;
-  rating: number;
-}
+import { Star, Heart } from 'lucide-react';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Destination, getAllDestinations } from '@/services/destinationService';
+import { Loader2 } from 'lucide-react';
+import { wishlistService } from '@/services/wishlistService';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 
 const Destinations: React.FC = () => {
   const { t } = useTranslation();
-  
-  const destinations: Destination[] = [
-    {
-      id: 1,
-      name: 'Paris',
-      country: 'France',
-      image: 'https://images.unsplash.com/photo-1500375592092-40eb2168fd21?auto=format&fit=crop&w=800&q=80',
-      rating: 4.8
-    },
-    {
-      id: 2,
-      name: 'Bali',
-      country: 'Indonesia',
-      image: 'https://images.unsplash.com/photo-1482938289607-e9573fc25ebb?auto=format&fit=crop&w=800&q=80',
-      rating: 4.7
-    },
-    {
-      id: 3,
-      name: 'Tokyo',
-      country: 'Japan',
-      image: 'https://images.unsplash.com/photo-1472396961693-142e6e269027?auto=format&fit=crop&w=800&q=80',
-      rating: 4.9
-    },
-    {
-      id: 4,
-      name: 'New York',
-      country: 'USA',
-      image: 'https://images.unsplash.com/photo-1485833077593-4278bba3f11f?auto=format&fit=crop&w=800&q=80',
-      rating: 4.6
+  const { user } = useAuth();
+  const [destinations, setDestinations] = useState<Destination[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [wishlist, setWishlist] = useState<string[]>([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const data = await getAllDestinations();
+        // Filter to show only popular destinations
+        const popularDestinations = data.filter(dest => dest.popular).slice(0, 4);
+        setDestinations(popularDestinations);
+
+        // Fetch user's wishlist if logged in
+        if (user) {
+          const wishlistData = await wishlistService.getWishlist(user._id);
+          // Extract just the destination IDs from the wishlist data
+          setWishlist(wishlistData.map(item => item._id.toString()));
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        setError("Failed to load destinations. Please try again later.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [user]);
+
+  const handleWishlistToggle = async (destinationId: string, e: React.MouseEvent) => {
+    e.preventDefault(); // Prevent navigation when clicking the heart icon
+    e.stopPropagation(); // Prevent event bubbling
+
+    if (!user) {
+      toast.error('Please log in to add destinations to your wishlist');
+      return;
     }
-  ];
+
+    try {
+      const destinationIdStr = destinationId.toString();
+      if (wishlist.includes(destinationIdStr)) {
+        await wishlistService.removeFromWishlist(user._id, destinationIdStr);
+        setWishlist(wishlist.filter(id => id !== destinationIdStr));
+        toast.success('Removed from wishlist');
+      } else {
+        await wishlistService.addToWishlist(user._id, destinationIdStr);
+        setWishlist([...wishlist, destinationIdStr]);
+        toast.success('Added to wishlist');
+      }
+    } catch (error) {
+      console.error('Error toggling wishlist:', error);
+      toast.error('Failed to update wishlist');
+    }
+  };
+
+  if (loading) {
+    return (
+      <section className="py-20">
+        <div className="container-custom">
+          <div className="flex justify-center items-center h-48">
+            <Loader2 className="h-8 w-8 animate-spin text-primary-500" />
+            <p className="ml-2 text-gray-600">Loading destinations...</p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="py-20">
+        <div className="container-custom">
+          <div className="text-center text-red-600">
+            <p>{error}</p>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="py-20">
@@ -61,40 +108,41 @@ const Destinations: React.FC = () => {
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {destinations.map((destination) => (
-            <div 
-              key={destination.id} 
-              className="bg-white rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-all duration-300 group"
+            <Link 
+              key={destination._id} 
+              to={`/destinations/${destination._id}`}
+              className="cursor-pointer"
             >
-              <div className="relative h-60 overflow-hidden">
-                <img 
-                  src={destination.image} 
-                  alt={destination.name} 
-                  className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent opacity-70"></div>
-                <div className="absolute bottom-4 left-4 text-white">
-                  <h3 className="text-xl font-bold">{destination.name}</h3>
-                  <p className="text-sm text-gray-200">{destination.country}</p>
-                </div>
-              </div>
-              <div className="p-4">
-                <div className="flex justify-between items-center mb-4">
-                  <div className="flex items-center">
-                    <Star className="text-yellow-400 w-5 h-5 fill-current" />
-                    <span className="ml-1 text-gray-700">{destination.rating}</span>
+              <Card className="h-full transition-all duration-300 hover:scale-105 hover:shadow-xl">
+                <CardHeader className="p-0 relative group">
+                  <img 
+                    src={destination.image} 
+                    alt={destination.name} 
+                    className="w-full h-48 object-cover rounded-t-md transition-transform duration-300 group-hover:scale-110" 
+                  />
+                  <div className="absolute top-2 right-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded-md text-sm flex items-center gap-1">
+                    <Star className="w-4 h-4 text-yellow-500" fill="currentColor" />
+                    <span>{destination.rating.toFixed(1)}</span>
                   </div>
-                  <span className="text-gray-600 text-sm">{t('excellent')}</span>
-                </div>
-                <Link 
-                  to={`/destinations/${destination.id}`} 
-                  className="block text-center py-2 border border-tourtastic-blue text-tourtastic-blue rounded hover:bg-tourtastic-blue hover:text-white transition-colors duration-300"
-                >
-                  {t('viewDetails')}
-                </Link>
-              </div>
-            </div>
+                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-300 rounded-t-md"></div>
+                </CardHeader>
+                <CardContent className="p-4">
+                  <h2 className="text-xl font-bold mb-2">{destination.name}</h2>
+                  <p className="text-gray-600 dark:text-gray-400">{destination.country}</p>
+                  <button
+                    onClick={(e) => handleWishlistToggle(destination._id, e)}
+                    className="mt-4 w-full bg-primary-50 hover:bg-primary-100 text-primary-600 py-2 px-4 rounded-md transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Heart 
+                      className={`w-5 h-5 ${wishlist.includes(destination._id.toString()) ? 'text-red-500 fill-current' : 'text-primary-600'}`} 
+                    />
+                    <span>{wishlist.includes(destination._id.toString()) ? 'Remove from Wishlist' : 'Add to Wishlist'}</span>
+                  </button>
+                </CardContent>
+              </Card>
+            </Link>
           ))}
         </div>
         

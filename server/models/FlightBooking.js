@@ -1,15 +1,15 @@
 const mongoose = require("mongoose");
 
 const FlightBookingSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true
+  },
   bookingId: {
     type: String,
     required: true,
     unique: true
-  },
-  userId: {
-    type: mongoose.Schema.ObjectId,
-    ref: "User",
-    required: true
   },
   customerName: {
     type: String,
@@ -21,11 +21,11 @@ const FlightBookingSchema = new mongoose.Schema({
   },
   customerPhone: String,
   flightDetails: {
-    from: {
+    departureCity: {
       type: String,
       required: true
     },
-    to: {
+    arrivalCity: {
       type: String,
       required: true
     },
@@ -33,31 +33,39 @@ const FlightBookingSchema = new mongoose.Schema({
       type: Date,
       required: true
     },
-    returnDate: Date,
-    passengers: {
-      adults: Number,
-      children: Number,
-      infants: Number
+    returnDate: {
+      type: Date
     },
-    selectedFlight: {
-      flightId: String,
-      airline: String,
-      departureTime: Date,
-      arrivalTime: Date,
-      price: {
-        total: Number,
-        currency: {
-          type: String,
-          default: "USD"
-        }
-      },
-      class: String
+    airline: {
+      type: String,
+      required: true
+    },
+    flightNumber: {
+      type: String,
+      required: true
     }
+  },
+  passengers: [{
+    name: String,
+    age: Number,
+    passportNumber: String
+  }],
+  amount: {
+    type: Number,
+    required: true
   },
   status: {
     type: String,
     enum: ["pending", "confirmed", "processing", "booked", "ticketed", "cancelled"],
     default: "pending"
+  },
+  paymentStatus: {
+    type: String,
+    enum: ["pending", "paid", "refunded"],
+    default: "pending"
+  },
+  ticketUrl: {
+    type: String
   },
   adminData: {
     assignedTo: String,
@@ -115,6 +123,8 @@ const FlightBookingSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
+}, {
+  timestamps: true
 });
 
 FlightBookingSchema.pre("save", function(next) {

@@ -1,9 +1,8 @@
-
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Globe, Lock, Phone } from 'lucide-react';
-import { useAuthenticatedAction } from '../../hooks/useAuthenticatedAction';
+import { useAuthenticatedAction } from '../../contexts/useAuthenticatedAction';
 
 const Features: React.FC = () => {
   const navigate = useNavigate();

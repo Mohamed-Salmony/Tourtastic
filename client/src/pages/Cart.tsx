@@ -1,7 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -40,23 +38,34 @@ const Cart = () => {
   };
   
   const handleRemoveItem = async (id: string) => {
+    if (!id) {
+      toast.error('Invalid item ID');
+      return;
+    }
     try {
       await cartService.removeFromCart(id);
-      setCartItems(cartItems.filter(item => item.id !== id));
+      setCartItems(cartItems.filter(item => item.bookingId !== id));
       toast.success('Item removed from cart');
     } catch (error) {
+      console.error('Remove item error:', error);
       toast.error('Failed to remove item');
     }
   };
 
   const handleUpdateQuantity = async (id: string, newQuantity: number) => {
+    if (!id) {
+      toast.error('Invalid item ID');
+      return;
+    }
     if (newQuantity < 1) return;
     try {
       await cartService.updateQuantity(id, newQuantity);
       setCartItems(cartItems.map(item => 
-        item.id === id ? { ...item, quantity: newQuantity } : item
+        item.bookingId === id ? { ...item, quantity: newQuantity } : item
       ));
+      toast.success('Quantity updated successfully');
     } catch (error) {
+      console.error('Update quantity error:', error);
       toast.error('Failed to update quantity');
     }
   };
@@ -70,7 +79,7 @@ const Cart = () => {
   const isCartEmpty = cartItems.length === 0;
   
   return (
-    <Layout>
+    <>
       <div className="bg-gradient-to-r from-gray-50 to-gray-100 py-12">
         <div className="container-custom">
           <h1 className="text-4xl font-bold mb-4">Your Cart</h1>
@@ -122,8 +131,8 @@ const Cart = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {cartItems.map((item) => (
-                        <TableRow key={item.id}>
+                      {cartItems.map((item, index) => (
+                        <TableRow key={`${item.bookingId || index}`}>
                           <TableCell>
                             <div className="flex items-center space-x-3">
                               <img 
@@ -142,7 +151,7 @@ const Cart = () => {
                             <div className="flex items-center justify-center">
                               <button
                                 className="w-8 h-8 rounded-l border border-gray-300 bg-gray-100 flex items-center justify-center hover:bg-gray-200"
-                                onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)}
+                                onClick={() => handleUpdateQuantity(item.bookingId, item.quantity - 1)}
                               >
                                 -
                               </button>
@@ -151,7 +160,7 @@ const Cart = () => {
                               </span>
                               <button
                                 className="w-8 h-8 rounded-r border border-gray-300 bg-gray-100 flex items-center justify-center hover:bg-gray-200"
-                                onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)}
+                                onClick={() => handleUpdateQuantity(item.bookingId, item.quantity + 1)}
                               >
                                 +
                               </button>
@@ -162,7 +171,7 @@ const Cart = () => {
                           </TableCell>
                           <TableCell>
                             <button
-                              onClick={() => handleRemoveItem(item.id)}
+                              onClick={() => handleRemoveItem(item.bookingId)}
                               className="text-gray-500 hover:text-red-500"
                             >
                               <Trash2 className="h-5 w-5" />
@@ -237,7 +246,7 @@ const Cart = () => {
           </div>
         )}
       </div>
-    </Layout>
+    </>
   );
 };
 

@@ -4,8 +4,11 @@ const jwt = require("jsonwebtoken");
 
 // Generate JWT
 const generateToken = (id) => {
+  if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET is not defined in environment variables');
+  }
   return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: "30d", // Expires in 30 days
+    expiresIn: process.env.JWT_EXPIRE || "30d",
   });
 };
 
@@ -53,36 +56,59 @@ exports.login = asyncHandler(async (req, res, next) => {
 
   // Validate email & password
   if (!email || !password) {
-    return res.status(400).json({ success: false, message: "Please provide an email and password" });
+    return res.status(400).json({ 
+      success: false, 
+      message: "Please provide an email and password" 
+    });
   }
 
-  // Check for user
-  const user = await User.findOne({ email }).select("+password");
+  try {
+    // Check for user
+    const user = await User.findOne({ email }).select("+password");
+    console.log('Found user:', user ? 'Yes' : 'No');
 
-  if (!user) {
-    return res.status(401).json({ success: false, message: "Invalid credentials" });
+    if (!user) {
+      return res.status(401).json({ 
+        success: false, 
+        message: "Invalid credentials" 
+      });
+    }
+
+    // Check if password matches
+    const isMatch = await user.matchPassword(password);
+    console.log('Password match:', isMatch ? 'Yes' : 'No');
+
+    if (!isMatch) {
+      return res.status(401).json({ 
+        success: false, 
+        message: "Invalid credentials" 
+      });
+    }
+
+    // Update last login time
+    user.lastLogin = Date.now();
+    await user.save();
+
+    // Don't send password back
+    const userResponse = { ...user._doc };
+    delete userResponse.password;
+
+    // Generate token
+    const token = generateToken(user._id);
+
+    res.status(200).json({
+      success: true,
+      token,
+      user: userResponse,
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: "An error occurred during login",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
-
-  // Check if password matches
-  const isMatch = await user.matchPassword(password);
-
-  if (!isMatch) {
-    return res.status(401).json({ success: false, message: "Invalid credentials" });
-  }
-
-  // Update last login time
-  user.lastLogin = Date.now();
-  await user.save();
-
-  // Don't send password back
-  const userResponse = { ...user._doc };
-  delete userResponse.password;
-
-  res.status(200).json({
-    success: true,
-    token: generateToken(user._id),
-    user: userResponse,
-  });
 });
 
 // @desc    Get current logged in user

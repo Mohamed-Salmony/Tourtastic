@@ -1,5 +1,4 @@
 import React from 'react';
-import Layout from '@/components/layout/Layout';
 import {
   Card,
   CardContent,
@@ -9,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 const About: React.FC = () => {
   const { t } = useTranslation();
   return (
-    <Layout>
+    <>
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-gray-50 to-gray-100 py-12">
         <div className="container-custom">
@@ -148,7 +147,7 @@ const About: React.FC = () => {
           </div>
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

@@ -7,7 +7,6 @@ import { z } from 'zod';
 import { format } from 'date-fns';
 import { CalendarIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -159,7 +158,7 @@ const Flights = () => {
   }, [location.search, setValue]);
 
   return (
-    <Layout>
+    <>
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-gray-50 to-gray-100 py-12">
         <div className="container-custom">
@@ -506,7 +505,7 @@ const Flights = () => {
           </div>
         )}
       </div>
-    </Layout>
+    </>
   );
 };
 

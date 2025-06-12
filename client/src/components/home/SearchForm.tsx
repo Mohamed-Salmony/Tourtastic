@@ -1,9 +1,8 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Calendar as CalendarIcon, Search } from 'lucide-react';
-import { useAuthenticatedAction } from '../../hooks/useAuthenticatedAction';
+import { useAuthenticatedAction } from '../../contexts/useAuthenticatedAction';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';

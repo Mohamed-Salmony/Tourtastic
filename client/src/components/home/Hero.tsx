@@ -1,8 +1,7 @@
-
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuthenticatedAction } from '../../hooks/useAuthenticatedAction';
+import { useAuthenticatedAction } from '../../contexts/useAuthenticatedAction';
 
 const Hero: React.FC = () => {
   const navigate = useNavigate();
