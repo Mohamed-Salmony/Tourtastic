@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 interface User {
   _id: string;
@@ -40,16 +40,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const storedUser = localStorage.getItem('user');
         const storedToken = localStorage.getItem('token');
         
-        console.log('Checking auth - storedUser:', storedUser);
-        console.log('Checking auth - storedToken:', storedToken);
-        
         if (storedUser && storedToken) {
           const parsedUser = JSON.parse(storedUser);
-          console.log('Setting initial user:', parsedUser);
           setUser(parsedUser);
         }
       } catch (err) {
-        console.error('Error checking authentication:', err);
         setError('Failed to restore session');
       } finally {
         setLoading(false);
@@ -59,25 +54,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     checkAuth();
   }, []);
 
-  const login = (token: string, userData: User) => {
-    console.log('Login called with:', { token, userData });
+  const login = useCallback((token: string, userData: User) => {
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(userData));
-    console.log('Setting user state to:', userData);
     setUser(userData);
-  };
+  }, []);
 
-  const logout = () => {
-    console.log('Logout called');
+  const logout = useCallback(() => {
     setUser(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-  };
-
-  // Debug log when user state changes
-  useEffect(() => {
-    console.log('User state changed:', user);
-  }, [user]);
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, loading, error, login, logout }}>

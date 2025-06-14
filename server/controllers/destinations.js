@@ -88,4 +88,30 @@ exports.deleteDestination = asyncHandler(async (req, res, next) => {
     success: true,
     data: {}
   });
+});
+
+// @desc    Update destination's popular status
+// @route   PATCH /api/destinations/:id/popular
+// @access  Private/Admin
+exports.updateDestinationPopular = asyncHandler(async (req, res, next) => {
+  const destination = await Destination.findByIdAndUpdate(
+    req.params.id,
+    { popular: req.body.popular },
+    {
+      new: true,
+      runValidators: true
+    }
+  );
+
+  if (!destination) {
+    return res.status(404).json({
+      success: false,
+      error: 'Destination not found'
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    data: destination
+  });
 }); 

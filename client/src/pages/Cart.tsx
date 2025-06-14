@@ -1,252 +1,255 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { format } from 'date-fns';
+import { Trash2, Plane, Calendar, Users, CreditCard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import { Trash2, Loader2 } from 'lucide-react';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { z } from 'zod';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { toast } from 'sonner';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { cartService, CartItem } from '@/services/cartService';
+import { toast } from '@/hooks/use-toast';
+import { api } from '@/config/api';
+import { useNavigate } from 'react-router-dom';
+import { paymentService } from '@/services/paymentService';
 
-// Remove payment schema since we're not using it anymore
+interface FlightBooking {
+  _id: string;
+  bookingId: string;
+  customerName: string;
+  customerEmail: string;
+  flightDetails: {
+    from: string;
+    to: string;
+    departureDate: string;
+    passengers: {
+      adults: number;
+      children: number;
+      infants: number;
+    };
+    selectedFlight: {
+      flightId: string;
+      airline: string;
+      departureTime: string;
+      arrivalTime: string;
+      price: {
+        total: number;
+        currency: string;
+      };
+      class: string;
+    };
+  };
+  status: string;
+  paymentDetails: {
+    status: string;
+    currency: string;
+    transactions: any[];
+  };
+  createdAt: string;
+}
+
+interface ApiResponse {
+  success: boolean;
+  count: number;
+  data: FlightBooking[];
+}
 
 const Cart = () => {
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [bookings, setBookings] = useState<FlightBooking[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [processingPayment, setProcessingPayment] = useState<string | null>(null);
+
   useEffect(() => {
-    loadCartItems();
+    fetchBookings();
   }, []);
 
-  const loadCartItems = async () => {
+  const fetchBookings = async () => {
     try {
-      const items = await cartService.getCartItems();
-      setCartItems(items);
+      const response = await api.get<ApiResponse>('/flights/bookings');
+      if (response.data.success && Array.isArray(response.data.data)) {
+        setBookings(response.data.data);
+      } else {
+        setBookings([]);
+        console.error('Invalid response format:', response.data);
+      }
     } catch (error) {
-      toast.error('Failed to load cart items');
+      console.error('Error fetching bookings:', error);
+      setBookings([]);
+      toast({
+        title: t('error', 'Error'),
+        description: t('fetchBookingsError', 'Failed to fetch bookings. Please try again.'),
+        variant: 'destructive',
+      });
     } finally {
-      setIsLoading(false);
-    }
-  };
-  
-  const handleRemoveItem = async (id: string) => {
-    if (!id) {
-      toast.error('Invalid item ID');
-      return;
-    }
-    try {
-      await cartService.removeFromCart(id);
-      setCartItems(cartItems.filter(item => item.bookingId !== id));
-      toast.success('Item removed from cart');
-    } catch (error) {
-      console.error('Remove item error:', error);
-      toast.error('Failed to remove item');
+      setLoading(false);
     }
   };
 
-  const handleUpdateQuantity = async (id: string, newQuantity: number) => {
-    if (!id) {
-      toast.error('Invalid item ID');
-      return;
-    }
-    if (newQuantity < 1) return;
+  const handleDelete = async (booking: FlightBooking) => {
     try {
-      await cartService.updateQuantity(id, newQuantity);
-      setCartItems(cartItems.map(item => 
-        item.bookingId === id ? { ...item, quantity: newQuantity } : item
-      ));
-      toast.success('Quantity updated successfully');
+      await api.delete(`/flights/bookings/${booking._id}`);
+      setBookings(bookings.filter(b => b._id !== booking._id));
+      toast({
+        title: t('success', 'Success'),
+        description: t('bookingDeleted', 'Booking has been deleted successfully'),
+      });
     } catch (error) {
-      console.error('Update quantity error:', error);
-      toast.error('Failed to update quantity');
+      console.error('Error deleting booking:', error);
+      toast({
+        title: t('error', 'Error'),
+        description: t('deleteBookingError', 'Failed to delete booking. Please try again.'),
+        variant: 'destructive',
+      });
     }
   };
-  
-  // Calculate totals
-  const subtotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const tax = subtotal * 0.08; // 8% tax rate
-  const total = subtotal + tax;
-  
-  // Check if cart is empty
-  const isCartEmpty = cartItems.length === 0;
-  
-  return (
-    <>
-      <div className="bg-gradient-to-r from-gray-50 to-gray-100 py-12">
-        <div className="container-custom">
-          <h1 className="text-4xl font-bold mb-4">Your Cart</h1>
-          <p className="text-gray-600">
-            Review your selected items before proceeding to checkout.
-          </p>
+
+  const handleProceedToPayment = async (booking: FlightBooking) => {
+    try {
+      setProcessingPayment(booking._id);
+      const amount = booking.flightDetails?.selectedFlight?.price?.total || 0;
+      const paymentUrl = await paymentService.initiatePayment(amount, booking.bookingId);
+      window.location.href = paymentUrl;
+    } catch (error) {
+      console.error('Payment initiation error:', error);
+      toast({
+        title: t('error', 'Error'),
+        description: t('paymentInitiationError', 'Failed to initiate payment. Please try again.'),
+        variant: 'destructive',
+      });
+      setProcessingPayment(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="container-custom py-8">
+        <div className="flex justify-center items-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-tourtastic-blue border-t-transparent"></div>
         </div>
       </div>
-      
-      <div className="py-12 container-custom">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-tourtastic-blue" />
-          </div>
-        ) : isCartEmpty ? (
-          <div className="text-center py-16 bg-white rounded-lg shadow-sm">
-            <div className="max-w-md mx-auto">
-              <h2 className="text-2xl font-bold mb-4">Your cart is empty</h2>
-              <p className="text-gray-600 mb-8">
-                You haven't added any flights, hotels, or experiences to your cart yet.
-                Start exploring our destinations to find your next adventure!
-              </p>
-              <div className="flex flex-wrap justify-center gap-4">
-                <Button asChild>
-                  <Link to="/flights">Find Flights</Link>
-                </Button>
-                <Button asChild variant="outline">
-                  <Link to="/destinations">Explore Destinations</Link>
-                </Button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Cart Items */}
-            <div className="lg:col-span-2">
-              <Card>
-                <CardContent className="p-6">
-                  <h2 className="text-xl font-bold mb-6">Cart Items ({cartItems.length})</h2>
-                  
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[300px]">Item</TableHead>
-                        <TableHead className="text-right">Price</TableHead>
-                        <TableHead className="text-center">Quantity</TableHead>
-                        <TableHead className="text-right">Total</TableHead>
-                        <TableHead className="w-[50px]"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {cartItems.map((item, index) => (
-                        <TableRow key={`${item.bookingId || index}`}>
-                          <TableCell>
-                            <div className="flex items-center space-x-3">
-                              <img 
-                                src={item.image} 
-                                alt={item.name}
-                                className="h-10 w-10" 
-                              />
-                              <div>
-                                <p className="font-medium">{item.name}</p>
-                                <p className="text-sm text-gray-500">{item.details}</p>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">${item.price}</TableCell>
-                          <TableCell className="text-center">
-                            <div className="flex items-center justify-center">
-                              <button
-                                className="w-8 h-8 rounded-l border border-gray-300 bg-gray-100 flex items-center justify-center hover:bg-gray-200"
-                                onClick={() => handleUpdateQuantity(item.bookingId, item.quantity - 1)}
-                              >
-                                -
-                              </button>
-                              <span className="w-10 text-center border-y border-gray-300 h-8 flex items-center justify-center bg-white">
-                                {item.quantity}
-                              </span>
-                              <button
-                                className="w-8 h-8 rounded-r border border-gray-300 bg-gray-100 flex items-center justify-center hover:bg-gray-200"
-                                onClick={() => handleUpdateQuantity(item.bookingId, item.quantity + 1)}
-                              >
-                                +
-                              </button>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            ${(item.price * item.quantity).toFixed(2)}
-                          </TableCell>
-                          <TableCell>
-                            <button
-                              onClick={() => handleRemoveItem(item.bookingId)}
-                              className="text-gray-500 hover:text-red-500"
-                            >
-                              <Trash2 className="h-5 w-5" />
-                            </button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            </div>
-            
-            {/* Order Summary */}
-            <div className="lg:col-span-1">
-              <Card>
-                <CardContent className="p-6">
-                  <h2 className="text-xl font-bold mb-6">Order Summary</h2>
-                  
-                  <div className="space-y-4">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Subtotal</span>
-                      <span className="font-medium">${subtotal.toFixed(2)}</span>
+    );
+  }
+
+  return (
+    <div className="container-custom py-8">
+      <h1 className="text-3xl font-bold mb-8 text-center md:text-left">{t('yourBookings', 'Your Bookings')}</h1>
+
+      {!bookings || bookings.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-gray-500">{t('noBookings', 'No bookings found in your cart.')}</p>
+          <Button
+            onClick={() => navigate('/flights')}
+            className="mt-4 bg-tourtastic-blue hover:bg-tourtastic-dark-blue text-white"
+          >
+            {t('searchFlights', 'Search Flights')}
+          </Button>
+        </div>
+      ) : (
+        <div className="grid gap-6">
+          {bookings.map((booking) => {
+            const airline = booking?.flightDetails?.selectedFlight?.airline || 'Unknown Airline';
+            const flightId = booking?.flightDetails?.selectedFlight?.flightId || 'N/A';
+            const from = booking?.flightDetails?.from || 'N/A';
+            const to = booking?.flightDetails?.to || 'N/A';
+            const departureDate = booking?.flightDetails?.departureDate;
+            const passengers = booking?.flightDetails?.passengers || { adults: 0, children: 0, infants: 0 };
+            const cabinClass = booking?.flightDetails?.selectedFlight?.class || 'N/A';
+            const status = booking?.status || 'pending';
+            const price = booking?.flightDetails?.selectedFlight?.price || { total: 0, currency: 'USD' };
+            const paymentStatus = booking?.paymentDetails?.status || 'pending';
+
+            return (
+              <Card key={booking._id} className="p-4 md:p-6">
+                <CardContent className="p-0">
+                  <div className="flex flex-col lg:flex-row justify-between gap-6">
+                    {/* Flight Details */}
+                    <div className="flex-1 text-center md:text-left">
+                      <div className="flex items-center justify-center md:justify-start gap-2 mb-4">
+                        <Plane className="h-5 w-5 text-tourtastic-blue" />
+                        <h2 className="text-xl font-semibold">{airline}</h2>
+                        <span className="text-sm text-gray-500">({flightId})</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div>
+                          <div className="text-sm text-gray-500 mb-1">{t('route', 'Route')}</div>
+                          <div className="font-medium">
+                            {from} → {to}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="text-sm text-gray-500 mb-1">{t('departure', 'Departure')}</div>
+                          <div className="font-medium">
+                            {departureDate ? format(new Date(departureDate), 'MMM dd, yyyy HH:mm') : 'N/A'}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="text-sm text-gray-500 mb-1">{t('passengers', 'Passengers')}</div>
+                          <div className="font-medium">
+                            {passengers.adults} {t('adults', 'Adults')}
+                            {passengers.children > 0 && `, ${passengers.children} ${t('children', 'Children')}`}
+                            {passengers.infants > 0 && `, ${passengers.infants} ${t('infants', 'Infants')}`}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <div className="text-sm text-gray-500 mb-1">{t('class', 'Class')}</div>
+                          <div className="font-medium capitalize">{cabinClass}</div>
+                        </div>
+
+                        <div>
+                          <div className="text-sm text-gray-500 mb-1">{t('bookingStatus', 'Booking Status')}</div>
+                          <div className="font-medium capitalize">{status}</div>
+                        </div>
+                      </div>
                     </div>
-                    
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Taxes & Fees</span>
-                      <span className="font-medium">${tax.toFixed(2)}</span>
+
+                    {/* Price and Actions */}
+                    <div className="lg:w-64 flex flex-col justify-between items-center md:items-end">
+                      <div className="mb-4 text-center md:text-right">
+                        <div className="text-sm text-gray-500 mb-1">{t('totalPrice', 'Total Price')}</div>
+                        <div className="text-2xl font-bold">
+                          {price.currency} {price.total}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-2 w-full md:w-auto">
+                        <Button
+                          onClick={() => handleProceedToPayment(booking)}
+                          className="w-full bg-tourtastic-blue hover:bg-tourtastic-dark-blue text-white flex items-center justify-center gap-2"
+                          disabled={paymentStatus === 'completed' || processingPayment === booking._id}
+                        >
+                          <CreditCard className="h-4 w-4" />
+                          {processingPayment === booking._id ? (
+                            <span className="animate-pulse">{t('processing', 'Processing...')}</span>
+                          ) : paymentStatus === 'completed' ? (
+                            t('paid', 'Paid')
+                          ) : (
+                            t('proceedToPayment', 'Proceed to Payment')
+                          )}
+                        </Button>
+
+                        <Button
+                          onClick={() => handleDelete(booking)}
+                          variant="outline"
+                          className="w-full text-red-500 hover:text-red-600 hover:bg-red-50"
+                          disabled={status !== 'pending' || processingPayment === booking._id}
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          {t('delete', 'Delete')}
+                        </Button>
+                      </div>
                     </div>
-                    
-                    <Separator />
-                    
-                    <div className="flex justify-between text-lg font-bold">
-                      <span>Total</span>
-                      <span className="text-tourtastic-blue">${total.toFixed(2)}</span>
-                    </div>
-                    
-                    <Button 
-                      className="w-full mt-6" 
-                      size="lg"
-                      onClick={async () => {
-                        try {
-                          await cartService.checkout();
-                          toast.success('Booking confirmed successfully!');
-                          setCartItems([]); // Clear cart after successful booking
-                        } catch (error) {
-                          toast.error('Failed to confirm booking');
-                        }
-                      }}
-                    >
-                      Confirm Booking
-                    </Button>
-                    
-                    <p className="text-xs text-gray-500 text-center pt-4">
-                      By proceeding, you agree to our Terms of Service and Privacy Policy.
-                    </p>
                   </div>
                 </CardContent>
               </Card>
-              
-              {/* Promo Code */}
-              <Card className="mt-4">
-                <CardContent className="p-6">
-                  <h3 className="font-medium mb-2">Have a promo code?</h3>
-                  <div className="flex gap-2">
-                    <Input placeholder="Enter code" />
-                    <Button variant="outline">Apply</Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        )}
-      </div>
-    </>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 };
 

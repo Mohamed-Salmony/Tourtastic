@@ -1,6 +1,7 @@
 const asyncHandler = require("../middleware/asyncHandler");
 const Booking = require("../models/Booking");
 const FlightBooking = require("../models/FlightBooking");
+const Notification = require("../models/Notification");
 
 // @desc    Get cart items for the logged-in user
 // @route   GET /api/cart
@@ -76,64 +77,6 @@ exports.removeFromCart = asyncHandler(async (req, res) => {
   });
 });
 
-// @desc    Update cart item quantity
-// @route   PATCH /api/cart/:id
-// @access  Private
-exports.updateCartItem = asyncHandler(async (req, res) => {
-  const { quantity } = req.body;
-
-  if (!quantity || quantity < 1) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid quantity"
-    });
-  }
-
-  // Try to find in regular bookings first
-  let booking = await Booking.findOne({
-    bookingId: req.params.id,
-    userId: req.user.id
-  });
-
-  if (!booking) {
-    // If not found in regular bookings, try flight bookings
-    booking = await FlightBooking.findOne({
-      bookingId: req.params.id,
-      userId: req.user.id
-    });
-  }
-
-  if (!booking) {
-    return res.status(404).json({
-      success: false,
-      message: "Booking not found"
-    });
-  }
-
-  // Update quantity based on booking type
-  if (booking.flightDetails) {
-    // For flight bookings, update the number of passengers
-    booking.flightDetails.passengers = {
-      ...booking.flightDetails.passengers,
-      adults: quantity
-    };
-  } else {
-    // For regular bookings, update the quantity in details
-    if (booking.details) {
-      booking.details.quantity = quantity;
-    } else {
-      booking.details = { quantity };
-    }
-  }
-  
-  await booking.save();
-
-  res.status(200).json({
-    success: true,
-    data: booking
-  });
-});
-
 // @desc    Checkout cart items
 // @route   POST /api/bookings/cart/checkout
 // @access  Private
@@ -165,10 +108,26 @@ exports.checkout = asyncHandler(async (req, res) => {
       ...regularBookings.map(async (item) => {
         item.status = "confirmed";
         await item.save();
+        
+        // Create notification for regular booking
+        await Notification.create({
+          userId: req.user.id,
+          title: "Booking Confirmed",
+          message: `Your ${item.type} booking for ${item.destination || 'your selected destination'} has been confirmed.`,
+          type: "booking"
+        });
       }),
       ...flightBookings.map(async (item) => {
         item.status = "confirmed";
         await item.save();
+        
+        // Create notification for flight booking
+        await Notification.create({
+          userId: req.user.id,
+          title: "Flight Booking Confirmed",
+          message: `Your flight from ${item.flightDetails.from} to ${item.flightDetails.to} has been confirmed.`,
+          type: "booking"
+        });
       })
     ]);
 

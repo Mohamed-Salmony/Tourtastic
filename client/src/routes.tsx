@@ -11,6 +11,7 @@ import Register from './pages/Register';
 import NotFound from './pages/NotFound';
 import ForgotPassword from './pages/ForgotPassword';
 import { RequireAuth } from './providers/RequireAuth';
+import PaymentSuccess from './pages/PaymentSuccess';
 
 // Protected pages
 import Cart from './pages/Cart';
@@ -38,6 +39,7 @@ const AppRoutes = () => {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/payment/success" element={<PaymentSuccess />} />
 
         {/* Protected User Routes */}
         <Route path="/cart" element={<RequireAuth><Cart /></RequireAuth>} />

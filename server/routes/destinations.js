@@ -4,7 +4,8 @@ const {
   getDestination,
   createDestination,
   updateDestination,
-  deleteDestination
+  deleteDestination,
+  updateDestinationPopular
 } = require("../controllers/destinations");
 const { protect, authorize } = require('../middleware/auth');
 
@@ -21,6 +22,10 @@ router
   .get(getDestination)
   .put(protect, authorize('admin'), updateDestination)
   .delete(protect, authorize('admin'), deleteDestination);
+
+router
+  .route('/:id/popular')
+  .patch(protect, authorize('admin'), updateDestinationPopular);
 
 // Note: POST, PUT, DELETE routes for destinations will be under /api/admin/destinations
 

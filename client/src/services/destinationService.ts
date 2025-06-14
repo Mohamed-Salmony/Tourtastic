@@ -34,4 +34,12 @@ export const getDestination = async (id: string): Promise<Destination> => {
     throw new Error(response.data.message || 'Failed to load destination');
   }
   return response.data.data;
+};
+
+export const updateDestinationPopular = async (id: string, popular: boolean): Promise<Destination> => {
+  const response = await api.patch(`/destinations/${id}/popular`, { popular });
+  if (!response.data.success) {
+    throw new Error(response.data.message || 'Failed to update destination');
+  }
+  return response.data.data;
 }; 
