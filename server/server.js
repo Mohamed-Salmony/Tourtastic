@@ -30,14 +30,32 @@ const app = express();
 app.use(express.json());
 
 // Enable CORS with specific options
+const allowedOrigins = [
+  'http://localhost:5000',
+  'http://127.0.0.1:5000',
+  'https://tourtastic.vercel.app'
+];
+
+// Regex لمطابقة أي رابط من Vercel
+const vercelRegex = /^https:\/\/.*\.vercel\.app$/;
+
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? 'https://tourtastic.vercel.app'  // Your Vercel frontend domain
-    : ['http://localhost:8080', 'http://127.0.0.1:8080'], // Vite dev server ports
-  credentials: true, // Allow cookies if you're using sessions
+  origin: function (origin, callback) {
+    if (
+      !origin || // السماح لأدوات مثل Postman
+      allowedOrigins.includes(origin) ||
+      vercelRegex.test(origin)
+    ) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS error: Not allowed origin - ${origin}`));
+    }
+  },
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 
 // Health check endpoint
 app.get('/health', (req, res) => {
