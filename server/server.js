@@ -39,32 +39,36 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // Mount routers
 app.use("/api/auth", authRoutes);
 app.use("/api/destinations", destinationRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/newsletter", newsletterRoutes);
-app.use("/api/flights", flightRoutes); // Seeru Proxy
-app.use("/api/admin", adminRoutes); // Admin routes
-app.use("/api/cart", cartRoutes); // Cart routes
-app.use("/api/users", userRoutes); // User routes
+app.use("/api/flights", flightRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/cart", cartRoutes);
+app.use("/api/users", userRoutes);
 app.use("/api/payment", paymentRoutes);
 app.use('/api/airports', airports);
 app.use('/api/notifications', notificationRoutes);
 
-// Serve static files from the uploads directory (e.g., for destination images)
-// Make sure the path is correct relative to where server.js is run
+// Serve static files from the uploads directory
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Basic route for testing API is running
 app.get("/", (req, res) => res.send("Tourtastic API Running"));
 
-// Use error handler middleware - MUST be after mounting routes
+// Use error handler middleware
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 8080;
 
-const server = app.listen(PORT, () =>
+const server = app.listen(PORT, '0.0.0.0', () =>
   console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`)
 );
 
@@ -75,4 +79,4 @@ process.on("unhandledRejection", (err, promise) => {
   server.close(() => process.exit(1));
 });
 
-module.exports = app; // Export for potential testing
+module.exports = app;
