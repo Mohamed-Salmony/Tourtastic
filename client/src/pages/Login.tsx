@@ -47,7 +47,7 @@ const Login: React.FC = () => {
           user: response.data.user
         });
         
-        login(response.data.token, response.data.user);
+        login(response.data.accessToken, response.data.refreshToken, response.data.user);
         
         toast({
           title: "Success",
