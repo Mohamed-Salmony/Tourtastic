@@ -21,11 +21,11 @@ const FlightBookingSchema = new mongoose.Schema({
   },
   customerPhone: String,
   flightDetails: {
-    departureCity: {
+    from: {
       type: String,
       required: true
     },
-    arrivalCity: {
+    to: {
       type: String,
       required: true
     },
@@ -33,26 +33,55 @@ const FlightBookingSchema = new mongoose.Schema({
       type: Date,
       required: true
     },
-    returnDate: {
-      type: Date
+    passengers: {
+      adults: {
+        type: Number,
+        required: true,
+        default: 1
+      },
+      children: {
+        type: Number,
+        default: 0
+      },
+      infants: {
+        type: Number,
+        default: 0
+      }
     },
-    airline: {
-      type: String,
-      required: true
-    },
-    flightNumber: {
-      type: String,
-      required: true
+    selectedFlight: {
+      flightId: {
+        type: String,
+        required: true
+      },
+      airline: {
+        type: String,
+        required: true
+      },
+      departureTime: {
+        type: Date,
+        required: true
+      },
+      arrivalTime: {
+        type: Date,
+        required: true
+      },
+      price: {
+        total: {
+          type: Number,
+          required: true
+        },
+        currency: {
+          type: String,
+          required: true,
+          default: 'USD'
+        }
+      },
+      class: {
+        type: String,
+        required: true,
+        default: 'economy'
+      }
     }
-  },
-  passengers: [{
-    name: String,
-    age: Number,
-    passportNumber: String
-  }],
-  amount: {
-    type: Number,
-    required: true
   },
   status: {
     type: String,
@@ -70,8 +99,8 @@ const FlightBookingSchema = new mongoose.Schema({
   adminData: {
     assignedTo: String,
     notes: String,
-    bookingSource: String, // Where the admin actually booked the ticket
-    bookingReference: String, // Reference number from the actual booking source
+    bookingSource: String,
+    bookingReference: String,
     cost: {
       amount: Number,
       currency: String

@@ -1,69 +1,81 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import Layout from '@/components/layout/Layout';
 import { useTranslation } from 'react-i18next';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
 
 const ForgotPassword: React.FC = () => {
   const { t } = useTranslation();
-  const [submitted, setSubmitted] = useState(false);
+  const { toast } = useToast();
   const [email, setEmail] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    setIsSubmitting(true);
+
+    try {
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      setIsSuccess(true);
+      toast({
+        title: t('success', 'Success'),
+        description: t('resetLinkSent', 'A password reset link has been sent to your email if it exists in our system.'),
+      });
+    } catch (error) {
+      toast({
+        title: t('error', 'Error'),
+        description: t('resetLinkError', 'Failed to send reset link. Please try again.'),
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <Layout>
+    <>
       <div className="py-16 container-custom">
         <div className="max-w-md mx-auto bg-white p-8 rounded-lg shadow-md">
-          <h1 className="text-3xl font-bold mb-6 text-center">{t('forgotPassword', 'Forgot Password?')}</h1>
-          <p className="text-gray-600 text-center mb-8">
+          <h1 className="text-2xl font-bold mb-6">{t('forgotPassword', 'Forgot Password')}</h1>
+          <p className="text-gray-600 mb-6">
             {t('forgotPasswordIntro', 'Enter your email address and we will send you a link to reset your password.')}
           </p>
 
-          {submitted ? (
+          {isSuccess ? (
             <div className="text-center">
-              <p className="text-green-600 font-medium mb-6">
-                {t('resetLinkSent', 'A password reset link has been sent to your email if it exists in our system.')}
-              </p>
-              <Link to="/login" className="text-tourtastic-blue hover:text-tourtastic-dark-blue font-medium">
-                {t('backToLogin', 'Back to Login')}
-              </Link>
+              <p className="text-green-600 mb-4">{t('resetLinkSent', 'A password reset link has been sent to your email if it exists in our system.')}</p>
+              <Button asChild>
+                <Link to="/login">
+                  {t('backToLogin', 'Back to Login')}
+                </Link>
+              </Button>
             </div>
           ) : (
-            <form className="space-y-6" onSubmit={handleSubmit}>
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('email', 'Email')}
-                </label>
-                <input
-                  id="email"
+            <form onSubmit={handleSubmit}>
+              <div className="mb-4">
+                <Input
                   type="email"
-                  required
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-tourtastic-blue"
-                  placeholder={t('yourEmail', 'your@email.com')}
+                  placeholder={t('email', 'Email')}
                   value={email}
-                  onChange={e => setEmail(e.target.value)}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
                 />
               </div>
-              <button
+              <Button
                 type="submit"
-                className="w-full py-2 px-4 bg-tourtastic-blue hover:bg-tourtastic-dark-blue text-white rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-tourtastic-blue focus:ring-opacity-50"
+                className="w-full"
+                disabled={isSubmitting}
               >
-                {t('sendResetLink', 'Send Reset Link')}
-              </button>
+                {isSubmitting ? t('sending', 'Sending...') : t('sendResetLink', 'Send Reset Link')}
+              </Button>
             </form>
           )}
-
-          <div className="mt-6 text-center">
-            <Link to="/login" className="text-sm text-tourtastic-blue hover:text-tourtastic-dark-blue font-medium">
-              {t('backToLogin', 'Back to Login')}
-            </Link>
-          </div>
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

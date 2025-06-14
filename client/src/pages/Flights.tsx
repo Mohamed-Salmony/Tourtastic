@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format } from 'date-fns';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, Plane, Clock, ShoppingCart, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,18 +13,25 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Flight, searchFlights, getSearchResults } from '@/services/flightService';
 import { toast } from '@/hooks/use-toast';
 import { api } from '@/config/api';
 
 // Form schema
 const searchFormSchema = z.object({
-  from: z.string().min(2, { message: 'Please enter departure city' }),
-  to: z.string().min(2, { message: 'Please enter destination city' }),
-  departureDate: z.date({ required_error: 'Please select departure date' }),
-  returnDate: z.date().optional(),
-  passengers: z.string().min(1, { message: 'Please select number of passengers' }),
+  flightSegments: z.array(z.object({
+    from: z.string().min(2, { message: 'Please enter departure city' }),
+    to: z.string().min(2, { message: 'Please enter destination city' }),
+    date: z.date({ required_error: 'Please select departure date' }),
+  })),
+  passengers: z.object({
+    adults: z.number().min(1, { message: 'At least one adult is required' }),
+    children: z.number().min(0),
+    infants: z.number().min(0),
+  }),
+  cabin: z.enum(['e', 'p', 'b', 'f']).optional(),
+  direct: z.boolean().optional(),
 });
 
 type SearchFormValues = z.infer<typeof searchFormSchema>;
@@ -34,73 +41,97 @@ const Flights = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [hasSearched, setHasSearched] = useState(false);
-  const [flights, setFlights] = useState<Flight[]>([]);
+  const [flights, setFlights] = useState<Record<string, Flight>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
   const [selectedFlight, setSelectedFlight] = useState<Flight | null>(null);
+  const [searchProgress, setSearchProgress] = useState(0);
+  const [searchId, setSearchId] = useState<string | null>(null);
+  const [showDetails, setShowDetails] = useState<string | null>(null);
 
   const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm<SearchFormValues>({
     resolver: zodResolver(searchFormSchema),
     defaultValues: {
-      from: '',
-      to: '',
-      passengers: '1',
+      flightSegments: [{ from: '', to: '', date: undefined }],
+      passengers: {
+        adults: 1,
+        children: 0,
+        infants: 0,
+      },
+      cabin: 'e',
+      direct: false,
     },
   });
 
-  const departureDate = watch('departureDate');
-  const returnDate = watch('returnDate');
+  const flightSegments = watch('flightSegments');
+  const passengers = watch('passengers');
+  const cabin = watch('cabin');
+  const direct = watch('direct');
 
-  const pollSearchResults = useCallback(async (searchId: string, maxAttempts = 5) => {
-    setIsPolling(true);
-    let attempts = 0;
+  const pollSearchResults = useCallback(async (id: string, lastAfter?: number) => {
+    if (!id) return;
     
-    const poll = async () => {
-      try {
-        const results = await getSearchResults(searchId);
-        if (results.success && results.data.flights.length > 0) {
-          setFlights(results.data.flights);
-          setHasSearched(true);
-          setIsPolling(false);
-          setIsLoading(false);
-        } else if (attempts < maxAttempts) {
-          attempts++;
-          setTimeout(poll, 2000); // Wait 2 seconds before trying again
-        } else {
-          throw new Error('Could not get flight results after multiple attempts');
-        }
-      } catch (error) {
-        setIsPolling(false);
-        setIsLoading(false);
-        toast({
-          title: t('error', 'Error'),
-          description: t('flightSearchError', 'Failed to fetch flight results. Please try again.'),
-          variant: 'destructive',
+    try {
+      const results = await getSearchResults(id, lastAfter);
+      
+      // Update search progress
+      setSearchProgress(results.complete);
+      
+      // Update flights with new or updated results
+      if (results.result && results.result.length > 0) {
+        setFlights(prevFlights => {
+          const updatedFlights = { ...prevFlights };
+          results.result.forEach(flight => {
+            updatedFlights[flight.trip_id] = flight;
+          });
+          return updatedFlights;
         });
       }
-    };
 
-    await poll();
+      // If search is not complete, continue polling
+      if (results.complete < 100) {
+        setTimeout(() => pollSearchResults(id, results.last_result), 2000);
+      } else {
+        setIsPolling(false);
+        setIsLoading(false);
+        setHasSearched(true);
+      }
+    } catch (error) {
+      console.error('Error polling search results:', error);
+      setIsPolling(false);
+      setIsLoading(false);
+      toast({
+        title: t('error', 'Error'),
+        description: t('flightSearchError', 'Failed to fetch flight results. Please try again.'),
+        variant: 'destructive',
+      });
+    }
   }, [t]);
 
   const onSubmit = useCallback(async (data: SearchFormValues) => {
     try {
       setIsLoading(true);
+      setFlights({});
+      setSearchProgress(0);
+      setSearchId(null);
       
       const searchParams = {
-        from: data.from,
-        to: data.to,
-        departureDate: data.departureDate.toISOString(),
-        returnDate: data.returnDate?.toISOString(),
-        adults: parseInt(data.passengers),
-        children: 0,
-        infants: 0,
+        flightSegments: data.flightSegments.map(segment => ({
+          from: segment.from,
+          to: segment.to,
+          date: segment.date instanceof Date && !isNaN(segment.date.getTime()) ? format(segment.date, 'yyyy-MM-dd') : '',
+        })),
+        passengers: data.passengers,
+        cabin: data.cabin,
+        direct: data.direct,
       };
 
       const response = await searchFlights(searchParams);
       
-      if (response.success && response.data.searchId) {
-        await pollSearchResults(response.data.searchId);
+      if (response.search_id) {
+        setSearchId(response.search_id);
+        setIsPolling(true);
+        await pollSearchResults(response.search_id);
       } else {
         throw new Error('Search initialization failed');
       }
@@ -117,45 +148,87 @@ const Flights = () => {
   // Handle search params from home page
   useEffect(() => {
     if (location.state) {
-      const { from, to, departureDate: departureDateParam, returnDate: returnDateParam, passengers } = location.state;
-      if (from) setValue('from', from);
-      if (to) setValue('to', to);
-      if (departureDateParam) setValue('departureDate', new Date(departureDateParam));
-      if (returnDateParam) setValue('returnDate', new Date(returnDateParam));
-      if (passengers) setValue('passengers', passengers);
+      const { flightSegments: segments, passengers: passengerCounts } = location.state;
+      
+      if (segments && segments.length > 0) {
+        setValue('flightSegments', segments.map((segment: any) => ({
+          ...segment,
+          date: new Date(segment.date),
+        })));
+      }
+      
+      if (passengerCounts) {
+        setValue('passengers', passengerCounts);
+      }
 
       // Auto submit if we have all required fields
-      if (from && to && departureDateParam) {
-        const formData = {
-          from,
-          to,
-          departureDate: new Date(departureDateParam),
-          returnDate: returnDateParam ? new Date(returnDateParam) : undefined,
-          passengers: passengers || '1',
-        };
-        onSubmit(formData);
+      if (segments && segments.length > 0 && segments.every((segment: any) => segment.from && segment.to && segment.date)) {
+        onSubmit({
+          flightSegments: segments.map((segment: any) => ({
+            ...segment,
+            date: new Date(segment.date),
+          })),
+          passengers: passengerCounts || { adults: 1, children: 0, infants: 0 },
+          cabin: 'e',
+          direct: false,
+        });
       }
     }
   }, [location.state, setValue, onSubmit]);
 
+  // Effect to handle polling when searchId changes
   useEffect(() => {
-    // Check if there are saved search parameters in the URL
-    const params = new URLSearchParams(location.search);
-    const from = params.get('from');
-    const to = params.get('to');
-    const departureDateParam = params.get('departureDate');
-    const returnDateParam = params.get('returnDate');
-    const passengers = params.get('passengers');
-
-    if (from && to && departureDateParam && passengers) {
-      // If all required parameters are present, set them in the form
-      setValue('from', from);
-      setValue('to', to);
-      setValue('departureDate', new Date(departureDateParam));
-      setValue('returnDate', returnDateParam ? new Date(returnDateParam) : null);
-      setValue('passengers', passengers);
+    if (searchId && isPolling) {
+      pollSearchResults(searchId);
     }
-  }, [location.search, setValue]);
+  }, [searchId, isPolling, pollSearchResults]);
+
+  const handleFlightSelection = async (flight: Flight) => {
+    setSelectedFlight(flight);
+    setShowDetails(flight.trip_id);
+  };
+
+  const handleAddToCart = async (flight: Flight) => {
+    try {
+      const response = await api.post('/flights/bookings', {
+        flightDetails: {
+          from: flight.legs[0].from.city,
+          to: flight.legs[0].to.city,
+          departureDate: flight.legs[0].from.date,
+          passengers: {
+            adults: flight.search_query.adt || 1,
+            children: flight.search_query.chd || 0,
+            infants: flight.search_query.inf || 0
+          },
+          selectedFlight: {
+            flightId: flight.legs[0].segments[0].flightnumber,
+            airline: flight.legs[0].segments[0].airline_name,
+            departureTime: flight.legs[0].from.date,
+            arrivalTime: flight.legs[0].to.date,
+            price: {
+              total: flight.price,
+              currency: flight.currency
+            },
+            class: flight.search_query.options.cabin || 'economy'
+          }
+        }
+      });
+
+      if (response.data.success) {
+        toast({
+          title: t('success', 'Success'),
+          description: t('flightAddedToCart', 'Flight has been added to your cart'),
+        });
+        navigate('/cart');
+      }
+    } catch (error) {
+      toast({
+        title: t('error', 'Error'),
+        description: t('addToCartError', 'Failed to add flight to cart. Please try again.'),
+        variant: 'destructive',
+      });
+    }
+  };
 
   return (
     <>
@@ -173,338 +246,335 @@ const Flights = () => {
       <div className="py-8 container-custom">
         <Card className="bg-white shadow-md">
           <CardContent className="p-6">
-            <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-              {/* From */}
-              <div className="space-y-2">
-                <Label htmlFor="from">{t('from', 'From')}</Label>
-                <Input
-                  id="from"
-                  placeholder={t('departureCity', 'Departure city')}
-                  {...register('from')}
-                />
-                {errors.from && (
-                  <p className="text-sm text-destructive">{errors.from.message}</p>
-                )}
-              </div>
-
-              {/* To */}
-              <div className="space-y-2">
-                <Label htmlFor="to">{t('to', 'To')}</Label>
-                <Input
-                  id="to"
-                  placeholder={t('destinationCity', 'Destination city')}
-                  {...register('to')}
-                />
-                {errors.to && (
-                  <p className="text-sm text-destructive">{errors.to.message}</p>
-                )}
-              </div>
-
-              {/* Departure Date */}
-              <div className="space-y-2">
-                <Label htmlFor="departureDate">{t('departure', 'Departure Date')}</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      id="departureDate"
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !departureDate && "text-muted-foreground"
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+              {/* Flight Segments */}
+              <div className="space-y-4">
+                {flightSegments.map((segment, index) => (
+                  <div key={index} className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 border rounded-lg">
+                    <div className="space-y-2">
+                      <Label htmlFor={`from-${index}`}>{t('from', 'From')}</Label>
+                      <Input
+                        id={`from-${index}`}
+                        placeholder={t('departureCity', 'Departure city')}
+                        {...register(`flightSegments.${index}.from`)}
+                      />
+                      {errors.flightSegments?.[index]?.from && (
+                        <p className="text-sm text-destructive">{errors.flightSegments[index]?.from?.message}</p>
                       )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {departureDate ? format(departureDate, "PPP") : <span>{t('pickDate', 'Pick a date')}</span>}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={departureDate}
-                      onSelect={(date) => date && setValue('departureDate', date)}
-                      disabled={(date) => date < new Date()}
-                      initialFocus
-                      className={cn("p-3 pointer-events-auto")}
-                    />
-                  </PopoverContent>
-                </Popover>
-                {errors.departureDate && (
-                  <p className="text-sm text-destructive">{errors.departureDate.message}</p>
-                )}
-              </div>
+                    </div>
 
-              {/* Return Date */}
-              <div className="space-y-2">
-                <Label htmlFor="returnDate">{t('return', 'Return Date (Optional)')}</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      id="returnDate"
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !returnDate && "text-muted-foreground"
+                    <div className="space-y-2">
+                      <Label htmlFor={`to-${index}`}>{t('to', 'To')}</Label>
+                      <Input
+                        id={`to-${index}`}
+                        placeholder={t('destinationCity', 'Destination city')}
+                        {...register(`flightSegments.${index}.to`)}
+                      />
+                      {errors.flightSegments?.[index]?.to && (
+                        <p className="text-sm text-destructive">{errors.flightSegments[index]?.to?.message}</p>
                       )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {returnDate ? format(returnDate, "PPP") : <span>{t('pickDate', 'Pick a date')}</span>}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={returnDate}
-                      onSelect={(date) => setValue('returnDate', date)}
-                      disabled={(date) => date < (departureDate || new Date())}
-                      initialFocus
-                      className={cn("p-3 pointer-events-auto")}
-                    />
-                  </PopoverContent>
-                </Popover>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor={`date-${index}`}>{t('date', 'Date')}</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            id={`date-${index}`}
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start text-left font-normal",
+                              !segment.date && "text-muted-foreground"
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {segment.date ? (segment.date instanceof Date && !isNaN(segment.date.getTime()) ? format(segment.date, "PPP") : <span>{t('pickDate', 'Pick a date')}</span>) : <span>{t('pickDate', 'Pick a date')}</span>}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={segment.date}
+                            onSelect={(date) => date && setValue(`flightSegments.${index}.date`, date)}
+                            disabled={(date) => date < new Date()}
+                            initialFocus
+                            className={cn("p-3 pointer-events-auto")}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      {errors.flightSegments?.[index]?.date && (
+                        <p className="text-sm text-destructive">{errors.flightSegments[index]?.date?.message}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
 
-              {/* Passengers */}
-              <div className="space-y-2">
-                <Label htmlFor="passengers">{t('passengers', 'Passengers')}</Label>
-                <Select defaultValue="1" onValueChange={(value) => setValue('passengers', value)}>
-                  <SelectTrigger id="passengers" className="w-full">
-                    <SelectValue placeholder="Select" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectLabel>Passengers</SelectLabel>
-                      {[1, 2, 3, 4, 5, 6].map((num) => (
-                        <SelectItem key={num} value={num.toString()}>
-                          {num} {num === 1 ? 'passenger' : 'passengers'}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                {errors.passengers && (
-                  <p className="text-sm text-destructive">{errors.passengers.message}</p>
-                )}
+              {/* Passenger Selection */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 border rounded-lg">
+                <div className="space-y-2">
+                  <Label>{t('adults', 'Adults')}</Label>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setValue('passengers.adults', Math.max(1, passengers.adults - 1))}
+                    >
+                      -
+                    </Button>
+                    <span className="w-8 text-center">{passengers.adults}</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setValue('passengers.adults', passengers.adults + 1)}
+                    >
+                      +
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t('children', 'Children')}</Label>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setValue('passengers.children', Math.max(0, passengers.children - 1))}
+                    >
+                      -
+                    </Button>
+                    <span className="w-8 text-center">{passengers.children}</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setValue('passengers.children', passengers.children + 1)}
+                    >
+                      +
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t('infants', 'Infants')}</Label>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setValue('passengers.infants', Math.max(0, passengers.infants - 1))}
+                    >
+                      -
+                    </Button>
+                    <span className="w-8 text-center">{passengers.infants}</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setValue('passengers.infants', passengers.infants + 1)}
+                    >
+                      +
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cabin Class and Direct Flights */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 border rounded-lg">
+                <div className="space-y-2">
+                  <Label>{t('cabinClass', 'Cabin Class')}</Label>
+                  <Select value={cabin} onValueChange={(value) => setValue('cabin', value as 'e' | 'p' | 'b' | 'f')}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('selectCabin', 'Select cabin class')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="e">{t('economy', 'Economy')}</SelectItem>
+                      <SelectItem value="p">{t('premiumEconomy', 'Premium Economy')}</SelectItem>
+                      <SelectItem value="b">{t('business', 'Business')}</SelectItem>
+                      <SelectItem value="f">{t('first', 'First')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t('flightType', 'Flight Type')}</Label>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant={direct ? "default" : "outline"}
+                      onClick={() => setValue('direct', true)}
+                    >
+                      {t('directOnly', 'Direct Only')}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={!direct ? "default" : "outline"}
+                      onClick={() => setValue('direct', false)}
+                    >
+                      {t('allFlights', 'All Flights')}
+                    </Button>
+                  </div>
+                </div>
               </div>
 
               {/* Search Button */}
-              <div className="mt-6 col-span-1 md:col-span-2 lg:col-span-5">
-                <Button 
-                  type="submit" 
-                  className="w-full md:w-auto md:px-8" 
-                  disabled={isLoading}
-                >
-                  {isLoading ? t('searching', 'Searching...') : t('searchFlights', 'Search Flights')}
-                </Button>
-              </div>
+              <Button type="submit" className="w-full bg-tourtastic-blue hover:bg-tourtastic-dark-blue text-white">
+                {isLoading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                    {t('searching', 'Searching...')}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Plane className="h-4 w-4" />
+                    {t('searchFlights', 'Search Flights')}
+                  </div>
+                )}
+              </Button>
             </form>
           </CardContent>
         </Card>
       </div>
 
-      {/* Results or Initial State */}
-      <div className="py-8 container-custom">
-        {isLoading ? (
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-tourtastic-blue mx-auto mb-4"></div>
-            <p className="text-lg font-medium">
-              {isPolling 
-                ? t('processingResults', 'Processing your search results...')
-                : t('searchingForBestFlights', 'Searching for the best flights...')}
-            </p>
+      {/* Results Section */}
+      {hasSearched && (
+        <div className="container-custom py-8">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-semibold">{t('searchResults', 'Search Results')}</h2>
+            {isPolling && (
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Clock className="h-4 w-4" />
+                <span>{t('searchingMoreFlights', 'Searching for more flights...')} {searchProgress}%</span>
+              </div>
+            )}
           </div>
-        ) : hasSearched ? (
-          <>
-            <h2 className="text-2xl font-bold mb-6">{t('flightResults', 'Flight Results')}</h2>
-            <div className="space-y-4">
-              {flights.map((flight) => (
-                <Card 
-                  key={flight.flightId} 
-                  className={cn(
-                    "overflow-hidden transition-shadow hover:shadow-lg",
-                    selectedFlight?.flightId === flight.flightId && "ring-2 ring-tourtastic-blue"
-                  )}
-                >
-                  <CardContent className="p-0">
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4 p-6">
-                      {/* Airline */}
-                      <div className="flex items-center">
-                        <div>
-                          <p className="font-bold">{flight.airline}</p>
-                          <p className="text-sm text-gray-500">{flight.flightId}</p>
-                        </div>
-                      </div>
 
-                      {/* Departure/Arrival */}
-                      <div className="col-span-2 flex flex-col justify-center">
-                        <div className="flex justify-between items-center">
-                          <div className="text-center">
-                            <p className="font-bold text-lg">
-                              {new Date(flight.departureTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </p>
-                            <p className="text-sm text-gray-500">{flight.departureAirport}</p>
-                          </div>
-                          
-                          <div className="flex-1 mx-4 relative">
-                            <div className="border-t border-gray-300 my-3"></div>
-                            <div className="absolute top-1/2 left-1/2 transform -translate-y-1/2 -translate-x-1/2 bg-white px-2 text-xs text-gray-500">
-                              {flight.duration}
+          {isLoading ? (
+            <div className="flex justify-center items-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-4 border-tourtastic-blue border-t-transparent"></div>
+            </div>
+          ) : Object.values(flights).length > 0 ? (
+            <div className="grid gap-6">
+              {Object.values(flights).map((flight) => (
+                <Card key={flight.trip_id} className="p-4 hover:shadow-lg transition-shadow">
+                  <div className="flex flex-col lg:flex-row justify-between items-center gap-6">
+                    <div className="flex-1 w-full">
+                      {flight.legs.map((leg, index) => (
+                        <div key={leg.leg_id} className={index > 0 ? 'mt-6 pt-6 border-t' : ''}>
+                          <div className="flex flex-col sm:flex-row items-center gap-4">
+                            <div className="flex items-center gap-4 min-w-[200px] justify-center sm:justify-start">
+                              <div className="text-lg font-semibold">{leg.segments[0].airline_name}</div>
+                              <div className="text-sm text-gray-500">{leg.segments[0].flightnumber}</div>
+                            </div>
+                            <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-4 text-center sm:text-left">
+                              <div className="flex flex-col items-center sm:items-start">
+                                <span className="text-sm text-gray-500">{t('departure', 'Departure')}</span>
+                                <span className="font-medium">{format(new Date(leg.from.date), 'HH:mm')}</span>
+                                <span className="text-sm">{leg.from.airport}</span>
+                              </div>
+                              <div className="flex flex-col items-center">
+                                <span className="text-sm text-gray-500">{t('duration', 'Duration')}</span>
+                                <span className="font-medium">{Math.floor(leg.duration / 60)}h {leg.duration % 60}m</span>
+                                <div className="w-full h-px bg-gray-200 my-2"></div>
+                                <span className="text-xs text-gray-500">{leg.segments.length === 1 ? t('direct', 'Direct') : `${leg.segments.length - 1} ${t('stops', 'stops')}`}</span>
+                              </div>
+                              <div className="flex flex-col items-center sm:items-end">
+                                <span className="text-sm text-gray-500">{t('arrival', 'Arrival')}</span>
+                                <span className="font-medium">{format(new Date(leg.to.date), 'HH:mm')}</span>
+                                <span className="text-sm">{leg.to.airport}</span>
+                              </div>
                             </div>
                           </div>
-                          
-                          <div className="text-center">
-                            <p className="font-bold text-lg">
-                              {new Date(flight.arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </p>
-                            <p className="text-sm text-gray-500">{flight.arrivalAirport}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex flex-col items-center lg:items-end gap-3 w-full lg:w-auto lg:min-w-[200px]">
+                      <div className="text-2xl font-bold text-center lg:text-right">
+                        {flight.currency} {flight.price}
+                      </div>
+                      <div className="text-sm text-gray-500 text-center lg:text-right">
+                        {t('perPerson', 'per person')}
+                      </div>
+                      <Button
+                        onClick={() => handleFlightSelection(flight)}
+                        className="w-full lg:w-auto bg-tourtastic-blue hover:bg-tourtastic-dark-blue text-white transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-md hover:shadow-lg"
+                      >
+                        {selectedFlight?.trip_id === flight.trip_id ? (
+                          <div className="flex items-center gap-2">
+                            <span>✓</span>
+                            {t('selected', 'Selected')}
+                          </div>
+                        ) : (
+                          t('select', 'Select')
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Flight Details Section */}
+                  {showDetails === flight.trip_id && (
+                    <div className="mt-6 pt-6 border-t">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-4">
+                          <h3 className="text-lg font-semibold flex items-center gap-2">
+                            <Info className="h-5 w-5 text-tourtastic-blue" />
+                            {t('flightDetails', 'Flight Details')}
+                          </h3>
+                          <div className="space-y-2">
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">{t('cabinClass', 'Cabin Class')}</span>
+                              <span>{flight.legs[0].cabin_name}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">{t('baggageAllowance', 'Baggage Allowance')}</span>
+                              <span>{flight.legs[0].bags.ADT.checked.desc}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">{t('refundable', 'Refundable')}</span>
+                              <span>{flight.refundable_info}</span>
+                            </div>
                           </div>
                         </div>
-                        <div className="mt-4 text-center space-y-1">
-                          <div className="text-sm text-gray-500">{flight.class}</div>
-                          {flight.layovers.length > 0 && (
-                            <div className="text-xs text-gray-500">
-                              {flight.layovers.length} {t('stop', 'Stop')} ({flight.layovers.map(l => l.airport).join(', ')})
+                        <div className="flex flex-col justify-between">
+                          <div className="space-y-2">
+                            <h3 className="text-lg font-semibold">{t('priceBreakdown', 'Price Breakdown')}</h3>
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">{t('baseFare', 'Base Fare')}</span>
+                              <span>{flight.currency} {flight.price}</span>
                             </div>
-                          )}
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">{t('taxes', 'Taxes')}</span>
+                              <span>{flight.currency} {flight.tax}</span>
+                            </div>
+                            <div className="flex justify-between font-semibold border-t pt-2">
+                              <span>{t('total', 'Total')}</span>
+                              <span>{flight.currency} {flight.price + flight.tax}</span>
+                            </div>
+                          </div>
+                          <Button
+                            onClick={() => handleAddToCart(flight)}
+                            className="mt-4 bg-tourtastic-blue hover:bg-tourtastic-dark-blue text-white flex items-center justify-center gap-2"
+                          >
+                            <ShoppingCart className="h-4 w-4" />
+                            {t('addToCart', 'Add to Cart')}
+                          </Button>
                         </div>
-                      </div>
-
-                      {/* Price */}
-                      <div className="flex flex-col justify-center items-center">
-                        <p className="font-bold text-lg text-tourtastic-blue">${flight.price.total}</p>
-                        <p className="text-sm text-gray-500">{t('perPerson', 'per person')}</p>
-                      </div>
-
-                      {/* Select Button */}
-                      <div className="flex items-center justify-center">
-                        <Button 
-                          variant={selectedFlight?.flightId === flight.flightId ? "secondary" : "default"}
-                          onClick={() => setSelectedFlight(selectedFlight?.flightId === flight.flightId ? null : flight)}
-                        >
-                          {selectedFlight?.flightId === flight.flightId ? t('selected', 'Selected') : t('select', 'Select')}
-                        </Button>
                       </div>
                     </div>
-
-                    {/* Booking Details Section */}
-                    {selectedFlight?.flightId === flight.flightId && (
-                      <div className="border-t border-gray-200 p-6 bg-gray-50">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                          <div>
-                            <h4 className="font-medium mb-2">{t('flightDetails', 'Flight Details')}</h4>
-                            <div className="text-sm space-y-1">
-                              <p><span className="text-gray-500">{t('airline', 'Airline')}:</span> {flight.airline}</p>
-                              <p><span className="text-gray-500">{t('flightNumber', 'Flight Number')}:</span> {flight.flightId}</p>
-                              <p><span className="text-gray-500">{t('class', 'Class')}:</span> {flight.class}</p>
-                            </div>
-                          </div>
-                          <div>
-                            <h4 className="font-medium mb-2">{t('priceBreakdown', 'Price Breakdown')}</h4>
-                            <div className="text-sm space-y-1">
-                              <p><span className="text-gray-500">{t('adultPrice', 'Adult Price')}:</span> ${flight.price.adult}</p>
-                              {flight.price.child > 0 && (
-                                <p><span className="text-gray-500">{t('childPrice', 'Child Price')}:</span> ${flight.price.child}</p>
-                              )}
-                              <p className="font-medium pt-1">{t('total', 'Total')}: ${flight.price.total}</p>
-                            </div>
-                          </div>
-                          <div>
-                            <h4 className="font-medium mb-2">{t('availableSeats', 'Available Seats')}</h4>
-                            <p className="text-sm">{flight.availableSeats} {t('seatsLeft', 'seats left')}</p>
-                            <Button 
-                              className="mt-4 w-full" 
-                              onClick={async () => {
-                                try {
-                                  const bookingData = {
-                                    flightDetails: {
-                                      from: watch('from'),
-                                      to: watch('to'),
-                                      departureDate: watch('departureDate'),
-                                      returnDate: watch('returnDate'),
-                                      passengers: {
-                                        adults: parseInt(watch('passengers')),
-                                        children: 0,
-                                        infants: 0
-                                      },
-                                      selectedFlight: {
-                                        ...flight,
-                                        price: {
-                                          total: flight.price.total,
-                                          currency: 'USD'
-                                        }
-                                      }
-                                    }
-                                  };
-                                  
-                                  // Use the configured api client to create the booking
-                                  const response = await api.post('/flights/book', bookingData);
-                                  
-                                  if (response.data.success) {
-                                    // Show success message
-                                    toast({
-                                      title: t('success', 'Success'),
-                                      description: t('flightAddedToCart', 'Flight added to cart successfully!'),
-                                      variant: 'default',
-                                    });
-                                    
-                                    // Redirect to cart page
-                                    navigate('/cart');
-                                  } else {
-                                    throw new Error(response.data.message || 'Failed to create booking');
-                                  }
-                                } catch (error) {
-                                  console.error('Error creating booking:', error);
-                                  toast({
-                                    title: t('error', 'Error'),
-                                    description: t('bookingError', 'Failed to add flight to cart. Please try again.'),
-                                    variant: 'destructive',
-                                  });
-                                }
-                              }}>
-                              {t('continueToBooking', 'Continue to Booking')}
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
+                  )}
                 </Card>
               ))}
             </div>
-          </>
-        ) : (
-          <div className="text-center py-12 bg-gray-50 rounded-lg">
-            <div className="max-w-md mx-auto">
-              <h3 className="text-xl font-bold mb-4">{t('findYourPerfectFlight', 'Find Your Perfect Flight')}</h3>
-              <p className="text-gray-600 mb-6">
-                {t('useSearchFormAbove', 'Use the search form above to find flights to your desired destination. Enter your departure city, destination, dates, and number of passengers to get started.')}
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
-                <div className="p-4">
-                  <div className="w-12 h-12 bg-tourtastic-light-blue rounded-full flex items-center justify-center mx-auto mb-3">
-                    <span className="text-tourtastic-blue font-bold">1</span>
-                  </div>
-                  <h4 className="font-bold mb-1">{t('search', 'Search')}</h4>
-                  <p className="text-sm text-gray-500">{t('enterTravelDetails', 'Enter your travel details')}</p>
-                </div>
-                <div className="p-4">
-                  <div className="w-12 h-12 bg-tourtastic-light-blue rounded-full flex items-center justify-center mx-auto mb-3">
-                    <span className="text-tourtastic-blue font-bold">2</span>
-                  </div>
-                  <h4 className="font-bold mb-1">{t('compare', 'Compare')}</h4>
-                  <p className="text-sm text-gray-500">{t('viewFlightsPrices', 'View flights and prices')}</p>
-                </div>
-                <div className="p-4">
-                  <div className="w-12 h-12 bg-tourtastic-light-blue rounded-full flex items-center justify-center mx-auto mb-3">
-                    <span className="text-tourtastic-blue font-bold">3</span>
-                  </div>
-                  <h4 className="font-bold mb-1">{t('book', 'Book')}</h4>
-                  <p className="text-sm text-gray-500">{t('secureReservation', 'Secure your reservation')}</p>
-                </div>
-              </div>
+          ) : (
+            <div className="text-center py-12">
+              <p className="text-gray-500">{t('noFlightsFound', 'No flights found matching your criteria.')}</p>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </>
   );
 };

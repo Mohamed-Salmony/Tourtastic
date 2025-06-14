@@ -1,11 +1,6 @@
 const mongoose = require("mongoose");
 
-const FlightSchema = new mongoose.Schema({
-  searchId: {
-    type: String,
-    required: true,
-    unique: true
-  },
+const FlightSegmentSchema = new mongoose.Schema({
   from: {
     type: String,
     required: true
@@ -17,10 +12,16 @@ const FlightSchema = new mongoose.Schema({
   departureDate: {
     type: Date,
     required: true
+  }
+});
+
+const FlightSchema = new mongoose.Schema({
+  searchId: {
+    type: String,
+    required: true,
+    unique: true
   },
-  returnDate: {
-    type: Date
-  },
+  segments: [FlightSegmentSchema],
   adults: {
     type: Number,
     required: true,
@@ -36,7 +37,7 @@ const FlightSchema = new mongoose.Schema({
   },
   searchResults: {
     type: Array,
-    required: true
+    default: []
   },
   createdAt: {
     type: Date,

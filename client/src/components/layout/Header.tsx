@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo, useEffect } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { Menu, X, Bell, Globe, ShoppingBasket, User, LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -8,18 +8,16 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import axios from 'axios';
 
 const Header: React.FC = () => {
   const { t } = useTranslation();
   const { currentLocale, toggleLocale } = useLocale();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [hasUnreadNotifications, setHasUnreadNotifications] = useState(true);
+  const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, logout } = useAuth();
-
-  // Add this temporary debug log
-  console.log('Header render - user state:', user);
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
@@ -33,6 +31,36 @@ const Header: React.FC = () => {
     });
     navigate('/');
   };
+
+  // Fetch unread notifications status
+  const fetchUnreadNotifications = async () => {
+    if (!user) return;
+    
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const response = await axios.get('/api/notifications', {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      const hasUnread = response.data.data.some((notification: any) => !notification.read);
+      setHasUnreadNotifications(hasUnread);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      fetchUnreadNotifications();
+      // Set up polling every minute to check for new notifications
+      const interval = setInterval(fetchUnreadNotifications, 60000);
+      return () => clearInterval(interval);
+    }
+  }, [user]);
 
   return (
     <header className="bg-white shadow-md fixed w-full top-0 left-0 z-50">
@@ -88,7 +116,7 @@ const Header: React.FC = () => {
                 <Link to="/notifications">
                   <Bell className="h-5 w-5" />
                   {hasUnreadNotifications && (
-                    <span className="absolute top-0 right-0 block h-2 w-2 rounded-full bg-tourtastic-blue ring-2 ring-white" />
+                    <span className="absolute -top-1 -right-1 block h-2 w-2 rounded-full bg-tourtastic-blue ring-2 ring-white" />
                   )}
                   <span className="sr-only">{t('notifications')}</span>
                 </Link>
@@ -217,11 +245,14 @@ const Header: React.FC = () => {
                 <>
                   <Link 
                     to="/notifications" 
-                    className="py-2 px-4 text-gray-800 flex items-center"
+                    className="py-2 px-4 text-gray-800 flex items-center relative"
                     onClick={toggleMenu}
                   >
                     <Bell className="h-5 w-5 mr-2" />
                     {t('notifications')}
+                    {hasUnreadNotifications && (
+                      <span className="absolute top-2 right-2 block h-2 w-2 rounded-full bg-tourtastic-blue" />
+                    )}
                   </Link>
                   <Link 
                     to="/cart" 
@@ -276,4 +307,4 @@ const Header: React.FC = () => {
   );
 };
 
-export default Header;
+export default memo(Header);

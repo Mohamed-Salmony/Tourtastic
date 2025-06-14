@@ -14,16 +14,18 @@ const { protect } = require("../middleware/auth");
 const router = express.Router();
 
 // Public routes for searching flights
-router.get("/search", searchFlights);
+router.get("/search/:tripsString/:adults/:children/:infants", searchFlights);
 router.get("/results/:search_id", getSearchResults);
 
-// Protected routes for managing bookings
-router.use(protect); // Apply protection to all routes below
+// Protected routes for flight bookings
+router.use(protect);
+router.route("/bookings")
+  .get(getUserFlightBookings)
+  .post(createFlightBooking);
 
-router.post("/book", createFlightBooking);
-router.get("/bookings", getUserFlightBookings);
-router.get("/bookings/:id", getFlightBookingById);
-router.put("/bookings/:id", updateFlightBooking);
-router.delete("/bookings/:id", deleteFlightBooking);
+router.route("/bookings/:bookingId")
+  .get(getFlightBookingById)
+  .put(updateFlightBooking)
+  .delete(deleteFlightBooking);
 
 module.exports = router;

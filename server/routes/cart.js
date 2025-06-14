@@ -2,7 +2,6 @@ const express = require("express");
 const {
   getCartItems,
   removeFromCart,
-  updateCartItem,
   checkout
 } = require("../controllers/cartController");
 const { protect } = require("../middleware/auth");
@@ -16,9 +15,6 @@ router.route("/")
   .get(getCartItems);
 
 router.route("/:id")
-  .delete(removeFromCart)
-  .patch(updateCartItem);
-
-router.post("/checkout", checkout);
+  .delete(removeFromCart);
 
 module.exports = router;

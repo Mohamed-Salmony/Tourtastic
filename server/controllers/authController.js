@@ -1,4 +1,5 @@
 const User = require("../models/User");
+const Notification = require("../models/Notification");
 const asyncHandler = require("../middleware/asyncHandler");
 const jwt = require("jsonwebtoken");
 
@@ -8,7 +9,7 @@ const generateToken = (id) => {
     throw new Error('JWT_SECRET is not defined in environment variables');
   }
   return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE || "30d",
+    expiresIn: process.env.JWT_EXPIRE || "1h",
   });
 };
 
@@ -34,6 +35,14 @@ exports.register = asyncHandler(async (req, res, next) => {
   });
 
   if (user) {
+    // Create welcome notification
+    await Notification.create({
+      userId: user._id,
+      title: "Welcome to Tourtastic!",
+      message: `Welcome ${name}! We're excited to have you join our travel community. Start exploring amazing destinations and create unforgettable memories.`,
+      type: "welcome"
+    });
+
     // Don't send password back, even hashed
     const userResponse = { ...user._doc };
     delete userResponse.password;

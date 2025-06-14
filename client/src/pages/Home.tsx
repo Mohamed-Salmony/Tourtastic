@@ -4,11 +4,10 @@ import SearchForm from '@/components/home/SearchForm';
 import Features from '@/components/home/Features';
 import Destinations from '@/components/home/Destinations';
 import Newsletter from '@/components/home/Newsletter';
-import Layout from '@/components/layout/Layout';
 
 const Home: React.FC = () => {
   return (
-    <Layout>
+    <>
       <Hero />
       <div className="container-custom">
         <SearchForm />
@@ -16,7 +15,7 @@ const Home: React.FC = () => {
       <Features />
       <Destinations />
       <Newsletter />
-    </Layout>
+    </>
   );
 };
 

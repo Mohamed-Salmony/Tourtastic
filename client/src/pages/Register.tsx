@@ -1,13 +1,17 @@
-
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import Layout from '@/components/layout/Layout';
-import { api } from '@/config/api';
+import { useTranslation } from 'react-i18next';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
+import { useLocale } from '@/hooks/useLocale';
+import api from '@/services/api';
 
 const Register: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { login } = useAuth();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -27,6 +31,17 @@ const Register: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    
+    // Validate password length
+    if (formData.password.length < 6) {
+      toast({
+        title: "Error",
+        description: "Password must be at least 6 characters long",
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (formData.password !== formData.confirmPassword) {
       toast({
         title: "Error",
@@ -53,10 +68,13 @@ const Register: React.FC = () => {
         password: formData.password
       });
 
-      const responseData = response.data as { success: boolean; token: string };
+      const responseData = response.data;
       if (responseData.success) {
         // Store the token
         localStorage.setItem('token', responseData.token);
+        
+        // Automatically log in the user
+        await login(formData.email, formData.password);
         
         toast({
           title: "Success",
@@ -65,12 +83,15 @@ const Register: React.FC = () => {
 
         // Redirect to home page
         navigate('/');
+      } else {
+        throw new Error(responseData.message || 'Registration failed');
       }
-    } catch (error) {
-      const errorResponse = error as { response?: { data?: { message?: string } } };
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      const errorMessage = error.response?.data?.message || error.message || "Registration failed. Please try again.";
       toast({
         title: "Error",
-        description: errorResponse.response?.data?.message || "Registration failed",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
@@ -79,7 +100,7 @@ const Register: React.FC = () => {
   };
 
   return (
-    <Layout>
+    <>
       <div className="py-16 container-custom">
         <div className="max-w-md mx-auto bg-white p-8 rounded-lg shadow-md">
           <h1 className="text-3xl font-bold mb-6 text-center">Create an Account</h1>
@@ -89,13 +110,15 @@ const Register: React.FC = () => {
 
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
                 Full Name
               </label>
               <input
                 id="name"
+                name="name"
                 type="text"
                 required
+                autoComplete="name"
                 value={formData.name}
                 onChange={handleChange}
                 className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-tourtastic-blue"
@@ -109,8 +132,10 @@ const Register: React.FC = () => {
               </label>
               <input
                 id="email"
+                name="email"
                 type="email"
                 required
+                autoComplete="email"
                 value={formData.email}
                 onChange={handleChange}
                 className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-tourtastic-blue"
@@ -124,8 +149,10 @@ const Register: React.FC = () => {
               </label>
               <input
                 id="password"
+                name="password"
                 type="password"
                 required
+                autoComplete="new-password"
                 value={formData.password}
                 onChange={handleChange}
                 className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-tourtastic-blue"
@@ -139,8 +166,10 @@ const Register: React.FC = () => {
               </label>
               <input
                 id="confirmPassword"
+                name="confirmPassword"
                 type="password"
                 required
+                autoComplete="new-password"
                 value={formData.confirmPassword}
                 onChange={handleChange}
                 className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-tourtastic-blue"
@@ -151,6 +180,7 @@ const Register: React.FC = () => {
             <div className="flex items-center">
               <input
                 id="terms"
+                name="terms"
                 type="checkbox"
                 required
                 checked={formData.terms}
@@ -198,7 +228,7 @@ const Register: React.FC = () => {
           </div>
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 
