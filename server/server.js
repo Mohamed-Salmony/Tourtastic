@@ -32,7 +32,7 @@ app.use(express.json());
 // Enable CORS with specific options
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? 'https://tourtastic.vercel.app'  // Your Vercel domain
+    ? 'https://tourtastic.vercel.app'  // Your Vercel frontend domain
     : ['http://localhost:8080', 'http://127.0.0.1:8080'], // Vite dev server ports
   credentials: true, // Allow cookies if you're using sessions
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
