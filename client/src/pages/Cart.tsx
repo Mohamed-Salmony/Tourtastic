@@ -85,7 +85,7 @@ const Cart = () => {
 
   const handleDelete = async (booking: FlightBooking) => {
     try {
-      await api.delete(`/flights/bookings/${booking._id}`);
+      await api.delete(`/flights/bookings/${booking.bookingId}`);
       setBookings(bookings.filter(b => b._id !== booking._id));
       toast({
         title: t('success', 'Success'),

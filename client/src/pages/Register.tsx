@@ -74,7 +74,7 @@ const Register: React.FC = () => {
         localStorage.setItem('token', responseData.token);
         
         // Automatically log in the user
-        await login(formData.email, formData.password);
+        login(responseData.accessToken, responseData.refreshToken, responseData.user);
         
         toast({
           title: "Success",

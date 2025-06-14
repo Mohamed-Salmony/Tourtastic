@@ -8,16 +8,25 @@ const generateToken = (id) => {
   if (!process.env.JWT_SECRET) {
     throw new Error('JWT_SECRET is not defined in environment variables');
   }
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE || "1h",
+  
+  // Generate access token (short-lived)
+  const accessToken = jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: '1h', // 1 hour
   });
+
+  // Generate refresh token (long-lived)
+  const refreshToken = jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: '7d', // 7 days
+  });
+
+  return { accessToken, refreshToken };
 };
 
 // @desc    Register a new user
 // @route   POST /api/auth/register
 // @access  Public
 exports.register = asyncHandler(async (req, res, next) => {
-  const { name, email, password, role } = req.body; // Role might be restricted later
+  const { name, email, password, role } = req.body;
 
   // Check if user already exists
   const userExists = await User.findOne({ email });
@@ -31,7 +40,7 @@ exports.register = asyncHandler(async (req, res, next) => {
     name,
     email,
     password,
-    role: role || "user", // Default to user if not provided or restrict based on logic
+    role: role || "user",
   });
 
   if (user) {
@@ -47,9 +56,11 @@ exports.register = asyncHandler(async (req, res, next) => {
     const userResponse = { ...user._doc };
     delete userResponse.password;
 
+    const tokens = generateToken(user._id);
+
     res.status(201).json({
       success: true,
-      token: generateToken(user._id),
+      ...tokens,
       user: userResponse,
     });
   } else {
@@ -74,7 +85,6 @@ exports.login = asyncHandler(async (req, res, next) => {
   try {
     // Check for user
     const user = await User.findOne({ email }).select("+password");
-    console.log('Found user:', user ? 'Yes' : 'No');
 
     if (!user) {
       return res.status(401).json({ 
@@ -85,7 +95,6 @@ exports.login = asyncHandler(async (req, res, next) => {
 
     // Check if password matches
     const isMatch = await user.matchPassword(password);
-    console.log('Password match:', isMatch ? 'Yes' : 'No');
 
     if (!isMatch) {
       return res.status(401).json({ 
@@ -102,12 +111,12 @@ exports.login = asyncHandler(async (req, res, next) => {
     const userResponse = { ...user._doc };
     delete userResponse.password;
 
-    // Generate token
-    const token = generateToken(user._id);
+    // Generate tokens
+    const tokens = generateToken(user._id);
 
     res.status(200).json({
       success: true,
-      token,
+      ...tokens,
       user: userResponse,
     });
   } catch (error) {
@@ -120,15 +129,46 @@ exports.login = asyncHandler(async (req, res, next) => {
   }
 });
 
+// @desc    Refresh access token
+// @route   POST /api/auth/refresh-token
+// @access  Public
+exports.refreshToken = asyncHandler(async (req, res, next) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    return res.status(400).json({
+      success: false,
+      message: "Refresh token is required"
+    });
+  }
+
+  try {
+    // Verify refresh token
+    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+    
+    // Generate new tokens
+    const tokens = generateToken(decoded.id);
+
+    res.status(200).json({
+      success: true,
+      ...tokens
+    });
+  } catch (error) {
+    return res.status(401).json({
+      success: false,
+      message: "Invalid refresh token"
+    });
+  }
+});
+
 // @desc    Get current logged in user
 // @route   GET /api/auth/me
 // @access  Private
 exports.getMe = asyncHandler(async (req, res, next) => {
-  // req.user is set by the protect middleware
   const user = await User.findById(req.user.id);
 
   if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+    return res.status(404).json({ success: false, message: "User not found" });
   }
 
   res.status(200).json({
