@@ -1,9 +1,7 @@
 import axios from 'axios';
 
 // Define base URL based on environment
-export const baseURL = import.meta.env.PROD 
-  ? 'https://tourtastic-production.up.railway.app/api'  // Railway backend URL
-  : 'http://localhost:5000/api'; // Direct connection to backend in development
+export const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 // Create axios instance with default config
 export const api = axios.create({

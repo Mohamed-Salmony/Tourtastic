@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { useLocale } from '@/hooks/useLocale';
-import api from '@/services/api';
+import { api } from '@/config/api';
 
 const Register: React.FC = () => {
   const navigate = useNavigate();
