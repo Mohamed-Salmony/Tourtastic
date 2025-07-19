@@ -2,19 +2,23 @@ const express = require("express");
 const {
   getCartItems,
   removeFromCart,
-  checkout
+  checkout,
+  addFlightToCart
 } = require("../controllers/cartController");
-const { protect } = require("../middleware/auth");
+const { protect, optionalAuth } = require("../middleware/auth");
 
 const router = express.Router();
 
-// All routes require authentication
-router.use(protect);
-
+// Routes that work for both authenticated and anonymous users
 router.route("/")
-  .get(getCartItems);
+  .get(optionalAuth, getCartItems)
+  .post(optionalAuth, addFlightToCart);
 
 router.route("/:id")
-  .delete(removeFromCart);
+  .delete(optionalAuth, removeFromCart);
+
+// Checkout requires authentication
+router.route("/checkout")
+  .post(protect, checkout);
 
 module.exports = router;

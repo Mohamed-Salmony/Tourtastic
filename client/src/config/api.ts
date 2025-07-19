@@ -1,41 +1,22 @@
 import axios from 'axios';
 
-// Define base URL based on environment
-export const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-
-// Create axios instance with default config
-export const api = axios.create({
-  baseURL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  withCredentials: true, // Enable sending cookies if using sessions
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  withCredentials: true
 });
 
-// Add request interceptor for authentication
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
+// Add session ID to requests for anonymous users
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  const sessionId = localStorage.getItem('sessionId');
+  
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  } else if (sessionId) {
+    config.headers['X-Session-ID'] = sessionId;
   }
-);
+  
+  return config;
+});
 
-// Add response interceptor for error handling
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Handle unauthorized access (e.g., redirect to login)
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
+export default api;

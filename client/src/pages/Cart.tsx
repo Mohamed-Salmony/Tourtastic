@@ -1,13 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
 import { Trash2, Plane, Calendar, Users, CreditCard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { toast } from '@/hooks/use-toast';
-import { api } from '@/config/api';
+import api from '@/config/api';
 import { useNavigate } from 'react-router-dom';
 import { paymentService } from '@/services/paymentService';
+import { useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
+
+interface Transaction {
+  id: string;
+  amount: number;
+  currency: string;
+  status: string;
+  createdAt: string;
+}
 
 interface FlightBooking {
   _id: string;
@@ -39,7 +48,7 @@ interface FlightBooking {
   paymentDetails: {
     status: string;
     currency: string;
-    transactions: any[];
+    transactions: Transaction[];
   };
   createdAt: string;
 }
@@ -53,17 +62,14 @@ interface ApiResponse {
 const Cart = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const authenticatedAction = useAuthenticatedAction();
   const [bookings, setBookings] = useState<FlightBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingPayment, setProcessingPayment] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchBookings();
-  }, []);
-
-  const fetchBookings = async () => {
+  const fetchBookings = useCallback(async () => {
     try {
-      const response = await api.get<ApiResponse>('/flights/bookings');
+      const response = await api.get<ApiResponse>('/cart');
       if (response.data.success && Array.isArray(response.data.data)) {
         setBookings(response.data.data);
       } else {
@@ -81,11 +87,15 @@ const Cart = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
+
+  useEffect(() => {
+    fetchBookings();
+  }, [fetchBookings]);
 
   const handleDelete = async (booking: FlightBooking) => {
     try {
-      await api.delete(`/flights/bookings/${booking.bookingId}`);
+      await api.delete(`/cart/${booking._id}`);
       setBookings(bookings.filter(b => b._id !== booking._id));
       toast({
         title: t('success', 'Success'),
@@ -102,20 +112,22 @@ const Cart = () => {
   };
 
   const handleProceedToPayment = async (booking: FlightBooking) => {
-    try {
-      setProcessingPayment(booking._id);
-      const amount = booking.flightDetails?.selectedFlight?.price?.total || 0;
-      const paymentUrl = await paymentService.initiatePayment(amount, booking.bookingId);
-      window.location.href = paymentUrl;
-    } catch (error) {
-      console.error('Payment initiation error:', error);
-      toast({
-        title: t('error', 'Error'),
-        description: t('paymentInitiationError', 'Failed to initiate payment. Please try again.'),
-        variant: 'destructive',
-      });
-      setProcessingPayment(null);
-    }
+    authenticatedAction(async () => {
+      try {
+        setProcessingPayment(booking._id);
+        const amount = booking.flightDetails?.selectedFlight?.price?.total || 0;
+        const paymentUrl = await paymentService.initiatePayment(amount, booking.bookingId);
+        window.location.href = paymentUrl;
+      } catch (error) {
+        console.error('Payment initiation error:', error);
+        toast({
+          title: t('error', 'Error'),
+          description: t('paymentInitiationError', 'Failed to initiate payment. Please try again.'),
+          variant: 'destructive',
+        });
+        setProcessingPayment(null);
+      }
+    });
   };
 
   if (loading) {

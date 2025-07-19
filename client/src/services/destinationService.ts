@@ -1,4 +1,4 @@
-import { api } from '../config/api';
+import api  from '../config/api';
 
 export interface Destination {
   _id: string;
@@ -15,7 +15,7 @@ export interface Destination {
     airport: string;
     timeZone: string;
   };
-  airportCode: string;
+  // Remove airportCode since it doesn't exist in the database model
   popular: boolean;
   createdAt: string;
 }
@@ -42,4 +42,4 @@ export const updateDestinationPopular = async (id: string, popular: boolean): Pr
     throw new Error(response.data.message || 'Failed to update destination');
   }
   return response.data.data;
-}; 
+};

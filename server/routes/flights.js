@@ -1,31 +1,21 @@
-const express = require("express");
+const express = require('express');
 const {
+  getFlightDestinations,
+  getFlightOffers,
+  getFlightDates,
   searchFlights,
-  getSearchResults,
-  createFlightBooking,
-  getUserFlightBookings,
-  getFlightBookingById,
-  updateFlightBooking,
-  deleteFlightBooking
-} = require("../controllers/flightController");
-
-const { protect } = require("../middleware/auth");
+  getFlightSearchResults
+} = require('../controllers/flightController');
 
 const router = express.Router();
 
-// Public routes for searching flights
-router.get("/search/:tripsString/:adults/:children/:infants", searchFlights);
-router.get("/results/:search_id", getSearchResults);
+// Public routes for flight search
+router.get('/destinations', getFlightDestinations);
+router.get('/offers', getFlightOffers);
+router.get('/dates', getFlightDates);
 
-// Protected routes for flight bookings
-router.use(protect);
-router.route("/bookings")
-  .get(getUserFlightBookings)
-  .post(createFlightBooking);
-
-router.route("/bookings/:bookingId")
-  .get(getFlightBookingById)
-  .put(updateFlightBooking)
-  .delete(deleteFlightBooking);
+// Frontend integration routes
+router.get('/search/:trips/:adults/:children/:infants', searchFlights);
+router.get('/results/:searchId', getFlightSearchResults);
 
 module.exports = router;

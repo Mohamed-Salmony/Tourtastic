@@ -1,17 +1,89 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, Star, Calendar, Plane, Clock, Users, MapPin, Landmark, Utensils, ShoppingBag, Camera } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Destination, getAllDestinations } from '@/services/destinationService';
-import { Flight, searchFlights, getSearchResults } from '@/services/flightService';
-import { findNearestAirport, Airport } from '@/services/airportService';
-import { Button } from '@/components/ui/button';
-import { useToast } from "@/components/ui/use-toast";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { format } from "date-fns";
-import { cn } from '@/lib/utils';
-import { api } from '@/config/api';
+import { format } from 'date-fns';
+import { 
+  Star, 
+  MapPin, 
+  Clock, 
+  Plane, 
+  Landmark, 
+  Utensils, 
+  ShoppingBag, 
+  Camera,
+  Sunrise,
+  Sun,
+  Sunset,
+  Moon
+} from 'lucide-react';
+import { Button } from '../components/ui/button';
+import { Card, CardContent } from '../components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { useToast } from '../hooks/use-toast';
+import  PlaneAnimation  from '../components/ui/PlaneAnimation';
+import api from '../config/api';
+import { Destination } from '../services/destinationService';
+import { Flight, FlightSearchParams, searchFlights, getSearchResults } from '../services/flightService';
+import { Airport, findCapitalAirport } from '../services/airportService';
+import FlightResults from '@/components/flights/FlightResults';
+
+// Helper functions
+const formatDuration = (minutes: number): string => {
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (remainingMinutes === 0) {
+    return `${hours}h`;
+  } else {
+    return `${hours}h ${remainingMinutes}m`;
+  }
+};
+
+const getTimeOfDay = (dateString: string) => {
+  const hour = new Date(dateString).getHours();
+  if (hour < 6) return 'night';
+  if (hour < 12) return 'morning';
+  if (hour < 18) return 'afternoon';
+  return 'evening';
+};
+
+const getTimeOfDayIcon = (timeOfDay: string) => {
+  switch (timeOfDay) {
+    case 'morning': return <Sunrise className="w-4 h-4 text-orange-400" />;
+    case 'afternoon': return <Sun className="w-4 h-4 text-yellow-400" />;
+    case 'evening': return <Sunset className="w-4 h-4 text-orange-600" />;
+    default: return <Moon className="w-4 h-4 text-blue-400" />;
+  }
+};
+
+const getAirlineLogo = (airlineName: string): string => {
+  const logoMap: Record<string, string> = {
+    'EgyptAir': '/egyptair-logo.png',
+    'Emirates': '/Emirates-Logo.png',
+    'Turkish Airlines': '/Turkish-Airlines-Logo.png',
+    'Qatar Airways': '/Qatar Airways Logo.png',
+    'Saudi Arabian Airlines': '/Saudi-Arabian-Airlines-Logo.png',
+    'Kuwait Airways': '/Kuwait-Airways-logo.png',
+    'Oman Air': '/Oman-Air-Logo.png',
+    'Etihad Airways': '/Etihad-Airways-Logo.png',
+    'FlyDubai': '/FlyDubai-Logo.png',
+    'Air Algerie': '/Air-Algerie-Logo.png',
+    'Tunisair': '/Tunisair-logo.png',
+    'Royal Jordanian': '/Royal-Jordanian-logo.png',
+    'Middle East Airlines': '/Middle-East-Airlines-Logo.png',
+    'Nile Air': '/Nile-air-logo.png',
+    'Flynas': '/Flynas-Logo.png',
+    'Gulf Air': '/Gulf-Air-logo.png',
+    'Pegasus Airlines': '/Pegasus-Airlines-Logo.png',
+    'AJet': '/AJet-logo.png',
+    'Aegean Airlines': '/Aegean-Airlines-logo.png',
+    'Air India': '/Air-India-Logo.png',
+    'Ethiopian Airlines': '/Ethiopian-Airlines-Logo.png',
+    'Hahn Air': '/Hahn-Air-Logo.png',
+    'Nemsa Airlines': '/Nemsa-Airlines-Logo.png',
+    'Pakistan International Airlines': '/Pakistan-International-Airlines-Logo.png'
+  };
+  return logoMap[airlineName] || '/Tourtastic-logo.png';
+};
 
 const DestinationDetails: React.FC = () => {
   const { t } = useTranslation();
@@ -29,61 +101,77 @@ const DestinationDetails: React.FC = () => {
   const [selectedClass, setSelectedClass] = useState('all');
   const [nearestAirport, setNearestAirport] = useState<Airport | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [showDetails, setShowDetails] = useState<string | null>(null);
+  const [manualOrigin, setManualOrigin] = useState('');
+
+  // Handler for flight selection
+  const handleFlightSelection = (flight: Flight) => {
+    setSelectedFlight(flight);
+    setShowDetails(showDetails === flight.trip_id ? null : flight.trip_id);
+  };
+
+  // Handler for adding flight to cart
+  const handleAddToCart = async (flight: Flight) => {
+    try {
+      const response = await api.post('/cart/add', {
+        type: 'flight',
+        flightData: flight,
+        destinationId: destinationId
+      });
+      
+      if (response.data.success) {
+        toast({
+          title: t('success', 'Success'),
+          description: t('flightAddedToCart', 'Flight has been added to your cart'),
+          variant: 'default',
+        });
+      }
+    } catch (error) {
+      console.error('Error adding flight to cart:', error);
+      toast({
+        title: t('error', 'Error'),
+        description: t('failedToAddToCart', 'Failed to add flight to cart'),
+        variant: 'destructive',
+      });
+    }
+  };
 
   // Get user's location and find nearest airport
   useEffect(() => {
-    if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          try {
-            const { latitude, longitude } = position.coords;
-            // For your location in Senbo Dairut, Assiut, use Assiut International Airport
-            setNearestAirport({
-              code: 'ATZ',
-              name: 'Assiut International Airport',
-              city: 'Assiut',
-              country: 'Egypt',
-              latitude: 27.0465,
-              longitude: 31.0119
-            });
-            setLocationError(null);
-          } catch (error) {
-            console.error('Error finding nearest airport:', error);
-            setLocationError('Could not find nearest airport. Using Assiut International Airport.');
-            setNearestAirport({
-              code: 'ATZ',
-              name: 'Assiut International Airport',
-              city: 'Assiut',
-              country: 'Egypt',
-              latitude: 27.0465,
-              longitude: 31.0119
-            });
+    const getUserLocation = () => {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            try {
+              const { latitude, longitude } = position.coords;
+              console.log('User location:', { latitude, longitude });
+              
+              // Use capital airport instead of nearest airport
+              const airport = await findCapitalAirport(latitude, longitude);
+              console.log('Found capital airport:', airport);
+              setNearestAirport(airport);
+              setLocationError(null);
+            } catch (error) {
+              console.error('Error finding capital airport:', error);
+              setLocationError('Failed to find capital airport. Please enable location services or enter manually.');
+            }
+          },
+          (error) => {
+            console.error('Geolocation error:', error);
+            setLocationError('Unable to get your location. Please enable location services or enter your departure city manually.');
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 300000 // 5 minutes
           }
-        },
-        (error) => {
-          console.error('Error getting location:', error);
-          setLocationError('Location access denied. Using Assiut International Airport.');
-          setNearestAirport({
-            code: 'ATZ',
-            name: 'Assiut International Airport',
-            city: 'Assiut',
-            country: 'Egypt',
-            latitude: 27.0465,
-            longitude: 31.0119
-          });
-        }
-      );
-    } else {
-      setLocationError('Geolocation not supported. Using Assiut International Airport.');
-      setNearestAirport({
-        code: 'ATZ',
-        name: 'Assiut International Airport',
-        city: 'Assiut',
-        country: 'Egypt',
-        latitude: 27.0465,
-        longitude: 31.0119
-      });
-    }
+        );
+      } else {
+        setLocationError('Geolocation is not supported by this browser. Please enter manually.');
+      }
+    };
+
+    getUserLocation();
   }, []);
 
   const pollSearchResults = useCallback(async (searchId: string, maxAttempts = 10) => {
@@ -93,17 +181,17 @@ const DestinationDetails: React.FC = () => {
     const poll = async () => {
       try {
         const results = await getSearchResults(searchId);
-        console.log('Poll results:', results); // Debug log
+        console.log('Poll results:', results);
         
         if (results.complete === 100 && results.result && results.result.length > 0) {
-          console.log('Found flights:', JSON.stringify(results.result, null, 2)); // Detailed flight data log
+          console.log('Found flights:', JSON.stringify(results.result, null, 2));
           setFlights(results.result);
           setIsPolling(false);
           setIsLoading(false);
         } else if (attempts < maxAttempts) {
           attempts++;
-          console.log(`Poll attempt ${attempts} of ${maxAttempts}`); // Debug log
-          setTimeout(poll, 3000); // Wait 3 seconds before trying again
+          console.log(`Poll attempt ${attempts} of ${maxAttempts}`);
+          setTimeout(poll, 3000);
         } else {
           setIsPolling(false);
           setIsLoading(false);
@@ -114,7 +202,7 @@ const DestinationDetails: React.FC = () => {
           });
         }
       } catch (error) {
-        console.error('Poll error:', error); // Debug log
+        console.error('Poll error:', error);
         setIsPolling(false);
         setIsLoading(false);
         toast({
@@ -128,7 +216,7 @@ const DestinationDetails: React.FC = () => {
     await poll();
   }, [t, toast]);
 
-  // Fetch destination details and search for flights
+  // Fetch destination details
   useEffect(() => {
     const fetchDestinationDetails = async () => {
       if (!destinationId) return;
@@ -152,37 +240,40 @@ const DestinationDetails: React.FC = () => {
     fetchDestinationDetails();
   }, [destinationId]);
 
-  // Separate useEffect for flight search
-  useEffect(() => {
-    if (nearestAirport && destination) {
-      searchFlightsForDestination();
-    }
-  }, [nearestAirport, destination]);
-
-  const searchFlightsForDestination = async () => {
+  const searchFlightsForDestination = useCallback(async () => {
     if (!destinationId || !nearestAirport || !destination) return;
     
+    // Validate airport codes - use destination.quickInfo.airport instead of destination.airportCode
+    if (!nearestAirport.code || nearestAirport.code.length !== 3 || !destination.quickInfo.airport || destination.quickInfo.airport.length !== 3) {
+      console.error('Invalid airport codes:', { origin: nearestAirport.code, destination: destination.quickInfo.airport });
+      toast({
+        title: 'Error',
+        description: 'Invalid airport codes. Please try again later.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
-      // Get today's date
       const today = new Date();
-      
-      // Get the last day of the current month
       const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      
-      // Format dates as YYYY-MM-DD
       const formattedStartDate = today.toISOString().split('T')[0];
       const formattedEndDate = lastDayOfMonth.toISOString().split('T')[0];
-
+  
+      console.log('Nearest airport:', nearestAirport);
+      console.log('Destination airport code:', destination.quickInfo.airport);
+      console.log('Destination object:', destination);
+  
       const searchParams: FlightSearchParams = {
         flightSegments: [
           {
             from: nearestAirport.code,
-            to: destination.airportCode || destination.quickInfo.airport,
+            to: destination.quickInfo.airport,
             date: formattedStartDate
           },
           {
-            from: destination.airportCode || destination.quickInfo.airport,
+            from: destination.quickInfo.airport,
             to: nearestAirport.code,
             date: formattedEndDate
           }
@@ -192,21 +283,25 @@ const DestinationDetails: React.FC = () => {
           children: 0,
           infants: 0
         },
-        cabin: 'e', // Economy class
-        direct: false
+        cabin: 'e'
       };
 
-      console.log('Search params:', searchParams); // Debug log
-
-      const response = await searchFlights(searchParams);
+      console.log('Search params:', searchParams);
+      const searchResponse = await searchFlights(searchParams);
+      console.log('Search response:', searchResponse);
       
-      if (response.search_id) {
-        await pollSearchResults(response.search_id);
+      if (searchResponse.search_id) {
+        await pollSearchResults(searchResponse.search_id);
       } else {
-        throw new Error('Search initialization failed');
+        setIsLoading(false);
+        toast({
+          title: t('error', 'Error'),
+          description: t('flightSearchError', 'Failed to initiate flight search. Please try again.'),
+          variant: 'destructive',
+        });
       }
     } catch (error) {
-      console.error('Search error:', error); // Debug log
+      console.error('Error searching flights:', error);
       setIsLoading(false);
       toast({
         title: t('error', 'Error'),
@@ -214,28 +309,39 @@ const DestinationDetails: React.FC = () => {
         variant: 'destructive',
       });
     }
-  };
+  }, [destinationId, nearestAirport, destination, toast, pollSearchResults, t]);
+
+  // Search for flights when airport and destination are available
+  useEffect(() => {
+    if (nearestAirport && destination && !isLoading && flights.length === 0) {
+      searchFlightsForDestination();
+    }
+  }, [nearestAirport, destination, searchFlightsForDestination, isLoading, flights.length]);
 
   // Filter and sort flights
   const filteredAndSortedFlights = flights
-    .filter(flight => selectedClass === 'all' || flight.legs[0]?.cabin_name?.toLowerCase() === selectedClass.toLowerCase())
+    .filter(flight => {
+      if (selectedClass === 'all') return true;
+      return flight.legs[0]?.cabin?.toLowerCase() === selectedClass;
+    })
     .sort((a, b) => {
-      if (sortBy === 'price') {
-        return a.price - b.price;
-      } else if (sortBy === 'duration') {
-        return (a.legs[0]?.duration || 0) - (b.legs[0]?.duration || 0);
-      } else if (sortBy === 'departure') {
-        return new Date(a.legs[0]?.from?.date || 0).getTime() - new Date(b.legs[0]?.from?.date || 0).getTime();
+      switch (sortBy) {
+        case 'price':
+          return (a.price || 0) - (b.price || 0);
+        case 'duration':
+          return (a.total_duration || 0) - (b.total_duration || 0);
+        case 'departure':
+          return new Date(a.legs[0]?.from?.date || 0).getTime() - new Date(b.legs[0]?.from?.date || 0).getTime();
+        default:
+          return 0;
       }
-      return 0;
     });
 
   if (loadingDestination) {
     return (
-      <section className="py-16 text-center">
-        <Loader2 className="h-12 w-12 animate-spin text-primary-500 mx-auto mb-4" />
-        <p className="text-lg text-gray-600">Loading destination details...</p>
-      </section>
+      <div className="min-h-screen flex items-center justify-center">
+        <PlaneAnimation size="lg" />
+      </div>
     );
   }
 
@@ -248,7 +354,7 @@ const DestinationDetails: React.FC = () => {
   }
 
   return (
-    <>
+    <div>
       {locationError && (
         <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
           <div className="flex">
@@ -297,14 +403,7 @@ const DestinationDetails: React.FC = () => {
                     <div>
                       <h3 className="font-semibold mb-1">{t('topAttractions', 'Top Attractions')}</h3>
                       <p className="text-gray-600 text-sm">
-                        {destination.name === 'Paris' && 'Eiffel Tower, Louvre Museum, Notre-Dame'}
-                        {destination.name === 'Santorini' && 'Oia Village, Red Beach, Ancient Thera'}
-                        {destination.name === 'Bali' && 'Ubud Monkey Forest, Tegallalang Rice Terraces, Uluwatu Temple'}
-                        {destination.name === 'Tokyo' && 'Tokyo Skytree, Senso-ji Temple, Shibuya Crossing'}
-                        {destination.name === 'New York' && 'Statue of Liberty, Central Park, Empire State Building'}
-                        {destination.name === 'Rome' && 'Colosseum, Vatican City, Trevi Fountain'}
-                        {destination.name === 'Sydney' && 'Sydney Opera House, Bondi Beach, Harbour Bridge'}
-                        {destination.name === 'Barcelona' && 'Sagrada Familia, Park Güell, La Rambla'}
+                        {destination.topAttractions.join(', ')}
                       </p>
                     </div>
                   </div>
@@ -314,14 +413,7 @@ const DestinationDetails: React.FC = () => {
                     <div>
                       <h3 className="font-semibold mb-1">{t('localCuisine', 'Local Cuisine')}</h3>
                       <p className="text-gray-600 text-sm">
-                        {destination.name === 'Paris' && 'Croissants, Coq au Vin, French Wine'}
-                        {destination.name === 'Santorini' && 'Fresh Seafood, Fava, Local Wine'}
-                        {destination.name === 'Bali' && 'Nasi Goreng, Satay, Fresh Tropical Fruits'}
-                        {destination.name === 'Tokyo' && 'Sushi, Ramen, Tempura'}
-                        {destination.name === 'New York' && 'Pizza, Bagels, Street Food'}
-                        {destination.name === 'Rome' && 'Pasta, Pizza, Gelato'}
-                        {destination.name === 'Sydney' && 'Seafood, Meat Pies, Tim Tams'}
-                        {destination.name === 'Barcelona' && 'Tapas, Paella, Churros'}
+                        {destination.localCuisine.join(', ')}
                       </p>
                     </div>
                   </div>
@@ -331,14 +423,7 @@ const DestinationDetails: React.FC = () => {
                     <div>
                       <h3 className="font-semibold mb-1">{t('shopping', 'Shopping')}</h3>
                       <p className="text-gray-600 text-sm">
-                        {destination.name === 'Paris' && 'Champs-Élysées, Le Marais, Galeries Lafayette'}
-                        {destination.name === 'Santorini' && 'Local Art, Jewelry, Wine Shops'}
-                        {destination.name === 'Bali' && 'Ubud Market, Seminyak, Local Crafts'}
-                        {destination.name === 'Tokyo' && 'Shibuya, Ginza, Akihabara'}
-                        {destination.name === 'New York' && 'Fifth Avenue, SoHo, Times Square'}
-                        {destination.name === 'Rome' && 'Via del Corso, Via Condotti, Local Markets'}
-                        {destination.name === 'Sydney' && 'Queen Victoria Building, The Rocks, Pitt Street Mall'}
-                        {destination.name === 'Barcelona' && 'La Rambla, Passeig de Gràcia, Local Markets'}
+                        {destination.shopping.join(', ')}
                       </p>
                     </div>
                   </div>
@@ -348,14 +433,7 @@ const DestinationDetails: React.FC = () => {
                     <div>
                       <h3 className="font-semibold mb-1">{t('bestTimeToVisit', 'Best Time to Visit')}</h3>
                       <p className="text-gray-600 text-sm">
-                        {destination.name === 'Paris' && 'April to June, September to October'}
-                        {destination.name === 'Santorini' && 'Late April to Early October'}
-                        {destination.name === 'Bali' && 'April to October'}
-                        {destination.name === 'Tokyo' && 'March to May, September to November'}
-                        {destination.name === 'New York' && 'April to June, September to November'}
-                        {destination.name === 'Rome' && 'April to June, September to October'}
-                        {destination.name === 'Sydney' && 'September to November, March to May'}
-                        {destination.name === 'Barcelona' && 'May to June, September to October'}
+                        {destination.bestTimeToVisit}
                       </p>
                     </div>
                   </div>
@@ -370,7 +448,7 @@ const DestinationDetails: React.FC = () => {
                     <MapPin className="w-5 h-5 text-primary-500" />
                     <div>
                       <p className="text-sm text-gray-500">{t('airport', 'Airport')}</p>
-                      <p className="font-medium">{destination.airportCode}</p>
+                      <p className="font-medium">{destination.quickInfo.airport}</p>
                     </div>
                   </div>
                   
@@ -378,16 +456,7 @@ const DestinationDetails: React.FC = () => {
                     <Clock className="w-5 h-5 text-primary-500" />
                     <div>
                       <p className="text-sm text-gray-500">{t('timeZone', 'Time Zone')}</p>
-                      <p className="font-medium">
-                        {destination.name === 'Paris' && 'CET (UTC+1)'}
-                        {destination.name === 'Santorini' && 'EET (UTC+2)'}
-                        {destination.name === 'Bali' && 'WITA (UTC+8)'}
-                        {destination.name === 'Tokyo' && 'JST (UTC+9)'}
-                        {destination.name === 'New York' && 'EST (UTC-5)'}
-                        {destination.name === 'Rome' && 'CET (UTC+1)'}
-                        {destination.name === 'Sydney' && 'AEST (UTC+10)'}
-                        {destination.name === 'Barcelona' && 'CET (UTC+1)'}
-                      </p>
+                      <p className="font-medium">{destination.quickInfo.timeZone}</p>
                     </div>
                   </div>
 
@@ -405,250 +474,94 @@ const DestinationDetails: React.FC = () => {
         </div>
       </section>
 
-      {/* Filters Section */}
-      <section className="py-8 bg-gray-50 dark:bg-gray-900">
-        <div className="container mx-auto px-4">
-          <div className="flex flex-wrap gap-4 items-center justify-between">
-            <div className="flex gap-4">
-              <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Sort by" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="price">Price</SelectItem>
-                  <SelectItem value="duration">Duration</SelectItem>
-                  <SelectItem value="departure">Departure Time</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={selectedClass} onValueChange={setSelectedClass}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Class" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Classes</SelectItem>
-                  <SelectItem value="economy">Economy</SelectItem>
-                  <SelectItem value="business">Business</SelectItem>
-                  <SelectItem value="first">First Class</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* Flights Section */}
-      <section className="py-12">
+      <section className="py-12 bg-gray-50">
         <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold mb-8">{t('availableTickets', 'Available Tickets')}</h2>
-          
-          {/* Date Range Display */}
-          <div className="mb-6 p-4 bg-white rounded-lg shadow">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <Calendar className="h-5 w-5 text-gray-500" />
-                <div>
-                  <p className="text-sm text-gray-600">{t('searchingFlights', 'Searching flights from')}</p>
-                  <p className="font-medium">
-                    {format(new Date(), 'MMM d, yyyy')} - {format(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0), 'MMM d, yyyy')}
-                  </p>
+          <div className="max-w-6xl mx-auto">
+            <h2 className="text-3xl font-bold mb-8 text-center">
+              {t('availableFlights', 'Available Flights')} {nearestAirport && `from ${nearestAirport.city}`}
+            </h2>
+
+            {/* Filters Section */}
+            <div className="flex flex-wrap gap-4 items-center justify-between mb-8 p-4 bg-white rounded-lg shadow-sm">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium">{t('sortBy', 'Sort by')}:</label>
+                  <Select value={sortBy} onValueChange={setSortBy}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="price">{t('price', 'Price')}</SelectItem>
+                      <SelectItem value="duration">{t('duration', 'Duration')}</SelectItem>
+                      <SelectItem value="departure">{t('departure', 'Departure')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium">{t('class', 'Class')}:</label>
+                  <Select value={selectedClass} onValueChange={setSelectedClass}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t('all', 'All')}</SelectItem>
+                      <SelectItem value="economy">{t('economy', 'Economy')}</SelectItem>
+                      <SelectItem value="business">{t('business', 'Business')}</SelectItem>
+                      <SelectItem value="first">{t('first', 'First')}</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-              <div className="flex items-center space-x-4">
-                <MapPin className="h-5 w-5 text-gray-500" />
-                <div>
-                  <p className="text-sm text-gray-600">{t('fromAirport', 'From')}</p>
-                  <p className="font-medium">{nearestAirport?.name || 'Loading...'}</p>
-                </div>
+
+              <div className="text-sm text-gray-600">
+                {filteredAndSortedFlights.length} {t('flightsFound', 'flights found')}
               </div>
             </div>
+
+            {/* Loading State */}
+            {(isLoading || isPolling) && (
+              <div className="text-center py-12">
+                <PlaneAnimation size="lg" />
+                <p className="text-lg text-gray-600 mt-4">
+                  {isPolling ? t('searchingFlights', 'Searching for flights...') : t('loading', 'Loading...')}
+                </p>
+              </div>
+            )}
+
+            {/* Flight Results */}
+            {!isLoading && !isPolling && filteredAndSortedFlights.length > 0 && (
+              <FlightResults
+                flights={filteredAndSortedFlights}
+                selectedFlight={selectedFlight}
+                showDetails={showDetails}
+                onFlightSelection={handleFlightSelection}
+                onAddToCart={handleAddToCart}
+                onShowDetails={(flightId: string) => setShowDetails(showDetails === flightId ? null : flightId)}
+                showSegmentHeaders={false}
+              />
+            )}
+
+            {/* No Flights Message */}
+            {!isLoading && !isPolling && filteredAndSortedFlights.length === 0 && flights.length === 0 && (
+              <div className="text-center py-12">
+                <Plane className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-gray-600 mb-2">{t('noFlights', 'No Flights Found')}</h3>
+                <p className="text-gray-500">{t('noFlightsMessage', 'No flights are currently available for this destination.')}</p>
+                <Button
+                  onClick={() => searchFlightsForDestination()}
+                  className="mt-4"
+                >
+                  {t('searchAgain', 'Search Again')}
+                </Button>
+              </div>
+            )}
           </div>
-
-          {isLoading ? (
-            <div className="flex justify-center items-center h-48">
-              <Loader2 className="h-8 w-8 animate-spin text-primary-500" />
-              <p className="ml-2 text-gray-600">
-                {isPolling 
-                  ? t('processingResults', 'Processing your search results...')
-                  : t('searchingForBestFlights', 'Searching for the best flights...')}
-              </p>
-            </div>
-          ) : filteredAndSortedFlights.length === 0 ? (
-            <p className="text-center text-gray-500">No tickets available for this destination.</p>
-          ) : (
-            <div className="space-y-6">
-              {filteredAndSortedFlights.map((flight) => (
-                <div key={flight.id} className="space-y-4">
-                  <Card className="overflow-hidden hover:shadow-lg transition-shadow">
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 p-6">
-                      {/* Airline Info */}
-                      <div className="md:col-span-3 flex flex-col items-center md:items-start">
-                        <h3 className="text-xl font-semibold mb-2">{flight.legs[0]?.segments[0]?.airline_name || 'Unknown Airline'}</h3>
-                        <div className="flex items-center text-gray-500">
-                          <Plane className="w-4 h-4 mr-1" />
-                          <span>{flight.legs[0]?.cabin_name || 'Economy'}</span>
-                        </div>
-                      </div>
-
-                      {/* Flight Details */}
-                      <div className="md:col-span-6 flex flex-col items-center">
-                        <div className="flex items-center justify-between w-full mb-4">
-                          <div className="text-center">
-                            <p className="text-lg font-semibold">{flight.legs[0]?.from?.airport || 'Unknown'}</p>
-                            <p className="text-sm text-gray-500">
-                              {flight.legs[0]?.from?.date ? format(new Date(flight.legs[0].from.date), 'HH:mm') : '--:--'}
-                            </p>
-                            <p className="text-xs text-gray-400">
-                              {flight.legs[0]?.from?.date ? format(new Date(flight.legs[0].from.date), 'MMM d, yyyy') : 'Unknown date'}
-                            </p>
-                          </div>
-                          <div className="flex-1 mx-4">
-                            <div className="relative">
-                              <div className="h-0.5 bg-gray-300"></div>
-                              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-                                <Plane className="w-4 h-4 text-primary-500" />
-                              </div>
-                            </div>
-                            <div className="flex items-center justify-center gap-2 mt-1">
-                              <Clock className="w-3 h-3 text-gray-500" />
-                              <p className="text-sm text-gray-500">
-                                {flight.legs[0]?.duration ? 
-                                  `${Math.floor(flight.legs[0].duration / 60)}h ${flight.legs[0].duration % 60}m` : 
-                                  'Unknown duration'}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-lg font-semibold">{flight.legs[0]?.to?.airport || 'Unknown'}</p>
-                            <p className="text-sm text-gray-500">
-                              {flight.legs[0]?.to?.date ? format(new Date(flight.legs[0].to.date), 'HH:mm') : '--:--'}
-                            </p>
-                            <p className="text-xs text-gray-400">
-                              {flight.legs[0]?.to?.date ? format(new Date(flight.legs[0].to.date), 'MMM d, yyyy') : 'Unknown date'}
-                            </p>
-                          </div>
-                        </div>
-                        {flight.legs[0]?.segments?.length > 1 && (
-                          <div className="flex items-center justify-center gap-1 text-sm text-gray-500">
-                            <Plane className="w-3 h-3" />
-                            <span>{flight.legs[0].segments.length - 1} {t('stop', 'Stop')}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Price and Action */}
-                      <div className="md:col-span-3 flex flex-col items-center justify-center gap-4">
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-primary-600">${flight.price}</p>
-                          <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
-                            <Users className="w-3 h-3" />
-                            <span>{flight.legs[0]?.segments[0]?.seats || 0} {t('seatsLeft', 'seats left')}</span>
-                          </div>
-                        </div>
-                        <Button 
-                          variant={selectedFlight?.id === flight.id ? "secondary" : "default"}
-                          onClick={() => setSelectedFlight(selectedFlight?.id === flight.id ? null : flight)}
-                          className="w-full"
-                          disabled={!flight.legs[0]?.segments[0]?.seats || parseInt(flight.legs[0].segments[0].seats) === 0}
-                        >
-                          {selectedFlight?.id === flight.id ? t('selected', 'Selected') : t('select', 'Select')}
-                        </Button>
-                      </div>
-                    </div>
-                  </Card>
-
-                  {/* Booking Details Section */}
-                  {selectedFlight?.id === flight.id && (
-                    <Card className="bg-gray-50">
-                      <div className="p-6">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                          <div>
-                            <h4 className="font-medium mb-2">{t('flightDetails', 'Flight Details')}</h4>
-                            <div className="text-sm space-y-1">
-                              <p><span className="text-gray-500">{t('airline', 'Airline')}:</span> {flight.legs[0]?.segments[0]?.airline_name || 'Unknown'}</p>
-                              <p><span className="text-gray-500">{t('flightNumber', 'Flight Number')}:</span> {flight.legs[0]?.segments[0]?.flightnumber || 'Unknown'}</p>
-                              <p><span className="text-gray-500">{t('class', 'Class')}:</span> {flight.legs[0]?.cabin_name || 'Economy'}</p>
-                            </div>
-                          </div>
-                          <div>
-                            <h4 className="font-medium mb-2">{t('priceBreakdown', 'Price Breakdown')}</h4>
-                            <div className="text-sm space-y-1">
-                              <p><span className="text-gray-500">{t('adultPrice', 'Adult Price')}:</span> ${flight.price_breakdowns?.ADT?.price || flight.price}</p>
-                              {flight.price_breakdowns?.CHD?.price > 0 && (
-                                <p><span className="text-gray-500">{t('childPrice', 'Child Price')}:</span> ${flight.price_breakdowns.CHD.price}</p>
-                              )}
-                              <p className="font-medium pt-1">{t('total', 'Total')}: ${flight.price}</p>
-                            </div>
-                          </div>
-                          <div>
-                            <h4 className="font-medium mb-2">{t('availableSeats', 'Available Seats')}</h4>
-                            <p className="text-sm">{flight.legs[0]?.segments[0]?.seats || 0} {t('seatsLeft', 'seats left')}</p>
-                            <Button 
-                              className="mt-4 w-full" 
-                              onClick={async () => {
-                                try {
-                                  const bookingData = {
-                                    flightDetails: {
-                                      from: flight.legs[0].from.city,
-                                      to: flight.legs[0].to.city,
-                                      departureDate: flight.legs[0].from.date,
-                                      passengers: {
-                                        adults: flight.search_query.adt || 1,
-                                        children: flight.search_query.chd || 0,
-                                        infants: flight.search_query.inf || 0
-                                      },
-                                      selectedFlight: {
-                                        flightId: flight.id,
-                                        airline: flight.legs[0].segments[0].airline_name,
-                                        departureTime: flight.legs[0].from.date,
-                                        arrivalTime: flight.legs[0].to.date,
-                                        price: {
-                                          total: flight.price,
-                                          currency: flight.currency
-                                        },
-                                        class: flight.search_query.options.cabin || 'economy'
-                                      }
-                                    }
-                                  };
-                                  
-                                  console.log('Booking data:', bookingData);
-                                  
-                                  const response = await api.post('/flights/bookings', bookingData);
-                                  
-                                  if (response.data.success) {
-                                    toast({
-                                      title: t('success', 'Success'),
-                                      description: t('flightAddedToCart', 'Flight added to cart successfully!'),
-                                      variant: 'default',
-                                    });
-                                    navigate('/cart');
-                                  } else {
-                                    throw new Error(response.data.message || 'Failed to create booking');
-                                  }
-                                } catch (error) {
-                                  console.error('Error creating booking:', error);
-                                  toast({
-                                    title: t('error', 'Error'),
-                                    description: t('bookingError', 'Failed to add flight to cart. Please try again.'),
-                                    variant: 'destructive',
-                                  });
-                                }
-                              }}>
-                              {t('continueToBooking', 'Continue to Booking')}
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </section>
-    </>
+    </div>
   );
 };
 
-export default DestinationDetails; 
+export default DestinationDetails;

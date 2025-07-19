@@ -37,8 +37,42 @@ exports.protect = asyncHandler(async (req, res, next) => {
     next();
   } catch (err) {
     console.error("Token verification failed:", err);
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ success: false, message: "Token expired. Please log in again or refresh your token." });
+    }
     return res.status(401).json({ success: false, message: "Not authorized to access this route (token failed)" });
   }
+});
+
+// Optional authentication - doesn't require login but sets user if available
+exports.optionalAuth = asyncHandler(async (req, res, next) => {
+  let token;
+
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+
+  if (token) {
+    try {
+      // Verify token
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      
+      // Get user from the token
+      req.user = await User.findById(decoded.id).select('-password');
+    } catch (error) {
+      // Token is invalid, but we continue without user
+      req.user = null;
+    }
+  } else {
+    req.user = null;
+  }
+
+  // Generate or use existing session ID for anonymous users
+  if (!req.user) {
+    req.sessionId = req.headers['x-session-id'] || generateSessionId();
+  }
+
+  next();
 });
 
 // Grant access to specific roles
@@ -57,3 +91,8 @@ exports.authorize = (...roles) => {
     next();
   };
 };
+
+// Helper function to generate session ID
+function generateSessionId() {
+  return 'session_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+}

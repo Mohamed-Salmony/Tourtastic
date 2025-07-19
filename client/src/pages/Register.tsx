@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { useLocale } from '@/hooks/useLocale';
-import { api } from '@/config/api';
+import api from '@/config/api';
 
 const Register: React.FC = () => {
   const navigate = useNavigate();
@@ -86,9 +86,11 @@ const Register: React.FC = () => {
       } else {
         throw new Error(responseData.message || 'Registration failed');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Registration error:', error);
-      const errorMessage = error.response?.data?.message || error.message || "Registration failed. Please try again.";
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : (error as { response?: { data?: { message?: string } } })?.response?.data?.message || "Registration failed. Please try again.";
       toast({
         title: "Error",
         description: errorMessage,

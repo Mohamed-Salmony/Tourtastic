@@ -1,7 +1,20 @@
-import { api } from '../config/api';
+import api from '../config/api';
+
+interface WishlistItem {
+  id: string;
+  destinationId: string;
+  destination?: {
+    id: string;
+    name: string;
+    image: string;
+    country: string;
+    rating: number;
+  };
+  createdAt: string;
+}
 
 class WishlistService {
-  async getWishlist(id: string): Promise<any[]> {
+  async getWishlist(id: string): Promise<WishlistItem[]> {
     const response = await api.get(`/users/${id}/wishlist`);
     if (!response.data.success) {
       throw new Error(response.data.message || 'Failed to load wishlist');
@@ -28,4 +41,4 @@ class WishlistService {
   }
 }
 
-export const wishlistService = new WishlistService(); 
+export const wishlistService = new WishlistService();
