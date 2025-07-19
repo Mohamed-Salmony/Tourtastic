@@ -1,4 +1,4 @@
-import React, { useState, memo, useEffect } from 'react';
+import React, { useState, memo, useEffect, useCallback } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { Menu, X, Bell, Globe, ShoppingBasket, User, LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -9,6 +9,16 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import axios from 'axios';
+
+// Add the Notification interface
+interface Notification {
+  _id: string;
+  title: string;
+  message: string;
+  type: string;
+  read: boolean;
+  createdAt: string;
+}
 
 const Header: React.FC = () => {
   const { t } = useTranslation();
@@ -32,8 +42,8 @@ const Header: React.FC = () => {
     navigate('/');
   };
 
-  // Fetch unread notifications status
-  const fetchUnreadNotifications = async () => {
+  // Fetch unread notifications status - wrapped in useCallback to fix dependency issue
+  const fetchUnreadNotifications = useCallback(async () => {
     if (!user) return;
     
     try {
@@ -46,12 +56,12 @@ const Header: React.FC = () => {
         }
       });
 
-      const hasUnread = response.data.data.some((notification: any) => !notification.read);
+      const hasUnread = response.data.data.some((notification: Notification) => !notification.read);
       setHasUnreadNotifications(hasUnread);
     } catch (error) {
       console.error('Error fetching notifications:', error);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     if (user) {
@@ -60,7 +70,7 @@ const Header: React.FC = () => {
       const interval = setInterval(fetchUnreadNotifications, 60000);
       return () => clearInterval(interval);
     }
-  }, [user]);
+  }, [user, fetchUnreadNotifications]);
 
   return (
     <header className="bg-white shadow-md fixed w-full top-0 left-0 z-50">
@@ -103,7 +113,7 @@ const Header: React.FC = () => {
         </nav>
 
         {/* Auth Buttons & Utilities Desktop */}
-        <div className="hidden md:flex items-center space-x-3">
+        <div className="hidden md:flex items-center space-x-4">
           {user ? (
             <>
               {/* Notifications */}
@@ -119,19 +129,6 @@ const Header: React.FC = () => {
                     <span className="absolute -top-1 -right-1 block h-2 w-2 rounded-full bg-tourtastic-blue ring-2 ring-white" />
                   )}
                   <span className="sr-only">{t('notifications')}</span>
-                </Link>
-              </Button>
-
-              {/* Shopping Cart */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-gray-600 hover:text-tourtastic-blue relative"
-                asChild
-              >
-                <Link to="/cart">
-                  <ShoppingBasket className="h-5 w-5" />
-                  <span className="sr-only">{t('cart')}</span>
                 </Link>
               </Button>
 
@@ -197,6 +194,19 @@ const Header: React.FC = () => {
               </Button>
             </>
           )}
+          
+          {/* Shopping Cart - Always Visible */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-gray-600 hover:text-tourtastic-blue relative"
+            asChild
+          >
+            <Link to="/cart">
+              <ShoppingBasket className="h-5 w-5" />
+              <span className="sr-only">{t('cart')}</span>
+            </Link>
+          </Button>
         </div>
 
         {/* Mobile Navigation */}
@@ -255,14 +265,6 @@ const Header: React.FC = () => {
                     )}
                   </Link>
                   <Link 
-                    to="/cart" 
-                    className="py-2 px-4 text-gray-800 flex items-center"
-                    onClick={toggleMenu}
-                  >
-                    <ShoppingBasket className="h-5 w-5 mr-2" />
-                    {t('cart')}
-                  </Link>
-                  <Link 
                     to="/profile" 
                     className="py-2 px-4 text-gray-800 flex items-center"
                     onClick={toggleMenu}
@@ -299,6 +301,16 @@ const Header: React.FC = () => {
                   </Link>
                 </>
               )}
+              
+              {/* Mobile Cart - Always Visible */}
+              <Link 
+                to="/cart" 
+                className="py-2 px-4 text-gray-800 flex items-center"
+                onClick={toggleMenu}
+              >
+                <ShoppingBasket className="h-5 w-5 mr-2" />
+                {t('cart')}
+              </Link>
             </div>
           </div>
         )}

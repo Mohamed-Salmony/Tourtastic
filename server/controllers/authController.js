@@ -11,12 +11,12 @@ const generateToken = (id) => {
   
   // Generate access token (short-lived)
   const accessToken = jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: '1h', // 1 hour
+    expiresIn: '2h', // 2 hour
   });
 
   // Generate refresh token (long-lived)
   const refreshToken = jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: '7d', // 7 days
+    expiresIn: '30d', // 30 days
   });
 
   return { accessToken, refreshToken };
@@ -129,35 +129,43 @@ exports.login = asyncHandler(async (req, res, next) => {
   }
 });
 
-// @desc    Refresh access token
+// @desc    Refresh access token using refresh token
 // @route   POST /api/auth/refresh-token
 // @access  Public
 exports.refreshToken = asyncHandler(async (req, res, next) => {
   const { refreshToken } = req.body;
 
   if (!refreshToken) {
-    return res.status(400).json({
-      success: false,
-      message: "Refresh token is required"
-    });
+    return res.status(400).json({ success: false, message: "Refresh token is required" });
   }
 
   try {
     // Verify refresh token
     const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
-    
+
+    // Find user
+    const user = await User.findById(decoded.id).select("-password");
+    if (!user) {
+      return res.status(401).json({ success: false, message: "User not found" });
+    }
+
     // Generate new tokens
-    const tokens = generateToken(decoded.id);
+    const { accessToken, refreshToken: newRefreshToken } = generateToken(user._id);
 
     res.status(200).json({
       success: true,
-      ...tokens
+      accessToken,
+      refreshToken: newRefreshToken,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      }
     });
-  } catch (error) {
-    return res.status(401).json({
-      success: false,
-      message: "Invalid refresh token"
-    });
+  } catch (err) {
+    console.error("Refresh token verification failed:", err);
+    return res.status(401).json({ success: false, message: "Invalid refresh token" });
   }
 });
 

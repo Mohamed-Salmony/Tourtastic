@@ -1,6 +1,6 @@
-import { api } from '../config/api';
+import api  from '../config/api';
 
-export interface FlightSegment {
+export interface FlightSearchInputSegment {
   from: string;
   to: string;
   date: string;
@@ -13,7 +13,7 @@ export interface PassengerCount {
 }
 
 export interface FlightSearchParams {
-  flightSegments: FlightSegment[];
+  flightSegments: FlightSearchInputSegment[];
   passengers: PassengerCount;
   cabin?: 'e' | 'p' | 'b' | 'f'; // e: Economy, p: PremiumEconomy, b: Business, f: First
   direct?: boolean;
@@ -21,6 +21,13 @@ export interface FlightSearchParams {
 
 export interface FlightSearchResponse {
   search_id: string;
+}
+
+// Fixed FlightSearchResults interface to match backend response
+export interface FlightSearchResults {
+  complete: number; // Progress percentage (0-100)
+  result: Flight[]; // Array of flights
+  last_result: number; // Last result index for pagination
 }
 
 export interface Airport {
@@ -31,22 +38,6 @@ export interface Airport {
   country_iso: string;
   terminal: string;
   airport_name: string;
-}
-
-export interface FlightSegment {
-  cabin: string;
-  cabin_name: string;
-  farebase: string;
-  seats: string;
-  class: string;
-  from: Airport;
-  to: Airport;
-  equipment: string;
-  equipment_name: string;
-  flightnumber: string;
-  iata: string;
-  airline_name: string;
-  duration: number;
 }
 
 export interface BaggageInfo {
@@ -63,6 +54,25 @@ export interface PriceBreakdown {
   price: number;
   label: string;
   tax: number;
+}
+
+export interface FlightSegment {
+  cabin: string;
+  cabin_name: string;
+  farebase: string;
+  seats: string;
+  class: string;
+  from: Airport;
+  to: Airport;
+  equipment: string;
+  equipment_name: string;
+  flightnumber: string;
+  iata: string;
+  airline_name: string;
+  duration: number;
+  // Enhanced fields
+  airline_code?: string;
+  duration_formatted?: string;
 }
 
 export interface FlightLeg {
@@ -82,9 +92,35 @@ export interface FlightLeg {
   stops: string[];
   stop_over: string[];
   cabin_name: string;
+  // Enhanced fields
+  duration_formatted?: string;
+  stops_count?: number;
+  stops_info?: Array<{
+    airport: string;
+    city: string;
+    duration?: string;
+  }>;
+  airline_name?: string;
+  main_airline_code?: string;
 }
 
+// Fixed Flight interface with all required properties
 export interface Flight {
+  // Required properties that were missing
+  trip_id: string;
+  search_query: {
+    adt: number;
+    chd: number;
+    inf: number;
+    options: {
+      cabin: string;
+      direct?: boolean;
+      multiCity?: boolean;
+    };
+  };
+  currency: string;
+  
+  // Existing properties
   price: number;
   tax: number;
   refundable_info: string;
@@ -95,39 +131,18 @@ export interface Flight {
     CHD: PriceBreakdown;
     INF: PriceBreakdown;
   };
+  
+  // Enhanced fields
+  airline_name?: string;
+  airline_code?: string;
+  total_duration?: number;
+  total_duration_formatted?: string;
+  stops_count?: number;
+  baggage_allowance?: string;
+  segment_index?: number; // Add this property
+  
+  // Enhanced leg information
   legs: FlightLeg[];
-  trip_id: string;
-  search_id: string;
-  src: string;
-  id: string;
-  total_pax_no_inf: number;
-  search_query: {
-    trips: Array<{
-      from: string;
-      to: string;
-      date: string;
-    }>;
-    adt: number;
-    chd: number;
-    inf: number;
-    options: {
-      direct: boolean;
-      cabin: string;
-      multiCity: boolean;
-    };
-  };
-  currency: string;
-  can_hold: boolean;
-  can_void: boolean;
-  can_refund: boolean;
-  can_exchange: boolean;
-  etd: string;
-}
-
-export interface FlightSearchResults {
-  complete: number;
-  result: Flight[];
-  last_result: number;
 }
 
 export const searchFlights = async (params: FlightSearchParams): Promise<FlightSearchResponse> => {

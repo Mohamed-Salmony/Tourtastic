@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { api } from '@/config/api';
+import api from '@/config/api';
 import axios from 'axios';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from 'react-i18next';

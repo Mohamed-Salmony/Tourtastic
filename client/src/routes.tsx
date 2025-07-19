@@ -40,9 +40,9 @@ const AppRoutes = () => {
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/payment/success" element={<PaymentSuccess />} />
+        <Route path="/cart" element={<Cart />} />
 
         {/* Protected User Routes */}
-        <Route path="/cart" element={<RequireAuth><Cart /></RequireAuth>} />
         <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
         <Route path="/notifications" element={<RequireAuth><Notifications /></RequireAuth>} />
 
@@ -61,4 +61,4 @@ const AppRoutes = () => {
   );
 };
 
-export default AppRoutes; 
+export default AppRoutes;

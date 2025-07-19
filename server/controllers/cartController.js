@@ -2,74 +2,221 @@ const asyncHandler = require("../middleware/asyncHandler");
 const Booking = require("../models/Booking");
 const FlightBooking = require("../models/FlightBooking");
 const Notification = require("../models/Notification");
+const User = require("../models/User");
 
-// @desc    Get cart items for the logged-in user
-// @route   GET /api/cart
-// @access  Private
-exports.getCartItems = asyncHandler(async (req, res) => {
-  // Get regular bookings
-  const bookings = await Booking.find({
-    userId: req.user.id,
-    status: "pending"
-  }).sort({ createdAt: -1 });
+// Helper function to generate a unique flight booking ID
+async function generateFlightBookingId() {
+  const lastBooking = await FlightBooking.findOne().sort({ createdAt: -1 });
+  let nextIdNumber = 1001;
+  if (lastBooking && lastBooking.bookingId) {
+    const lastIdNumber = parseInt(lastBooking.bookingId.split("-")[1]);
+    if (!isNaN(lastIdNumber)) {
+      nextIdNumber = lastIdNumber + 1;
+    }
+  }
+  return `FB-${nextIdNumber}`;
+}
 
-  // Get flight bookings
-  const flightBookings = await FlightBooking.find({
-    userId: req.user.id,
-    status: "pending"
-  }).sort({ createdAt: -1 });
+// @desc    Add flight to cart (works for both authenticated and anonymous users)
+// @route   POST /api/cart
+// @access  Public
+exports.addFlightToCart = asyncHandler(async (req, res) => {
+  const { flightDetails } = req.body;
 
-  // Combine and format all items
-  const cartItems = [
-    ...bookings.map(formatRegularBooking),
-    ...flightBookings.map(formatFlightBooking)
-  ];
-  // Transform bookings to cart item format
-  const formattedItems = cartItems.map(item => {
-    const formattedItem = {
-      id: item.bookingId,
-      type: (item.type || '').toLowerCase(),
-      name: item.name || '',
-      image: item.image || getBookingImage(item.type),
-      details: item.details || '',
-      price: typeof item.price === 'number' ? item.price : 0,
-      quantity: item.quantity || 1
+  if (!flightDetails) {
+    return res.status(400).json({
+      success: false,
+      message: "Flight details are required"
+    });
+  }
+
+  // Validate required fields
+  if (!flightDetails.from || !flightDetails.to || !flightDetails.departureDate) {
+    return res.status(400).json({
+      success: false,
+      message: "Missing required flight details: from, to, or departureDate"
+    });
+  }
+
+  if (!flightDetails.selectedFlight || !flightDetails.selectedFlight.flightId || 
+      !flightDetails.selectedFlight.airline) {
+    return res.status(400).json({
+      success: false,
+      message: "Missing required selected flight details"
+    });
+  }
+
+  // Validate price - handle both number and object formats
+  if (!flightDetails.selectedFlight.price && 
+      flightDetails.selectedFlight.price !== 0) {
+    return res.status(400).json({
+      success: false,
+      message: "Missing flight price"
+    });
+  }
+
+  if (req.user) {
+    // Check for existing booking to prevent duplicates
+    const existingBooking = await FlightBooking.findOne({
+      userId: req.user.id,
+      status: "pending",
+      'flightDetails.selectedFlight.flightId': flightDetails.selectedFlight?.flightId,
+      'flightDetails.departureDate': new Date(flightDetails.departureDate)
+    });
+
+    if (existingBooking) {
+      return res.status(400).json({
+        success: false,
+        message: "This flight is already in your cart"
+      });
+    }
+
+    // Authenticated user - save to database
+    const bookingId = await generateFlightBookingId();
+    
+    // Prepare flight details with proper date conversion
+    const processedFlightDetails = {
+      ...flightDetails,
+      departureDate: new Date(flightDetails.departureDate),
+      selectedFlight: {
+        ...flightDetails.selectedFlight,
+        departureTime: new Date(flightDetails.selectedFlight.departureTime || flightDetails.departureDate),
+        arrivalTime: new Date(flightDetails.selectedFlight.arrivalTime || flightDetails.departureDate),
+        price: {
+          total: Number(flightDetails.selectedFlight.price.total),
+          currency: flightDetails.selectedFlight.price.currency || 'USD'
+        }
+      }
     };
-    return formattedItem;
-  });
+    
+    const flightBooking = await FlightBooking.create({
+      bookingId,
+      userId: req.user.id,
+      customerName: req.user.name,
+      customerEmail: req.user.email,
+      flightDetails: processedFlightDetails,
+      status: "pending"
+    });
+
+    res.status(201).json({
+      success: true,
+      data: flightBooking,
+    });
+  } else {
+    // Anonymous user - save to session
+    if (!req.session.cart) {
+      req.session.cart = [];
+    }
+
+    // Check for duplicates in session
+    const existingItem = req.session.cart.find(item => 
+      item.flightDetails?.selectedFlight?.flightId === flightDetails.selectedFlight?.flightId &&
+      new Date(item.flightDetails?.departureDate).getTime() === new Date(flightDetails.departureDate).getTime()
+    );
+
+    if (existingItem) {
+      return res.status(400).json({
+        success: false,
+        message: "This flight is already in your cart"
+      });
+    }
+
+    const cartItem = {
+      id: 'temp_' + Date.now(),
+      type: 'flight',
+      flightDetails: {
+        ...flightDetails,
+        departureDate: new Date(flightDetails.departureDate),
+        selectedFlight: {
+          ...flightDetails.selectedFlight,
+          departureTime: new Date(flightDetails.selectedFlight.departureTime || flightDetails.departureDate),
+          arrivalTime: new Date(flightDetails.selectedFlight.arrivalTime || flightDetails.departureDate),
+          price: {
+            total: Number(flightDetails.selectedFlight.price.total),
+            currency: flightDetails.selectedFlight.price.currency || 'USD'
+          }
+        }
+      },
+      addedAt: new Date()
+    };
+
+    req.session.cart.push(cartItem);
+
+    res.status(201).json({
+      success: true,
+      data: cartItem,
+      sessionId: req.sessionId
+    });
+  }
+});
+
+// @desc    Get cart items (works for both authenticated and anonymous users)
+// @route   GET /api/cart
+// @access  Public
+exports.getCartItems = asyncHandler(async (req, res) => {
+  let cartItems = [];
+
+  if (req.user) {
+    // Authenticated user - get full FlightBooking objects from database
+    const flightBookings = await FlightBooking.find({
+      userId: req.user.id,
+      status: "pending"
+    }).sort({ createdAt: -1 });
+
+    cartItems = flightBookings;
+  } else {
+    // Anonymous user - get from session and convert to FlightBooking-like format
+    if (req.session.cart) {
+      cartItems = req.session.cart.map(item => ({
+        _id: item.id,
+        bookingId: item.id,
+        flightDetails: item.flightDetails,
+        status: 'pending',
+        createdAt: item.addedAt,
+        paymentDetails: { status: 'pending' }
+      }));
+    }
+  }
 
   res.status(200).json({
     success: true,
-    data: formattedItems
+    data: cartItems,
+    sessionId: req.sessionId
   });
 });
 
 // @desc    Remove item from cart
 // @route   DELETE /api/cart/:id
-// @access  Private
+// @access  Public
 exports.removeFromCart = asyncHandler(async (req, res) => {
-  // Try to find in regular bookings first
-  let booking = await Booking.findOne({
-    bookingId: req.params.id,
-    userId: req.user.id
-  });
-
-  if (!booking) {
-    // If not found in regular bookings, try flight bookings
-    booking = await FlightBooking.findOne({
+  if (req.user) {
+    // Authenticated user - remove from database
+    let booking = await Booking.findOne({
       bookingId: req.params.id,
       userId: req.user.id
     });
-  }
 
-  if (!booking) {
-    return res.status(404).json({
-      success: false,
-      message: "Booking not found"
-    });
-  }
+    if (!booking) {
+      booking = await FlightBooking.findOne({
+        bookingId: req.params.id,
+        userId: req.user.id
+      });
+    }
 
-  await booking.deleteOne();
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: "Booking not found"
+      });
+    }
+
+    await booking.deleteOne();
+  } else {
+    // Anonymous user - remove from session
+    if (req.session.cart) {
+      req.session.cart = req.session.cart.filter(item => item.id !== req.params.id);
+    }
+  }
 
   res.status(200).json({
     success: true,
@@ -77,10 +224,17 @@ exports.removeFromCart = asyncHandler(async (req, res) => {
   });
 });
 
-// @desc    Checkout cart items
-// @route   POST /api/bookings/cart/checkout
+// @desc    Checkout cart items (requires authentication)
+// @route   POST /api/cart/checkout
 // @access  Private
 exports.checkout = asyncHandler(async (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      message: "Authentication required for checkout"
+    });
+  }
+
   try {
     // Get both regular bookings and flight bookings
     const [regularBookings, flightBookings] = await Promise.all([
@@ -198,19 +352,16 @@ function getBookingDetails(booking) {
     case "Tour Package":
       return `${booking.details.duration} - ${new Date(booking.bookingDate).toLocaleDateString()}`;
     default:
-      return new Date(booking.bookingDate).toLocaleDateString();
+      return `${new Date(booking.bookingDate).toLocaleDateString()}`;
   }
 }
 
 function getBookingImage(type) {
-  switch (type.toLowerCase()) {
-    case "flight":
-      return "https://cdn-icons-png.flaticon.com/512/3125/3125713.png";
-    case "hotel":
-      return "https://cdn-icons-png.flaticon.com/512/2933/2933772.png";
-    case "tour package":
-      return "https://cdn-icons-png.flaticon.com/512/3774/3774073.png";
-    default:
-      return "https://cdn-icons-png.flaticon.com/512/2933/2933772.png";
-  }
+  const imageMap = {
+    'hotel': '/uploads/hotel-placeholder.jpg',
+    'tour package': '/uploads/tour-placeholder.jpg',
+    'flight': '/uploads/flight-placeholder.jpg',
+    'car rental': '/uploads/car-placeholder.jpg'
+  };
+  return imageMap[type.toLowerCase()] || '/uploads/default-placeholder.jpg';
 }

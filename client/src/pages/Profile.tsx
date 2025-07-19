@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from 'sonner';
 import { Star, Plane, Calendar, CreditCard, User, Mail, Phone } from 'lucide-react';
-import { api } from '@/config/api';
+import api from '@/config/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -241,8 +241,11 @@ const Profile: React.FC = () => {
           confirmPassword: ''
         });
       }
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to change password');
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : (error as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to change password';
+      toast.error(errorMessage);
     } finally {
       setIsChangingPassword(false);
     }
