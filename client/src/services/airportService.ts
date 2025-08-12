@@ -2,13 +2,17 @@ import api from '@/config/api';
 import { getCapitalAirportFromCoordinates } from './geolocationService';
 
 export interface Airport {
-  code: string;
+  code?: string;
   name: string;
-  city: string;
-  country: string;
-  latitude: number;
-  longitude: number;
-  iata_code?: string;
+  city?: string;
+  country?: string;
+  latitude?: number;
+  longitude?: number;
+  iata_code: string;
+  municipality?: string;
+  iso_country?: string;
+  type?: string;
+  scheduled_service?: string;
 }
 
 // Add interface for raw airport data from API

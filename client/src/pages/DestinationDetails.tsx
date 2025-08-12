@@ -80,7 +80,14 @@ const getAirlineLogo = (airlineName: string): string => {
     'Ethiopian Airlines': '/Ethiopian-Airlines-Logo.png',
     'Hahn Air': '/Hahn-Air-Logo.png',
     'Nemsa Airlines': '/Nemsa-Airlines-Logo.png',
-    'Pakistan International Airlines': '/Pakistan-International-Airlines-Logo.png'
+    'Pakistan International Airlines': '/Pakistan-International-Airlines-Logo.png',
+    'Air Cairo': '/Air-Cairo-Logo.png',
+    'Air Arabia': '/Air-Arabia-Logo.png',
+    'flyadeal': '/Flyadeal-Logo.svg',
+    'Air Arabia Egypt': '/Air-Arabia-Egypt-Logo.png',
+    'Jazeera Airways': '/Jazeera-Airways-Logo.png',
+    'British Airways': '/British-Airways-Logo.png',
+    'Lufthansa': '/Lufthansa-Logo.png'
   };
   return logoMap[airlineName] || '/Tourtastic-logo.png';
 };
@@ -538,8 +545,6 @@ const DestinationDetails: React.FC = () => {
                 showDetails={showDetails}
                 onFlightSelection={handleFlightSelection}
                 onAddToCart={handleAddToCart}
-                onShowDetails={(flightId: string) => setShowDetails(showDetails === flightId ? null : flightId)}
-                showSegmentHeaders={false}
               />
             )}
 

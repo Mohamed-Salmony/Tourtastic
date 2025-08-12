@@ -27,10 +27,24 @@ export default defineConfig(({ mode }) => ({
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom'], // example
+          vendor: ['react', 'react-dom'],
+          ui: ['@radix-ui/react-dialog', '@radix-ui/react-popover', '@radix-ui/react-select'],
+          routing: ['react-router-dom'],
+          forms: ['react-hook-form', '@hookform/resolvers', 'zod'],
+          i18n: ['i18next', 'react-i18next', 'i18next-browser-languagedetector'],
+          icons: ['lucide-react'],
+          utils: ['axios', '@tanstack/react-query', 'date-fns']
         },
       },
     },
-    chunkSizeWarningLimit: 1000, // in KB
+    chunkSizeWarningLimit: 1000,
+    // Enable compression
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: mode === 'production',
+        drop_debugger: mode === 'production',
+      },
+    },
   },
 }));

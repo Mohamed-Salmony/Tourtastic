@@ -57,6 +57,7 @@ export interface PriceBreakdown {
 }
 
 export interface FlightSegment {
+  [x: string]: Key;
   cabin: string;
   cabin_name: string;
   farebase: string;
@@ -131,6 +132,21 @@ export interface Flight {
     CHD: PriceBreakdown;
     INF: PriceBreakdown;
   };
+
+  // Add these new fields
+  total_price?: number; // Pre-calculated total from backend
+  cabin_class?: string; // Flight-level cabin class
+  carry_on_baggage?: string;
+  checked_baggage?: string;
+  airline_logo_url?: string;
+  departure_time_formatted?: string;
+  arrival_time_formatted?: string;
+  layover_details?: Array<{
+    airport: string;
+    city: string;
+    duration: string;
+    terminal?: string;
+  }>;
   
   // Enhanced fields
   airline_name?: string;
@@ -139,7 +155,13 @@ export interface Flight {
   total_duration_formatted?: string;
   stops_count?: number;
   baggage_allowance?: string;
-  segment_index?: number; // Add this property
+  segment_index?: number;
+  
+  // Add missing booking-related properties
+  can_refund?: boolean;
+  can_hold?: boolean;
+  can_void?: boolean;
+  can_exchange?: boolean;
   
   // Enhanced leg information
   legs: FlightLeg[];
@@ -169,11 +191,34 @@ export const searchFlights = async (params: FlightSearchParams): Promise<FlightS
   }
 };
 
+// Add simple cache for search results
+const searchCache = new Map<string, { data: FlightSearchResults; timestamp: number }>();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
 export const getSearchResults = async (searchId: string, after?: number): Promise<FlightSearchResults> => {
-  const response = await api.get(`/flights/results/${searchId}`, {
-    params: after ? { after } : undefined
-  });
-  return response.data;
+  const cacheKey = `${searchId}-${after || 0}`;
+  const cached = searchCache.get(cacheKey);
+  
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    return cached.data;
+  }
+  
+  try {
+    const response = await api.get(`/flights/results/${searchId}`, {
+      params: after ? { after } : undefined
+    });
+    
+    // Validate response structure
+    if (!response.data || typeof response.data.complete !== 'number') {
+      throw new Error('Invalid response structure from flight search API');
+    }
+    
+    searchCache.set(cacheKey, { data: response.data, timestamp: Date.now() });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching search results:', error);
+    throw error;
+  }
 };
 
 

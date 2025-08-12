@@ -1,61 +1,69 @@
 import { Routes, Route, Outlet } from 'react-router-dom';
+import { Suspense, lazy } from 'react';
 import Layout from './components/layout/Layout';
-import Home from './pages/Home';
-import Flights from './pages/Flights';
-import Destinations from './pages/Destinations';
-import DestinationDetails from './pages/DestinationDetails';
-import About from './pages/About';
-import Contact from './pages/Contact';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import NotFound from './pages/NotFound';
-import ForgotPassword from './pages/ForgotPassword';
 import { RequireAuth } from './providers/RequireAuth';
-import PaymentSuccess from './pages/PaymentSuccess';
 
-// Protected pages
-import Cart from './pages/Cart';
-import Profile from './pages/Profile';
-import Notifications from './pages/Notifications';
-import AdminLayout from './components/layout/AdminLayout';
-import AdminDashboard from './pages/admin/Dashboard';
-import AdminBookings from './pages/admin/Bookings';
-import AdminProfile from './pages/admin/Profile';
-import AdminUsers from './pages/admin/Users';
-import AdminDestinations from './pages/admin/Destinations';
-import AdminReports from './pages/admin/Reports';
+// Lazy load components
+const Home = lazy(() => import('./pages/Home'));
+const Flights = lazy(() => import('./pages/Flights'));
+const Destinations = lazy(() => import('./pages/Destinations'));
+const DestinationDetails = lazy(() => import('./pages/DestinationDetails'));
+const About = lazy(() => import('./pages/About'));
+const Contact = lazy(() => import('./pages/Contact'));
+const Login = lazy(() => import('./pages/Login'));
+const Register = lazy(() => import('./pages/Register'));
+const NotFound = lazy(() => import('./pages/NotFound'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const PaymentSuccess = lazy(() => import('./pages/PaymentSuccess'));
+const Cart = lazy(() => import('./pages/Cart'));
+const Profile = lazy(() => import('./pages/Profile'));
+const Notifications = lazy(() => import('./pages/Notifications'));
+const AdminLayout = lazy(() => import('./components/layout/AdminLayout'));
+const AdminDashboard = lazy(() => import('./pages/admin/Dashboard'));
+const AdminBookings = lazy(() => import('./pages/admin/Bookings'));
+const AdminProfile = lazy(() => import('./pages/admin/Profile'));
+const AdminUsers = lazy(() => import('./pages/admin/Users'));
+const AdminDestinations = lazy(() => import('./pages/admin/Destinations'));
+const AdminReports = lazy(() => import('./pages/admin/Reports'));
+
+// Loading component
+const PageLoader = () => (
+  <div className="flex items-center justify-center min-h-[400px]">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-tourtastic-blue"></div>
+  </div>
+);
 
 const AppRoutes = () => {
   return (
     <Routes>
       {/* Public Routes */}
       <Route element={<Layout><Outlet /></Layout>}>
-        <Route index element={<Home />} />
-        <Route path="/flights" element={<Flights />} />
-        <Route path="/destinations" element={<Destinations />} />
-        <Route path="/destinations/:destinationId" element={<DestinationDetails />} />
-        <Route path="/about" element={<About />} />
-        <Route path="/contact" element={<Contact />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/payment/success" element={<PaymentSuccess />} />
-        <Route path="/cart" element={<Cart />} />
+        <Route index element={<Suspense fallback={<PageLoader />}><Home /></Suspense>} />
+        <Route path="/flights" element={<Suspense fallback={<PageLoader />}><Flights /></Suspense>} />
+        <Route path="/destinations" element={<Suspense fallback={<PageLoader />}><Destinations /></Suspense>} />
+        <Route path="/destinations/:destinationId" element={<Suspense fallback={<PageLoader />}><DestinationDetails /></Suspense>} />
+        <Route path="/about" element={<Suspense fallback={<PageLoader />}><About /></Suspense>} />
+        <Route path="/contact" element={<Suspense fallback={<PageLoader />}><Contact /></Suspense>} />
+        <Route path="/login" element={<Suspense fallback={<PageLoader />}><Login /></Suspense>} />
+        <Route path="/register" element={<Suspense fallback={<PageLoader />}><Register /></Suspense>} />
+        <Route path="/forgot-password" element={<Suspense fallback={<PageLoader />}><ForgotPassword /></Suspense>} />
+        <Route path="/payment/success" element={<Suspense fallback={<PageLoader />}><PaymentSuccess /></Suspense>} />
+        <Route path="/cart" element={<Suspense fallback={<PageLoader />}><Cart /></Suspense>} />
 
         {/* Protected User Routes */}
-        <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
-        <Route path="/notifications" element={<RequireAuth><Notifications /></RequireAuth>} />
+        <Route path="/profile" element={<RequireAuth><Suspense fallback={<PageLoader />}><Profile /></Suspense></RequireAuth>} />
+        <Route path="/notifications" element={<RequireAuth><Suspense fallback={<PageLoader />}><Notifications /></Suspense></RequireAuth>} />
 
         {/* Admin Routes */}
-        <Route path="/admin" element={<RequireAuth><AdminLayout><AdminDashboard /></AdminLayout></RequireAuth>} />
-        <Route path="/admin/bookings" element={<RequireAuth><AdminLayout><AdminBookings /></AdminLayout></RequireAuth>} />
-        <Route path="/admin/users" element={<RequireAuth><AdminLayout><AdminUsers /></AdminLayout></RequireAuth>} />
-        <Route path="/admin/destinations" element={<RequireAuth><AdminLayout><AdminDestinations /></AdminLayout></RequireAuth>} />
-        <Route path="/admin/reports" element={<RequireAuth><AdminLayout><AdminReports /></AdminLayout></RequireAuth>} />
-        <Route path="/admin/profile" element={<RequireAuth><AdminLayout><AdminProfile /></AdminLayout></RequireAuth>} />
+        <Route path="/admin" element={<RequireAuth><Suspense fallback={<PageLoader />}><AdminLayout><AdminDashboard /></AdminLayout></Suspense></RequireAuth>} />
+        <Route path="/admin/bookings" element={<RequireAuth><Suspense fallback={<PageLoader />}><AdminLayout><AdminBookings /></AdminLayout></Suspense></RequireAuth>} />
+        <Route path="/admin/users" element={<RequireAuth><Suspense fallback={<PageLoader />}><AdminLayout><AdminUsers /></AdminLayout></Suspense></RequireAuth>} />
+        <Route path="/admin/destinations" element={<RequireAuth><Suspense fallback={<PageLoader />}><AdminLayout><AdminDestinations /></AdminLayout></Suspense></RequireAuth>} />
+        <Route path="/admin/reports" element={<RequireAuth><Suspense fallback={<PageLoader />}><AdminLayout><AdminReports /></AdminLayout></Suspense></RequireAuth>} />
+        <Route path="/admin/profile" element={<RequireAuth><Suspense fallback={<PageLoader />}><AdminLayout><AdminProfile /></AdminLayout></Suspense></RequireAuth>} />
 
         {/* 404 Route */}
-        <Route path="*" element={<NotFound />} />
+        <Route path="*" element={<Suspense fallback={<PageLoader />}><NotFound /></Suspense>} />
       </Route>
     </Routes>
   );

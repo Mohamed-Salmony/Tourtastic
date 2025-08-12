@@ -1,317 +1,388 @@
 const axios = require('axios');
 const asyncHandler = require('../middleware/asyncHandler');
 
-// Base URL for Amadeus API
-const baseURL = `https://${process.env.AMADEUS_API_ENDPOINT}`;
+// Seeru API configuration
+const seeruBaseURL = `https://${process.env.SEERU_API_ENDPOINT}/${process.env.SEERU_API_VERSION}/flights`;
+const seeruApiKey = process.env.SEERU_API_KEY;
 
-// Token storage and expiration tracking
-let amadeusToken = null;
-let tokenExpiration = null;
-
-// Helper function to get a valid Amadeus token
-const getAmadeusToken = async () => {
-  // Check if we have a valid token
-  if (amadeusToken && tokenExpiration && new Date() < tokenExpiration) {
-    return amadeusToken;
-  }
-  
-  // Request a new token
-  try {
-    const response = await axios.post(
-      `${baseURL}/v1/security/oauth2/token`,
-      `grant_type=client_credentials&client_id=${process.env.AMADEUS_API_KEY}&client_secret=${process.env.AMADEUS_API_SECRET}`,
-      {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        }
-      }
-    );
-    
-    // Set the token and calculate expiration
-    amadeusToken = response.data.access_token;
-    // Set expiration 5 minutes before actual expiry to be safe
-    tokenExpiration = new Date(new Date().getTime() + (response.data.expires_in - 300) * 1000);
-    
-    return amadeusToken;
-  } catch (error) {
-    console.error('Amadeus token error:', error.response?.data || error.message);
-    throw new Error('Failed to obtain Amadeus API token');
-  }
-};
-
-// Helper function to get a configured axios instance with the latest token
-const getAmadeusApiInstance = async () => {
-  const token = await getAmadeusToken();
-  
+// Helper function to get configured axios instance for Seeru API
+// Helper function to get configured axios instance for Seeru API
+const getSeeruApiInstance = () => {
   return axios.create({
-    baseURL,
+    baseURL: seeruBaseURL,
     headers: {
-      'Authorization': `Bearer ${token}`,
+      'Authorization': `Bearer ${seeruApiKey}`,
       'Content-Type': 'application/json'
-    }
+    },
+    timeout: 30000, // 30 seconds timeout
+    retry: 3, // Retry failed requests 3 times
+    retryDelay: 1000 // 1 second delay between retries
   });
 };
 
-// @desc    Search for flight destinations
-// @route   GET /api/flights/destinations
-// @access  Public
-exports.getFlightDestinations = asyncHandler(async (req, res) => {
-  const { origin, maxPrice } = req.query;
-  
-  if (!origin) {
-    return res.status(400).json({
-      success: false,
-      message: 'Origin is required'
-    });
-  }
-  
-  try {
-    const amadeusApi = await getAmadeusApiInstance();
-    const response = await amadeusApi.get(
-      '/v1/shopping/flight-destinations',
-      { params: { origin, maxPrice } }
-    );
-    
-    res.status(200).json(response.data);
-  } catch (error) {
-    console.error('Amadeus API error:', error.response?.data || error.message);
-    res.status(error.response?.status || 500).json({
-      success: false,
-      message: error.response?.data?.errors?.[0]?.detail || 'Error searching flight destinations',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
-
-// @desc    Search for flight offers
-// @route   GET /api/flights/offers
-// @access  Public
-exports.getFlightOffers = asyncHandler(async (req, res) => {
-  const { 
-    originLocationCode, 
-    destinationLocationCode, 
-    departureDate, 
-    returnDate, 
-    adults = 1, 
-    children = 0, 
-    infants = 0,
-    travelClass = 'ECONOMY',
-    nonStop = false
-  } = req.query;
-  
-  if (!originLocationCode || !destinationLocationCode || !departureDate) {
-    return res.status(400).json({
-      success: false,
-      message: 'Origin, destination, and departure date are required'
-    });
-  }
-  
-  try {
-    const amadeusApi = await getAmadeusApiInstance();
-    const params = {
-      originLocationCode,
-      destinationLocationCode,
-      departureDate,
-      adults,
-      children,
-      infants,
-      travelClass,
-      nonStop
-    };
-    
-    // Add return date if provided (for round trip)
-    if (returnDate) {
-      params.returnDate = returnDate;
-    }
-    
-    const response = await amadeusApi.get(
-      '/v2/shopping/flight-offers',
-      { params }
-    );
-    
-    res.status(200).json(response.data);
-  } catch (error) {
-    console.error('Amadeus API error:', error.response?.data || error.message);
-    res.status(error.response?.status || 500).json({
-      success: false,
-      message: error.response?.data?.errors?.[0]?.detail || 'Error searching flight offers',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
-
-// @desc    Get flight dates with prices
-// @route   GET /api/flights/dates
-// @access  Public
-exports.getFlightDates = asyncHandler(async (req, res) => {
-  const { origin, destination, departureDate, oneWay = false } = req.query;
-  
-  if (!origin || !destination || !departureDate) {
-    return res.status(400).json({
-      success: false,
-      message: 'Origin, destination, and departure date are required'
-    });
-  }
-  
-  try {
-    const amadeusApi = await getAmadeusApiInstance();
-    const response = await amadeusApi.get(
-      '/v1/shopping/flight-dates',
-      { params: { origin, destination, departureDate, oneWay } }
-    );
-    
-    res.status(200).json(response.data);
-  } catch (error) {
-    console.error('Amadeus API error:', error.response?.data || error.message);
-    res.status(error.response?.status || 500).json({
-      success: false,
-      message: error.response?.data?.errors?.[0]?.detail || 'Error searching flight dates',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
-
-// @desc    Search for flights (Frontend integration)
+// @desc    Search for flights using Seeru API
 // @route   GET /api/flights/search/:trips/:adults/:children/:infants
 // @access  Public
+// Add timeout configuration to Seeru API calls
+const seeruApiConfig = {
+  timeout: 30000, // 30 seconds timeout
+  retry: 3,
+  retryDelay: 1000
+};
+
+// Update the searchFlights function to use timeout
 exports.searchFlights = asyncHandler(async (req, res) => {
   const { trips, adults, children, infants } = req.params;
-  const { cabin = 'ECONOMY', direct = '0' } = req.query;
-  
-  // Parse trips format: ORIGIN-DESTINATION-DATE:ORIGIN2-DESTINATION2-DATE2
-  const tripSegments = trips.split(':').map(trip => {
-    const [origin, destination, date] = trip.split('-');
-    // Convert YYYYMMDD to YYYY-MM-DD
-    const formattedDate = `${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}`;
-    return { origin, destination, date: formattedDate };
-  });
-  
-  if (tripSegments.length === 0 || !tripSegments[0].origin) {
+  const { cabin = 'e', direct = 0 } = req.query;
+
+  // Validate passenger counts
+  const totalPassengers = parseInt(adults) + parseInt(children) + parseInt(infants);
+  if (totalPassengers > 9) {
     return res.status(400).json({
       success: false,
-      message: 'Invalid trip format'
+      message: 'Maximum 9 passengers allowed for optimal performance'
     });
   }
-  
+
   try {
-    const amadeusApi = await getAmadeusApiInstance();
-    
-    // Map cabin codes
-    const cabinMap = {
-      'e': 'ECONOMY',
-      'p': 'PREMIUM_ECONOMY', 
-      'b': 'BUSINESS',
-      'f': 'FIRST'
-    };
-    
-    let allFlights = [];
-    const searchId = `search_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    // Handle multi-city search by making separate API calls for each segment
-    for (let i = 0; i < tripSegments.length; i++) {
-      const segment = tripSegments[i];
-      
-      const params = {
-        originLocationCode: segment.origin,
-        destinationLocationCode: segment.destination,
-        departureDate: segment.date,
-        adults: parseInt(adults) || 1,
-        children: parseInt(children) || 0,
-        infants: parseInt(infants) || 0,
-        travelClass: cabinMap[cabin] || 'ECONOMY',
-        nonStop: direct === '1'
-      };
-      
-      try {
-        const response = await amadeusApi.get('/v2/shopping/flight-offers', { params });
-        
-        // Transform and add segment index to each flight
-        const segmentFlights = transformAmadeusToFrontendFormat(response.data.data, `${searchId}_segment_${i}`, {
-          trips: [segment], // Pass only current segment
-          adt: parseInt(adults),
-          chd: parseInt(children),
-          inf: parseInt(infants),
-          options: {
-            direct: direct === '1',
-            cabin: cabin,
-            multiCity: tripSegments.length > 1,
-            segmentIndex: i // Add segment index
-          }
-        });
-        
-        // Add segment information to each flight
-        segmentFlights.forEach(flight => {
-          flight.segment_index = i;
-          flight.segment_info = {
-            from: segment.origin,
-            to: segment.destination,
-            date: segment.date,
-            index: i
-          };
-        });
-        
-        allFlights = allFlights.concat(segmentFlights);
-      } catch (segmentError) {
-        console.error(`Error searching segment ${i}:`, segmentError.response?.data || segmentError.message);
-        // Continue with other segments even if one fails
+    // Use environment variables for the correct API endpoint
+    const seeruResponse = await axios.get(
+      `https://${process.env.SEERU_API_ENDPOINT}/${process.env.SEERU_API_VERSION}/flights/search/${trips}/${adults}/${children}/${infants}?cabin=${cabin}&direct=${direct}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.SEERU_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: seeruApiConfig.timeout
       }
+    );
+
+    res.json({
+      success: true,
+      search_id: seeruResponse.data.search_id,
+      message: 'Search initiated successfully'
+    });
+  } catch (error) {
+    if (error.code === 'ECONNABORTED') {
+      return res.status(408).json({
+        success: false,
+        message: 'Search request timed out. Please try again with fewer passengers.'
+      });
     }
     
-    // Store search results temporarily (in production, use Redis or database)
-    global.flightSearchResults = global.flightSearchResults || {};
-    global.flightSearchResults[searchId] = {
-      complete: 100,
-      result: allFlights,
-      last_result: allFlights.length,
-      segments: tripSegments.length
-    };
-    
-    res.status(200).json({
-      search_id: searchId
-    });
-    
-  } catch (error) {
-    console.error('Amadeus flight search error:', error.response?.data || error.message);
-    res.status(error.response?.status || 500).json({
+    console.error('Seeru API Error:', error.response?.data || error.message);
+    res.status(500).json({
       success: false,
-      message: error.response?.data?.errors?.[0]?.detail || 'Error searching flights',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Failed to initiate flight search'
     });
   }
 });
 
-// @desc    Get search results
+// @desc    Get search results from Seeru API
 // @route   GET /api/flights/results/:searchId
 // @access  Public
 exports.getFlightSearchResults = asyncHandler(async (req, res) => {
   const { searchId } = req.params;
   const { after } = req.query;
   
-  // Retrieve stored results
-  const results = global.flightSearchResults?.[searchId];
-  
-  if (!results) {
-    return res.status(404).json({
+  if (!searchId) {
+    return res.status(400).json({
       success: false,
-      message: 'Search results not found or expired'
+      message: 'Search ID is required'
     });
   }
   
-  // Handle pagination if needed
-  let filteredResults = results.result;
-  if (after) {
-    const afterIndex = parseInt(after);
-    filteredResults = results.result.slice(afterIndex);
+  try {
+    const seeruApi = getSeeruApiInstance();
+    
+    // Build the result URL according to Seeru API format
+    // GET /result/{search_id}
+    const resultUrl = `/result/${searchId}`;
+    
+    const params = {};
+    if (after) {
+      params.after = parseInt(after);
+    }
+    
+    console.log('Fetching Seeru results:', { resultUrl, params });
+    
+    const response = await seeruApi.get(resultUrl, { params });
+
+    // Normalize complete and last_result
+    const completePercent = typeof response.data.complete === 'number'
+      ? response.data.complete
+      : (response.data.complete ? 100 : 0);
+    const lastResult = typeof response.data.last_result === 'number' ? response.data.last_result : undefined;
+
+    // Dedupe by trip_id within this batch in case Seeru returns duplicates in same payload
+    const rawResults = Array.isArray(response.data.result) ? response.data.result : [];
+    const tripIdToTransformed = new Map();
+    rawResults.forEach((flight, index) => {
+      // Determine segment index based on trip structure (best-effort; single-trip searches will be 0)
+      const tripsLen = Array.isArray(flight?.search_query?.trips) ? flight.search_query.trips.length : 1;
+      const segmentIndex = tripsLen > 1 && rawResults.length > 0
+        ? Math.floor(index / (rawResults.length / tripsLen))
+        : 0;
+      const transformed = transformSeeruToFrontendFormat(flight, segmentIndex);
+      if (transformed && transformed.trip_id) {
+        // Last occurrence wins per Seeru doc (newer updates replace older)
+        tripIdToTransformed.set(transformed.trip_id, transformed);
+      }
+    });
+
+    const transformedResults = {
+      complete: completePercent,
+      result: Array.from(tripIdToTransformed.values()),
+      last_result: lastResult
+    };
+    
+    res.status(200).json(transformedResults);
+    
+  } catch (error) {
+    console.error('Seeru API results error:', error.response?.data || error.message);
+    
+    if (error.response?.status === 404) {
+      return res.status(404).json({
+        success: false,
+        message: 'Search results not found or expired'
+      });
+    }
+    
+    res.status(error.response?.status || 500).json({
+      success: false,
+      message: error.response?.data?.message || 'Error retrieving search results',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
-  
-  res.status(200).json({
-    complete: results.complete,
-    result: filteredResults,
-    last_result: results.last_result
-  });
 });
 
-// Helper function to transform Amadeus response to frontend format
+// Helper function to standardize baggage allowance format
+function formatBaggageAllowance(baggageDesc) {
+  if (!baggageDesc || baggageDesc === '0' || baggageDesc === '0 kg') {
+    return 'No baggage included';
+  }
+  
+  // Convert various formats to standardized format
+  const desc = String(baggageDesc).toLowerCase();
+  
+  // Handle piece-based baggage
+  if (desc.includes('pc') || desc.includes('piece')) {
+    const pieceMatch = desc.match(/(\d+)\s*(pc|piece)/i);
+    if (pieceMatch) {
+      const count = parseInt(pieceMatch[1]);
+      return count === 1 ? '1 piece (23kg)' : `${count} pieces (23kg each)`;
+    }
+    return '1 piece (23kg)';
+  }
+  
+  // Handle weight-based baggage
+  if (desc.includes('kg')) {
+    const kgMatch = desc.match(/(\d+)\*?\s*kg/i);
+    if (kgMatch) {
+      return `${kgMatch[1]}kg`;
+    }
+  }
+  
+  // Handle other formats
+  if (desc.includes('x')) {
+    const xMatch = desc.match(/(\d+)\s*x\s*(\d+)\s*kg/i);
+    if (xMatch) {
+      return `${xMatch[1]} × ${xMatch[2]}kg`;
+    }
+  }
+  
+  // Return original if no pattern matches, but clean it up
+  return baggageDesc.replace(/\*/g, '').trim() || 'Standard baggage';
+}
+
+// Helper function to round price to 2 decimal places
+function roundPrice(price) {
+  return Math.round((parseFloat(price) || 0) * 100) / 100;
+}
+
+// Helper function to transform Seeru response to frontend format
+function transformSeeruToFrontendFormat(seeruFlight, segmentIndex = 0) {
+  // Add null checks for seeruFlight
+  if (!seeruFlight) {
+    console.error('seeruFlight is null or undefined');
+    return null;
+  }
+
+  // Cache passenger counts
+  const adtCount = seeruFlight.search_query?.adt || 1;
+  const chdCount = seeruFlight.search_query?.chd || 0;
+  const infCount = seeruFlight.search_query?.inf || 0;
+  
+  // Helper function to get cabin name from cabin code
+  const getCabinName = (cabinCode) => {
+    const cabinMap = {
+      'e': 'Economy',
+      'p': 'Premium Economy', 
+      'b': 'Business',
+      'f': 'First Class'
+    };
+    return cabinMap[cabinCode?.toLowerCase()] || 'Economy';
+  };
+  
+  // Fix: Use consistent price calculation logic
+  // The price and tax from Seeru should represent the TOTAL for all passengers, not per passenger
+  const totalPrice = roundPrice(seeruFlight.price || 0);
+  const totalTax = roundPrice(seeruFlight.tax || 0);
+  const grandTotal = roundPrice(totalPrice + totalTax);
+  
+  // Calculate per-passenger prices by dividing total by passenger count
+  const totalPassengers = adtCount + chdCount + infCount;
+  const pricePerPassenger = totalPassengers > 0 ? roundPrice(totalPrice / totalPassengers) : totalPrice;
+  const taxPerPassenger = totalPassengers > 0 ? roundPrice(totalTax / totalPassengers) : totalTax;
+  const totalPerPassenger = roundPrice(pricePerPassenger + taxPerPassenger);
+  
+  // Create consistent price breakdowns
+  let priceBreakdowns;
+  
+  if (seeruFlight.price_breakdowns && typeof seeruFlight.price_breakdowns === 'object') {
+    // Use existing price breakdowns if available, but ensure consistency
+    priceBreakdowns = {
+      ADT: {
+        total: roundPrice(seeruFlight.price_breakdowns.ADT?.total || totalPerPassenger),
+        price: roundPrice(seeruFlight.price_breakdowns.ADT?.price || pricePerPassenger),
+        label: seeruFlight.price_breakdowns.ADT?.label || 'Adult',
+        tax: roundPrice(seeruFlight.price_breakdowns.ADT?.tax || taxPerPassenger)
+      },
+      CHD: {
+        total: roundPrice(seeruFlight.price_breakdowns.CHD?.total || (totalPerPassenger * 0.75)),
+        price: roundPrice(seeruFlight.price_breakdowns.CHD?.price || (pricePerPassenger * 0.75)),
+        label: seeruFlight.price_breakdowns.CHD?.label || 'Child',
+        tax: roundPrice(seeruFlight.price_breakdowns.CHD?.tax || (taxPerPassenger * 0.75))
+      },
+      INF: {
+        total: roundPrice(seeruFlight.price_breakdowns.INF?.total || (totalPerPassenger * 0.1)),
+        price: roundPrice(seeruFlight.price_breakdowns.INF?.price || (pricePerPassenger * 0.1)),
+        label: seeruFlight.price_breakdowns.INF?.label || 'Infant',
+        tax: roundPrice(seeruFlight.price_breakdowns.INF?.tax || (taxPerPassenger * 0.1))
+      }
+    };
+  } else {
+    // Create fallback price breakdowns with consistent logic
+    priceBreakdowns = {
+      ADT: { 
+        total: totalPerPassenger,
+        price: pricePerPassenger, 
+        label: 'Adult', 
+        tax: taxPerPassenger 
+      },
+      CHD: { 
+        total: roundPrice(totalPerPassenger * 0.75),
+        price: roundPrice(pricePerPassenger * 0.75), 
+        label: 'Child', 
+        tax: roundPrice(taxPerPassenger * 0.75) 
+      },
+      INF: { 
+        total: roundPrice(totalPerPassenger * 0.1),
+        price: roundPrice(pricePerPassenger * 0.1), 
+        label: 'Infant', 
+        tax: roundPrice(taxPerPassenger * 0.1) 
+      }
+    };
+  }
+  
+  // Calculate accurate total price for all passengers using breakdowns
+  const calculatedTotalPrice = roundPrice(
+    (adtCount * (priceBreakdowns.ADT?.total || 0)) +
+    (chdCount * (priceBreakdowns.CHD?.total || 0)) +
+    (infCount * (priceBreakdowns.INF?.total || 0))
+  );
+  
+  // Get standardized baggage allowance
+  const rawBaggage = seeruFlight.legs && seeruFlight.legs[0] && seeruFlight.legs[0].bags && seeruFlight.legs[0].bags.ADT 
+    ? seeruFlight.legs[0].bags.ADT.checked?.desc : null;
+  const standardizedBaggage = formatBaggageAllowance(rawBaggage);
+  
+  return {
+    // Core flight information - use per-passenger prices for display consistency
+    price: pricePerPassenger,  // Price per passenger for display
+    tax: taxPerPassenger,      // Tax per passenger for display
+    total_price: calculatedTotalPrice,  // Correct total for all passengers
+    
+    // Price breakdowns with correct calculations
+    price_breakdowns: priceBreakdowns,
+    
+    // Flight legs with enhanced information
+    legs: (seeruFlight.legs || []).map(leg => ({
+      ...leg,
+      duration_formatted: formatMinutesToHoursMinutes(leg.duration),
+      stops_count: leg.stops ? leg.stops.length : 0,
+      
+      // Add cabin_name to leg
+      cabin_name: getCabinName(leg.cabin || seeruFlight.search_query?.options?.cabin),
+      
+      // Enhanced stops information
+      stops_info: leg.stops ? leg.stops.map((stop, index) => ({
+        airport: stop,
+        city: leg.stop_over?.[index] || stop,
+        duration: '45m'
+      })) : [],
+      
+      // Enhanced segments with airline names and cabin info
+      segments: (leg.segments || []).map(segment => ({
+        ...segment,
+        airline_name: getAirlineName(segment.iata),
+        duration_formatted: formatMinutesToHoursMinutes(segment.duration),
+        cabin_name: getCabinName(segment.cabin || leg.cabin || seeruFlight.search_query?.options?.cabin)
+      })),
+      
+      // Add main airline information
+      airline_name: leg.segments && leg.segments.length > 0 ? getAirlineName(leg.segments[0].iata) : '',
+      main_airline_code: leg.segments && leg.segments.length > 0 ? leg.segments[0].iata : ''
+    })),
+    
+    // Flight identifiers
+    trip_id: seeruFlight.trip_id,
+    search_id: seeruFlight.search_id,
+    src: seeruFlight.src || 'seeru',
+    id: seeruFlight.id,
+    
+    // Passenger and search information
+    total_pax_no_inf: seeruFlight.total_pax_no_inf || 0,
+    search_query: {
+      adt: adtCount,
+      chd: chdCount,
+      inf: infCount,
+      options: {
+        cabin: seeruFlight.search_query?.options?.cabin || 'e',
+        direct: seeruFlight.search_query?.options?.direct || false,
+        multiCity: seeruFlight.search_query?.options?.multiCity || false
+      },
+      trips: seeruFlight.search_query?.trips || []
+    },
+    
+    // Additional flight details
+    currency: seeruFlight.currency || 'USD',
+    can_hold: seeruFlight.can_hold || false,
+    can_void: seeruFlight.can_void || false,
+    can_refund: seeruFlight.can_refund || false,
+    can_exchange: seeruFlight.can_exchange || false,
+    etd: seeruFlight.etd || '',
+    
+    // Enhanced fields for better frontend display
+    airline_name: seeruFlight.legs && seeruFlight.legs[0] && seeruFlight.legs[0].segments && seeruFlight.legs[0].segments[0] 
+      ? getAirlineName(seeruFlight.legs[0].segments[0].iata) : '',
+    airline_code: seeruFlight.legs && seeruFlight.legs[0] && seeruFlight.legs[0].segments && seeruFlight.legs[0].segments[0] 
+      ? seeruFlight.legs[0].segments[0].iata : '',
+    total_duration: seeruFlight.legs && seeruFlight.legs[0] ? seeruFlight.legs[0].duration : 0,
+    total_duration_formatted: seeruFlight.legs && seeruFlight.legs[0] 
+      ? formatMinutesToHoursMinutes(seeruFlight.legs[0].duration) : '0h 0m',
+    stops_count: seeruFlight.legs && seeruFlight.legs[0] && seeruFlight.legs[0].stops 
+      ? seeruFlight.legs[0].stops.length : 0,
+    baggage_allowance: standardizedBaggage,
+    
+    // Add cabin class at flight level
+    cabin_class: getCabinName(seeruFlight.search_query?.options?.cabin),
+    
+    // Segment index for multi-trip searches (0 for single-trip)
+    segment_index: segmentIndex
+  };
+}
+
 // Helper function to get airline name from IATA code
 function getAirlineName(iataCode) {
   const airlineMap = {
@@ -323,13 +394,9 @@ function getAirlineName(iataCode) {
     'KU': 'Kuwait Airways',
     'GF': 'Gulf Air',
     'UX': 'Air Europa',
-    'QR': 'Qatar Airways',
     'RJ': 'Royal Jordanian',
     'WY': 'Oman Air',
-    'SV': 'Saudia',
-    'EK': 'Emirates',
     'ET': 'Ethiopian Airlines',
-    'TK': 'Turkish Airlines',
     'A3': 'Aegean Airlines',
     'XY': 'Flynas', 
     'VF': 'Ajet',
@@ -348,178 +415,298 @@ function getAirlineName(iataCode) {
     'XQ': 'SunExpress',
     'KQ': 'Kenya Airways',
     '3U': 'Sichuan Airlines',
-    'MH': 'Malaysia Airlines'
-
+    'MH': 'Malaysia Airlines',
+    'SM': 'Air Cairo',
+    'G9': 'Air Arabia',
+    'F3': 'flyadeal',
+    'E5': 'Air Arabia Egypt',
+    'J9': 'Jazeera Airways',
+    'R5': 'Royal Jordanian',
+    'BA': 'British Airways',
+    'LH': 'Lufthansa'
   };
   return airlineMap[iataCode] || iataCode;
 }
 
-// Helper function to parse duration from ISO 8601 format
-function parseDuration(isoDuration) {
-  if (!isoDuration) return { hours: 0, minutes: 0, total: 0 };
+// Helper function to format duration from minutes to "Xh Ym" format
+function formatMinutesToHoursMinutes(totalMinutes) {
+  if (!totalMinutes || totalMinutes === 0) return '0h 0m';
   
-  const match = isoDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?/);
-  if (!match) return { hours: 0, minutes: 0, total: 0 };
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
   
-  const hours = parseInt(match[1] || '0');
-  const minutes = parseInt(match[2] || '0');
-  const total = hours * 60 + minutes;
-  
-  return { hours, minutes, total };
-}
-
-// Helper function to format duration for display
-function formatDuration(isoDuration) {
-  const { hours, minutes } = parseDuration(isoDuration);
   return `${hours}h ${minutes}m`;
 }
 
-// Enhanced transformation function
-function transformAmadeusToFrontendFormat(amadeusFlights, searchId, searchQuery) {
-  return amadeusFlights.map((flight, index) => {
-    const firstItinerary = flight.itineraries[0];
-    const firstSegment = firstItinerary.segments[0];
-    const lastSegment = firstItinerary.segments[firstItinerary.segments.length - 1];
-    
-    // Get cabin class from travelerPricings or use default
-    const cabinClass = flight.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.cabin || 'ECONOMY';
-    
-    // Calculate total duration
-    const totalDuration = parseDuration(firstItinerary.duration);
-    
-    // Get stops information
-    const stops = firstItinerary.segments.length > 1 
-      ? firstItinerary.segments.slice(0, -1).map(segment => ({
-          airport: segment.arrival.iataCode,
-          city: segment.arrival.iataCode, // You might want to map this to actual city names
-          duration: segment.arrival.at // Layover time would need to be calculated
-        }))
-      : [];
-    
-    // Get baggage information
-    const baggageInfo = flight.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.includedCheckedBags;
-    const baggageDesc = baggageInfo ? 
-      `${baggageInfo.quantity || 1} x ${baggageInfo.weight || 23}${baggageInfo.weightUnit || 'KG'}` : 
-      '1 x 23KG';
-    
-    return {
-      price: parseFloat(flight.price.total),
-      tax: parseFloat(flight.price.total) - parseFloat(flight.price.base),
-      refundable_info: flight.pricingOptions?.refundableFare ? 'Refundable' : 'Non-refundable',
-      fare_key: flight.id,
-      fare_brand: flight.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.brandedFare || 'Standard',
-      price_breakdowns: {
-        ADT: {
-          total: parseFloat(flight.price.total),
-          price: parseFloat(flight.price.base),
-          label: 'Adult',
-          tax: parseFloat(flight.price.total) - parseFloat(flight.price.base)
-        },
-        CHD: { total: 0, price: 0, label: 'Child', tax: 0 },
-        INF: { total: 0, price: 0, label: 'Infant', tax: 0 }
-      },
-      legs: [{
-        leg_id: `leg_${index}`,
-        duration: totalDuration.total, // Duration in minutes
-        duration_formatted: formatDuration(firstItinerary.duration),
-        stops_count: stops.length,
-        stops_info: stops,
-        bags: {
-          ADT: {
-            cabin: { desc: flight.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.includedCheckedBags?.quantity || '1 piece' },
-            checked: { desc: baggageDesc }
-          },
-          CHD: {
-            cabin: { desc: '1 piece' },
-            checked: { desc: baggageDesc }
-          },
-          INF: {
-            cabin: { desc: '1 piece' },
-            checked: { desc: '0 piece' }
-          }
-        },
-        segments: firstItinerary.segments.map((segment, segIndex) => {
-          const segmentDuration = parseDuration(segment.duration);
-          return {
-            cabin: cabinClass,
-            cabin_name: cabinClass,
-            farebase: flight.travelerPricings?.[0]?.fareDetailsBySegment?.[segIndex]?.fareBasis || '',
-            seats: '9',
-            class: cabinClass.charAt(0),
-            from: {
-              date: segment.departure.at,
-              airport: segment.departure.iataCode,
-              city: segment.departure.iataCode,
-              country: '',
-              country_iso: '',
-              terminal: segment.departure.terminal || '',
-              airport_name: segment.departure.iataCode
-            },
-            to: {
-              date: segment.arrival.at,
-              airport: segment.arrival.iataCode,
-              city: segment.arrival.iataCode,
-              country: '',
-              country_iso: '',
-              terminal: segment.arrival.terminal || '',
-              airport_name: segment.arrival.iataCode
-            },
-            equipment: segment.aircraft?.code || '',
-            equipment_name: segment.aircraft?.code || '',
-            flightnumber: `${segment.carrierCode}${segment.number}`,
-            iata: segment.carrierCode,
-            airline_name: getAirlineName(segment.carrierCode),
-            airline_code: segment.carrierCode,
-            duration: segmentDuration.total,
-            duration_formatted: formatDuration(segment.duration)
-          };
-        }),
-        from: {
-          date: firstSegment.departure.at,
-          airport: firstSegment.departure.iataCode,
-          city: firstSegment.departure.iataCode,
-          country: '',
-          country_iso: '',
-          terminal: firstSegment.departure.terminal || '',
-          airport_name: firstSegment.departure.iataCode
-        },
-        to: {
-          date: lastSegment.arrival.at,
-          airport: lastSegment.arrival.iataCode,
-          city: lastSegment.arrival.iataCode,
-          country: '',
-          country_iso: '',
-          terminal: lastSegment.arrival.terminal || '',
-          airport_name: lastSegment.arrival.iataCode
-        },
-        cabin: cabinClass,
-        seats: 9,
-        iata: firstItinerary.segments.map(s => s.carrierCode),
-        stops: stops.map(stop => stop.airport),
-        stop_over: stops,
-        cabin_name: cabinClass,
-        airline_name: getAirlineName(firstSegment.carrierCode),
-        main_airline_code: firstSegment.carrierCode
-      }],
-      trip_id: `trip_${searchId}_${index}`,
-      search_id: searchId,
-      src: 'amadeus',
-      id: flight.id,
-      total_pax_no_inf: searchQuery.adt + searchQuery.chd,
-      search_query: searchQuery,
-      currency: flight.price.currency,
-      can_hold: flight.pricingOptions?.holdable || false,
-      can_void: false,
-      can_refund: flight.pricingOptions?.refundableFare || false,
-      can_exchange: false,
-      etd: firstSegment.departure.at,
-      // Additional fields for better frontend display
-      airline_name: getAirlineName(firstSegment.carrierCode),
-      airline_code: firstSegment.carrierCode,
-      total_duration: totalDuration.total,
-      total_duration_formatted: formatDuration(firstItinerary.duration),
-      stops_count: stops.length,
-      baggage_allowance: baggageDesc
-    };
+// Legacy functions for backward compatibility (can be removed after full migration)
+// These are kept to ensure the application doesn't break during transition
+
+// @desc    Search for flight destinations (Legacy - for backward compatibility)
+// @route   GET /api/flights/destinations
+// @access  Public
+exports.getFlightDestinations = asyncHandler(async (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Flight destinations endpoint has been migrated to Seeru API. Please use the new search endpoints.',
+    data: []
   });
-}
+});
+
+// @desc    Search for flight offers (Legacy - for backward compatibility)
+// @route   GET /api/flights/offers
+// @access  Public
+exports.getFlightOffers = asyncHandler(async (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Flight offers endpoint has been migrated to Seeru API. Please use the new search endpoints.',
+    data: []
+  });
+});
+
+// @desc    Get flight dates with prices (Legacy - for backward compatibility)
+// @route   GET /api/flights/dates
+// @access  Public
+exports.getFlightDates = asyncHandler(async (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Flight dates endpoint has been migrated to Seeru API. Please use the new search endpoints.',
+    data: []
+  });
+});
+
+// @desc    Validate fare for booking
+// @route   POST /api/flights/booking/fare
+// @access  Public
+exports.validateFare = asyncHandler(async (req, res) => {
+  const { booking } = req.body;
+  
+  if (!booking) {
+    return res.status(400).json({
+      success: false,
+      message: 'Booking data is required'
+    });
+  }
+  
+  try {
+    const seeruApi = getSeeruApiInstance();
+    
+    console.log('Validating fare for booking:', booking.trip_id);
+    
+    const response = await seeruApi.post('/booking/fare', {
+      booking: booking
+    });
+    
+    res.status(200).json({
+      success: true,
+      status: response.data.status,
+      booking: response.data.booking
+    });
+    
+  } catch (error) {
+    console.error('Seeru fare validation error:', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json({
+      success: false,
+      message: error.response?.data?.message || 'Error validating fare',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// @desc    Save booking and create order
+// @route   POST /api/flights/booking/save
+// @access  Public
+exports.saveBooking = asyncHandler(async (req, res) => {
+  const { booking, passengers, contact } = req.body;
+  
+  if (!booking || !passengers || !contact) {
+    return res.status(400).json({
+      success: false,
+      message: 'Booking data, passengers, and contact information are required'
+    });
+  }
+  
+  // Validate passenger data
+  if (!Array.isArray(passengers) || passengers.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'At least one passenger is required'
+    });
+  }
+  
+  // Validate contact information
+  if (!contact.email || !contact.full_name || !contact.mobile) {
+    return res.status(400).json({
+      success: false,
+      message: 'Contact email, full name, and mobile are required'
+    });
+  }
+  
+  try {
+    const seeruApi = getSeeruApiInstance();
+    
+    console.log('Saving booking for trip:', booking.trip_id);
+    
+    const response = await seeruApi.post('/booking/save', {
+      booking: booking,
+      passengers: passengers,
+      contact: contact
+    });
+    
+    res.status(200).json({
+      success: true,
+      status: response.data.status,
+      message: response.data.message,
+      order_id: response.data.order_id
+    });
+    
+  } catch (error) {
+    console.error('Seeru booking save error:', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json({
+      success: false,
+      message: error.response?.data?.message || 'Error saving booking',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// @desc    Get order details
+// @route   POST /api/flights/order/details
+// @access  Public
+exports.getOrderDetails = asyncHandler(async (req, res) => {
+  const { order_id } = req.body;
+  
+  if (!order_id) {
+    return res.status(400).json({
+      success: false,
+      message: 'Order ID is required'
+    });
+  }
+  
+  try {
+    const seeruApi = getSeeruApiInstance();
+    
+    console.log('Fetching order details for:', order_id);
+    
+    const response = await seeruApi.post('/order/details', {
+      order_id: order_id
+    });
+    
+    res.status(200).json({
+      success: true,
+      status: response.data.status,
+      message: response.data.message,
+      order_id: response.data.order_id,
+      transactions: response.data.transactions,
+      contact: response.data.contact,
+      tickets: response.data.tickets
+    });
+    
+  } catch (error) {
+    console.error('Seeru order details error:', error.response?.data || error.message);
+    
+    if (error.response?.status === 404) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found or you do not have access to it'
+      });
+    }
+    
+    res.status(error.response?.status || 500).json({
+      success: false,
+      message: error.response?.data?.message || 'Error retrieving order details',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// @desc    Cancel order
+// @route   POST /api/flights/order/cancel
+// @access  Public
+exports.cancelOrder = asyncHandler(async (req, res) => {
+  const { order_id } = req.body;
+  
+  if (!order_id) {
+    return res.status(400).json({
+      success: false,
+      message: 'Order ID is required'
+    });
+  }
+  
+  try {
+    const seeruApi = getSeeruApiInstance();
+    
+    console.log('Cancelling order:', order_id);
+    
+    const response = await seeruApi.post('/order/cancel', {
+      order_id: order_id
+    });
+    
+    res.status(200).json({
+      success: true,
+      status: response.data.status,
+      message: response.data.message
+    });
+    
+  } catch (error) {
+    console.error('Seeru order cancel error:', error.response?.data || error.message);
+    
+    if (error.response?.status === 404) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found or you do not have access to it'
+      });
+    }
+    
+    res.status(error.response?.status || 500).json({
+      success: false,
+      message: error.response?.data?.message || 'Error cancelling order',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// @desc    Issue order (ticketing)
+// @route   POST /api/flights/order/issue
+// @access  Public
+exports.issueOrder = asyncHandler(async (req, res) => {
+  const { order_id } = req.body;
+  
+  if (!order_id) {
+    return res.status(400).json({
+      success: false,
+      message: 'Order ID is required'
+    });
+  }
+  
+  try {
+    const seeruApi = getSeeruApiInstance();
+    
+    console.log('Issuing order:', order_id);
+    
+    const response = await seeruApi.post('/order/issue', {
+      order_id: order_id
+    });
+    
+    res.status(200).json({
+      success: true,
+      status: response.data.status,
+      message: response.data.message
+    });
+    
+  } catch (error) {
+    console.error('Seeru order issue error:', error.response?.data || error.message);
+    
+    if (error.response?.status === 404) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found or you do not have access to it'
+      });
+    }
+    
+    res.status(error.response?.status || 500).json({
+      success: false,
+      message: error.response?.data?.message || 'Error issuing order',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
