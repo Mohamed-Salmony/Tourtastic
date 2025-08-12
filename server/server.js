@@ -35,36 +35,21 @@ const app = express();
 // Body parser middleware
 app.use(express.json());
 
-// Session middleware for anonymous cart support
-const sessionOptions = {
-  secret: process.env.SESSION_SECRET || 'your-session-secret-change-this-in-production',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
-};
-if (process.env.MONGODB_URI) {
-  sessionOptions.store = MongoStore.create({ mongoUrl: process.env.MONGODB_URI });
-}
-app.use(session(sessionOptions));
+// Behind proxies/load balancers (Render, Vercel)
+app.set('trust proxy', 1);
 
-// Enable CORS with specific options
+// Enable CORS with specific options (MUST be before sessions)
 const allowedOrigins = [
   'http://localhost:8080',
   'http://127.0.0.1:8080',
   'https://tourtastic.vercel.app'
 ];
 
-// Regex for matching Vercel URLs
+// Regex for matching Vercel Preview URLs
 const vercelRegex = /^https:\/\/.*\.vercel\.app$/;
 
-// Configure CORS
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, Postman, etc.)
     if (!origin || allowedOrigins.includes(origin) || vercelRegex.test(origin)) {
       callback(null, true);
     } else {
@@ -76,6 +61,24 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Session-ID'],
   exposedHeaders: ['Content-Range', 'X-Content-Range']
 }));
+
+// Session middleware for anonymous cart support
+const sessionOptions = {
+  secret: process.env.SESSION_SECRET || 'your-session-secret-change-this-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    // Cross-site cookies for Vercel (frontend) -> Render (backend)
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+};
+if (process.env.MONGODB_URI) {
+  sessionOptions.store = MongoStore.create({ mongoUrl: process.env.MONGODB_URI });
+}
+app.use(session(sessionOptions));
 
 // Health check endpoints (support both root and /api for platform routing)
 app.get('/api/health', (req, res) => {
