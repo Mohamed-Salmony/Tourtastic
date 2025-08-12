@@ -72,8 +72,8 @@ app.use(cors({
   exposedHeaders: ['Content-Range', 'X-Content-Range']
 }));
 
-// Health check endpoint
-app.get('/health', (req, res) => {
+// Health check endpoints (support both root and /api for platform routing)
+app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
@@ -99,17 +99,20 @@ app.get("/", (req, res) => res.send("Tourtastic API Running"));
 // Use error handler middleware
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 5000;
+// In Vercel Serverless, export the Express app without binding a port
+// In local/dev environments, start the HTTP server
+let server;
+if (!process.env.VERCEL) {
+  const PORT = process.env.PORT || 5000;
+  server = app.listen(PORT, '0.0.0.0', () =>
+    console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`)
+  );
 
-const server = app.listen(PORT, '0.0.0.0', () =>
-  console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`)
-);
-
-// Handle unhandled promise rejections
-process.on("unhandledRejection", (err, promise) => {
-  console.error(`Unhandled Rejection: ${err.message}`);
-  // Close server & exit process
-  server.close(() => process.exit(1));
-});
+  // Handle unhandled promise rejections only when a server is running
+  process.on("unhandledRejection", (err) => {
+    console.error(`Unhandled Rejection: ${err.message}`);
+    if (server) server.close(() => process.exit(1));
+  });
+}
 
 module.exports = app;
