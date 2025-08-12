@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Calendar as CalendarIcon, Search, Plus, Minus } from 'lucide-react';
+import { Calendar as CalendarIcon, Search, Plus, Minus, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,20 @@ const searchFormSchema = z.object({
     from: z.string().min(2, { message: 'Please enter departure city' }),
     to: z.string().min(2, { message: 'Please enter destination city' }),
     date: z.date({ required_error: 'Please select departure date' }),
-  })),
+  })).min(1, { message: 'At least one flight segment is required' })
+    .max(3, { message: 'Maximum 3 flight segments allowed' })
+    .superRefine((segments, ctx) => {
+      // Validate date sequence for multi-city
+      for (let i = 1; i < segments.length; i++) {
+        if (segments[i-1].date >= segments[i].date) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Flight ${i + 1} date must be after flight ${i} date`,
+            path: [i, 'date'],
+          });
+        }
+      }
+    }),
   passengers: z.object({
     adults: z.number().min(1, { message: 'At least one adult is required' }),
     children: z.number().min(0),
@@ -39,15 +52,15 @@ const SearchForm: React.FC = () => {
   const navigate = useNavigate();
   const [fromSuggestions, setFromSuggestions] = useState<Airport[]>([]);
   const [toSuggestions, setToSuggestions] = useState<Airport[]>([]);
-  const [showFromSuggestions, setShowFromSuggestions] = useState(false);
-  const [showToSuggestions, setShowToSuggestions] = useState(false);
-  const [fromDisplayValues, setFromDisplayValues] = useState<string[]>([]);
-  const [toDisplayValues, setToDisplayValues] = useState<string[]>([]);
+  const [showFromSuggestions, setShowFromSuggestions] = useState<number | null>(null);
+  const [showToSuggestions, setShowToSuggestions] = useState<number | null>(null);
+  const [fromDisplayValues, setFromDisplayValues] = useState<string[]>(['']);
+  const [toDisplayValues, setToDisplayValues] = useState<string[]>(['']);
   const [datePickerOpen, setDatePickerOpen] = useState<boolean[]>([false]);
   const fromInputRef = useRef<HTMLInputElement>(null);
   const toInputRef = useRef<HTMLInputElement>(null);
 
-  const { register, handleSubmit, formState: { errors }, setValue, watch, trigger } = useForm<SearchFormValues>({
+  const { register, handleSubmit, formState: { errors }, setValue, watch, trigger, setError, clearErrors } = useForm<SearchFormValues>({
     resolver: zodResolver(searchFormSchema),
     defaultValues: {
       flightSegments: [{ from: '', to: '', date: undefined }],
@@ -65,47 +78,65 @@ const SearchForm: React.FC = () => {
   // Update datePickerOpen state when flightSegments change
   useEffect(() => {
     setDatePickerOpen(Array(flightSegments.length).fill(false));
+    setFromDisplayValues(prev => {
+      const newValues = [...prev];
+      while (newValues.length < flightSegments.length) {
+        newValues.push('');
+      }
+      return newValues.slice(0, flightSegments.length);
+    });
+    setToDisplayValues(prev => {
+      const newValues = [...prev];
+      while (newValues.length < flightSegments.length) {
+        newValues.push('');
+      }
+      return newValues.slice(0, flightSegments.length);
+    });
   }, [flightSegments.length]);
 
-  // Fetch airport suggestions from API (sync with flight page)
+  // Fetch airport suggestions from API
   const handleFromInputChange = async (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
+    const value = e.target.value;
     setFromDisplayValues(values => {
       const newValues = [...values];
-      newValues[index] = e.target.value;
+      newValues[index] = value;
       return newValues;
     });
-    setValue(`flightSegments.${index}.from`, e.target.value);
-    if (e.target.value.length > 0) {
-      setShowFromSuggestions(true);
+    setValue(`flightSegments.${index}.from`, value);
+    
+    if (value.length >= 2) {
+      setShowFromSuggestions(index);
       try {
-        const res = await api.get(`/airports/search?q=${encodeURIComponent(e.target.value)}`);
+        const res = await api.get(`/airports/search?q=${encodeURIComponent(value)}`);
         setFromSuggestions(res.data.data);
       } catch {
         setFromSuggestions([]);
       }
     } else {
-      setShowFromSuggestions(false);
+      setShowFromSuggestions(null);
       setFromSuggestions([]);
     }
   };
 
   const handleToInputChange = async (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
+    const value = e.target.value;
     setToDisplayValues(values => {
       const newValues = [...values];
-      newValues[index] = e.target.value;
+      newValues[index] = value;
       return newValues;
     });
-    setValue(`flightSegments.${index}.to`, e.target.value);
-    if (e.target.value.length > 0) {
-      setShowToSuggestions(true);
+    setValue(`flightSegments.${index}.to`, value);
+    
+    if (value.length >= 2) {
+      setShowToSuggestions(index);
       try {
-        const res = await api.get(`/airports/search?q=${encodeURIComponent(e.target.value)}`);
+        const res = await api.get(`/airports/search?q=${encodeURIComponent(value)}`);
         setToSuggestions(res.data.data);
       } catch {
         setToSuggestions([]);
       }
     } else {
-      setShowToSuggestions(false);
+      setShowToSuggestions(null);
       setToSuggestions([]);
     }
   };
@@ -114,10 +145,10 @@ const SearchForm: React.FC = () => {
     setValue(`flightSegments.${index}.from`, airport.iata_code, { shouldValidate: true, shouldDirty: true });
     setFromDisplayValues(values => {
       const newValues = [...values];
-      newValues[index] = `${airport.iata_code} - ${airport.name} (${airport.city}, ${airport.country})`;
+      newValues[index] = `${airport.iata_code} - ${airport.name} (${airport.city || airport.municipality}, ${airport.country || airport.iso_country})`;
       return newValues;
     });
-    setShowFromSuggestions(false);
+    setShowFromSuggestions(null);
     trigger(`flightSegments.${index}.from`);
   };
 
@@ -125,17 +156,55 @@ const SearchForm: React.FC = () => {
     setValue(`flightSegments.${index}.to`, airport.iata_code, { shouldValidate: true, shouldDirty: true });
     setToDisplayValues(values => {
       const newValues = [...values];
-      newValues[index] = `${airport.iata_code} - ${airport.name} (${airport.city}, ${airport.country})`;
+      newValues[index] = `${airport.iata_code} - ${airport.name} (${airport.city || airport.municipality}, ${airport.country || airport.iso_country})`;
       return newValues;
     });
-    setShowToSuggestions(false);
+    setShowToSuggestions(null);
     trigger(`flightSegments.${index}.to`);
   };
 
+  const addFlightSegment = () => {
+    if (flightSegments.length < 3) {
+      setValue('flightSegments', [...flightSegments, { from: '', to: '', date: undefined }]);
+    }
+  };
+
+  const removeFlightSegment = (index: number) => {
+    if (flightSegments.length > 1) {
+      const newSegments = flightSegments.filter((_, i) => i !== index);
+      setValue('flightSegments', newSegments);
+      
+      // Clean up display values
+      setFromDisplayValues(prev => prev.filter((_, i) => i !== index));
+      setToDisplayValues(prev => prev.filter((_, i) => i !== index));
+    }
+  };
+
+  // Calculate min date for subsequent flights
+  const getMinDateForSegment = (index: number) => {
+    if (index === 0) {
+      return new Date();
+    }
+    const previousDate = flightSegments[index - 1]?.date;
+    if (previousDate && previousDate instanceof Date) {
+      const nextDay = new Date(previousDate);
+      nextDay.setDate(nextDay.getDate() + 1);
+      return nextDay;
+    }
+    return new Date();
+  };
+
   const onSubmit = (data: SearchFormValues) => {
+    // Clear any previous errors
+    clearErrors();
+    
     navigate('/flights', {
       state: {
-        flightSegments: data.flightSegments,
+        flightSegments: data.flightSegments.map((segment, index) => ({
+          ...segment,
+          fromDisplayValue: fromDisplayValues[index] || segment.from,
+          toDisplayValue: toDisplayValues[index] || segment.to,
+        })),
         passengers: data.passengers,
         cabin: data.cabin,
         direct: data.direct,
@@ -149,29 +218,47 @@ const SearchForm: React.FC = () => {
         {/* Flight Segments */}
         <div className="space-y-4">
           {flightSegments.map((segment, index) => (
-            <div key={index} className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 border rounded-lg">
+            <div key={index} className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 border rounded-lg relative">
+              {/* Remove button for additional segments */}
+              {flightSegments.length > 1 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => removeFlightSegment(index)}
+                  className="absolute top-2 right-2 h-6 w-6 p-0 text-gray-400 hover:text-red-500"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+              
               <div className="space-y-2">
                 <Label htmlFor={`from-${index}`}>{t('from', 'From')}</Label>
                 <div className="relative">
                   <Input
                     id={`from-${index}`}
                     ref={fromInputRef}
-                    placeholder={t('departureCity', 'Departure city')}
-                    value={fromDisplayValues[index] ?? segment.from ?? ''}
+                    placeholder={t('departureCity', 'Type 2-3 letters...')}
+                    value={fromDisplayValues[index] || ''}
                     onChange={e => handleFromInputChange(e, index)}
                     autoComplete="off"
-                    onFocus={() => (segment.from ?? '').length > 0 && setShowFromSuggestions(true)}
-                    onBlur={() => setTimeout(() => setShowFromSuggestions(false), 100)}
+                    onFocus={() => {
+                      if (fromDisplayValues[index]?.length >= 2) {
+                        setShowFromSuggestions(index);
+                      }
+                    }}
+                    onBlur={() => setTimeout(() => setShowFromSuggestions(null), 150)}
                   />
-                  {showFromSuggestions && fromSuggestions.length > 0 && (
-                    <ul className="absolute z-10 bg-white border w-full max-h-48 overflow-y-auto shadow-lg rounded mt-1">
+                  {showFromSuggestions === index && fromSuggestions.length > 0 && (
+                    <ul className="absolute z-50 bg-white border w-full max-h-48 overflow-y-auto shadow-lg rounded mt-1">
                       {fromSuggestions.map((a, i) => (
                         <li
-                          key={`${a.code || 'unknown'}-${i}`}
-                          className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                          key={`${a.iata_code || 'unknown'}-${i}`}
+                          className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
                           onMouseDown={() => handleFromSuggestionClick(a, index)}
                         >
-                          {a.code} - {a.name} ({a.city}, {a.country})
+                          <div className="font-medium">{a.iata_code} - {a.name}</div>
+                          <div className="text-gray-500 text-xs">{a.city || a.municipality}, {a.country || a.iso_country}</div>
                         </li>
                       ))}
                     </ul>
@@ -188,22 +275,27 @@ const SearchForm: React.FC = () => {
                   <Input
                     id={`to-${index}`}
                     ref={toInputRef}
-                    placeholder={t('destinationCity', 'Destination city')}
-                    value={toDisplayValues[index] ?? segment.to ?? ''}
+                    placeholder={t('destinationCity', 'Type 2-3 letters...')}
+                    value={toDisplayValues[index] || ''}
                     onChange={e => handleToInputChange(e, index)}
                     autoComplete="off"
-                    onFocus={() => (segment.to ?? '').length > 0 && setShowToSuggestions(true)}
-                    onBlur={() => setTimeout(() => setShowToSuggestions(false), 100)}
+                    onFocus={() => {
+                      if (toDisplayValues[index]?.length >= 2) {
+                        setShowToSuggestions(index);
+                      }
+                    }}
+                    onBlur={() => setTimeout(() => setShowToSuggestions(null), 150)}
                   />
-                  {showToSuggestions && toSuggestions.length > 0 && (
-                    <ul className="absolute z-10 bg-white border w-full max-h-48 overflow-y-auto shadow-lg rounded mt-1">
+                  {showToSuggestions === index && toSuggestions.length > 0 && (
+                    <ul className="absolute z-50 bg-white border w-full max-h-48 overflow-y-auto shadow-lg rounded mt-1">
                       {toSuggestions.map((a, i) => (
                         <li
-                          key={`${a.code || 'unknown'}-${i}`}
-                          className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                          key={`${a.iata_code || 'unknown'}-${i}`}
+                          className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
                           onMouseDown={() => handleToSuggestionClick(a, index)}
                         >
-                          {a.code} - {a.name} ({a.city}, {a.country})
+                          <div className="font-medium">{a.iata_code} - {a.name}</div>
+                          <div className="text-gray-500 text-xs">{a.city || a.municipality}, {a.country || a.iso_country}</div>
                         </li>
                       ))}
                     </ul>
@@ -215,7 +307,14 @@ const SearchForm: React.FC = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor={`date-${index}`}>{t('date', 'Date')}</Label>
+                <Label htmlFor={`date-${index}`}>
+                  {t('date', 'Date')}
+                  {index > 0 && (
+                    <span className="text-xs text-gray-500 ml-1">
+                      (after {flightSegments[index - 1]?.date ? format(flightSegments[index - 1].date, "MMM dd") : 'previous flight'})
+                    </span>
+                  )}
+                </Label>
                 <Popover open={datePickerOpen[index]} onOpenChange={open => setDatePickerOpen(prev => {
                   const arr = [...prev];
                   arr[index] = open;
@@ -250,8 +349,10 @@ const SearchForm: React.FC = () => {
                           arr[index] = false;
                           return arr;
                         });
+                        // Validate date sequence
+                        trigger('flightSegments');
                       }}
-                      disabled={(date) => date < new Date()}
+                      disabled={(date) => date < getMinDateForSegment(index)}
                       initialFocus
                       className={cn("p-3 pointer-events-auto min-h-[280px]")}
                       fixedWeeks
@@ -264,11 +365,13 @@ const SearchForm: React.FC = () => {
               </div>
             </div>
           ))}
+          
+          {/* Add Search Button */}
           {flightSegments.length < 3 && (
             <Button
               type="button"
               variant="outline"
-              onClick={() => setValue('flightSegments', [...flightSegments, { from: '', to: '', date: undefined }])}
+              onClick={addFlightSegment}
               className="w-full"
             >
               <Plus className="mr-2 h-4 w-4" /> {t('addSearch', 'Add Search')}

@@ -1,0 +1,203 @@
+import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { format } from 'date-fns';
+import { Plane } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Flight } from '../../services/flightService';
+import { getAirlineLogo, getTimeOfDay, getTimeOfDayIcon, getTimeOfDayWithColor } from './utils/flightHelpers';
+
+interface FlightCardProps {
+  flight: Flight;
+  onFlightSelection: (flight: Flight) => void;
+  selectedFlight?: Flight;
+  showDetails?: string | null;
+  onAddToCart?: (flight: Flight) => void;
+}
+
+const FlightCard: React.FC<FlightCardProps> = ({
+  flight,
+  onFlightSelection,
+  selectedFlight,
+  showDetails,
+  onAddToCart
+}) => {
+  const { t } = useTranslation();
+
+  // Calculate totals and adult base/tax
+  const { totalPrice, adultBase, adultTax } = useMemo(() => {
+    const adtPrice = flight.price_breakdowns?.ADT?.price ?? flight.price ?? 0;
+    const adtTax = flight.price_breakdowns?.ADT?.tax ?? flight.tax ?? 0;
+
+    const adtTotal = (flight.search_query?.adt || 0) * (adtPrice + adtTax);
+    const chdPrice = flight.price_breakdowns?.CHD?.price ?? flight.price ?? 0;
+    const chdTax = flight.price_breakdowns?.CHD?.tax ?? flight.tax ?? 0;
+    const chdTotal = (flight.search_query?.chd || 0) * (chdPrice + chdTax);
+    const infPrice = flight.price_breakdowns?.INF?.price ?? flight.price ?? 0;
+    const infTax = flight.price_breakdowns?.INF?.tax ?? flight.tax ?? 0;
+    const infTotal = (flight.search_query?.inf || 0) * (infPrice + infTax);
+
+    return {
+      totalPrice: adtTotal + chdTotal + infTotal,
+      adultBase: adtPrice,
+      adultTax: adtTax,
+    };
+  }, [flight.price_breakdowns, flight.price, flight.tax, flight.search_query]);
+
+  return (
+    <Card className={`p-6 hover:shadow-lg transition-all duration-200 cursor-pointer border-l-4 ${
+      selectedFlight?.trip_id === flight.trip_id 
+        ? 'border-l-tourtastic-blue bg-blue-50' 
+        : 'border-l-transparent hover:border-l-tourtastic-blue'
+    }`}>
+      <div className="flex flex-col lg:flex-row lg:items-center gap-6">
+        {/* Flight Info Section */}
+        <div className="flex-1 space-y-4">
+          {/* Date and Flight Number */}
+          <div className="flex items-center gap-4 text-sm text-gray-600">
+            <span className="font-medium">
+              {format(new Date(flight.legs[0].segments[0].from.date), 'EEE, MMM d')}
+            </span>
+            <span>•</span>
+            <span>{flight.legs[0].segments[0].flightnumber}</span>
+          </div>
+          
+          {flight.legs.map((leg, legIndex) => (
+            <div key={legIndex} className="space-y-3">
+              {/* Airline Info */}
+              <div className="flex items-center gap-3">
+                <img 
+                  src={getAirlineLogo(leg.segments[0].iata)} 
+                  alt={leg.segments[0].iata}
+                  className="h-40 w-40 object-contain"
+                  onError={(e) => {
+                    e.currentTarget.src = '/placeholder.svg';
+                  }}
+                />
+                <div>
+                  <div className="font-medium text-gray-900">
+                    {leg.segments[0].airline_name || leg.segments[0].iata}
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    {leg.segments[0].iata} {leg.segments[0].flightnumber}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Flight Route */}
+              <div className="flex items-center gap-4">
+                {/* Departure */}
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-2xl font-bold text-gray-900">
+                      {format(new Date(leg.segments[0].from.date), 'HH:mm')}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {getTimeOfDayIcon(leg.segments[0].from.date)}
+                      <span className={`text-xs ${getTimeOfDayWithColor(leg.segments[0].from.date).color}`}>
+                        {t(getTimeOfDay(leg.segments[0].from.date), getTimeOfDay(leg.segments[0].from.date))}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-sm font-medium text-gray-700">
+                    {leg.segments[0].from.airport}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {leg.segments[0].from.city}
+                  </div>
+                </div>
+                
+                {/* Flight Duration and Stops */}
+                <div className="flex-1 text-center">
+                  <div className="text-sm text-gray-600 mb-1">
+                    {leg.duration_formatted || `${Math.floor(leg.duration / 60)}h ${leg.duration % 60}m`}
+                  </div>
+                  <div className="flex items-center justify-center mb-1">
+                    <div className="h-px bg-gray-300 flex-1"></div>
+                    <Plane className="h-4 w-4 text-tourtastic-blue mx-2" />
+                    <div className="h-px bg-gray-300 flex-1"></div>
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {leg.stops_count === 0 ? t('nonstop', 'Nonstop') : 
+                     leg.stops_count === 1 ? t('oneStop', '1 stop') : 
+                     t('multipleStops', `${leg.stops_count} stops`)}
+                  </div>
+                </div>
+                
+                {/* Arrival */}
+                <div className="flex-1 text-right">
+                  <div className="flex items-center justify-end gap-2 mb-1">
+                    <div className="flex items-center gap-1">
+                      {getTimeOfDayIcon(leg.segments[leg.segments.length - 1].to.date)}
+                      <span className={`text-xs ${getTimeOfDayWithColor(leg.segments[leg.segments.length - 1].to.date).color}`}>
+                        {t(getTimeOfDay(leg.segments[leg.segments.length - 1].to.date), getTimeOfDay(leg.segments[leg.segments.length - 1].to.date))}
+                      </span>
+                    </div>
+                    <span className="text-2xl font-bold text-gray-900">
+                      {format(new Date(leg.segments[leg.segments.length - 1].to.date), 'HH:mm')}
+                    </span>
+                  </div>
+                  <div className="text-sm font-medium text-gray-700">
+                    {leg.segments[leg.segments.length - 1].to.airport}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {leg.segments[leg.segments.length - 1].to.city}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        
+        {/* Price and Action Section */}
+        <div className="flex flex-col items-center lg:items-end gap-3 w-full lg:w-auto lg:min-w-[220px]">
+          {/* Black price: adult base */}
+          <div className="text-2xl font-bold text-center lg:text-right">
+            {flight.currency} {adultBase.toFixed(2)}
+          </div>
+          <div className="text-xs text-gray-600 text-center lg:text-right">
+            {t('perAdult', 'per adult')} {t('base', 'Base')}
+          </div>
+          {/* Adult tax line */}
+          <div className="text-xs text-gray-600 text-center lg:text-right">
+            {t('tax', 'Tax')}: {flight.currency} {adultTax.toFixed(2)}
+          </div>
+
+          {/* Passenger counts */}
+          <div className="text-xs text-gray-700 text-center lg:text-right">
+            {(flight.search_query?.adt || 0) > 0 && `${flight.search_query.adt} ${t('adults', 'Adults')}`}
+            {(flight.search_query?.chd || 0) > 0 && `, ${flight.search_query.chd} ${t('children', 'Children')}`}
+            {(flight.search_query?.inf || 0) > 0 && `, ${flight.search_query.inf} ${t('infants', 'Infants')}`}
+          </div>
+          
+          {/* Blue total */}
+          <div className="text-xs font-semibold text-tourtastic-blue text-center lg:text-right">
+            {t('total', 'Total')}: {flight.currency} {totalPrice.toFixed(2)}
+          </div>
+
+          <div className="text-xs text-gray-600 text-center lg:text-right flex items-center justify-center lg:justify-end gap-1">
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m0-10L4 7m8 4v10l-8 4m0-10L4 7m8 4v10l-8 4" />
+            </svg>
+            <span>{t('baggage', 'Baggage')}: {flight.baggage_allowance || flight.legs[0]?.bags?.ADT?.checked?.desc || 'N/A'}</span>
+          </div>
+          <Button
+            onClick={() => onFlightSelection(flight)}
+            className="w-full lg:w-auto bg-tourtastic-blue hover:bg-tourtastic-dark-blue text-white transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-md hover:shadow-lg"
+          >
+            {selectedFlight?.trip_id === flight.trip_id ? (
+              <div className="flex items-center gap-2">
+                <span>✓</span>
+                {t('selected', 'Selected')}
+              </div>
+            ) : (
+              t('select', 'Select')
+            )}
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+};
+
+export default FlightCard;

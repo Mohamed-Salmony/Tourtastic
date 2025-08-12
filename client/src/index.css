@@ -1,4 +1,27 @@
+/* Add font-display for better loading */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* Optimize font rendering */
+body {
+  font-display: swap;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Prevent layout shift */
+.container-custom {
+  min-height: 1px; /* Prevent collapse */
+}
+
+/* Optimize animations */
+* {
+  will-change: auto;
+}
+
+.animate-spin {
+  will-change: transform;
+}
 
 @tailwind base;
 @tailwind components;
