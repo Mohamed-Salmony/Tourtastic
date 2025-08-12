@@ -10,8 +10,12 @@ const errorHandler = require("./middleware/errorHandler");
 // Load env vars
 dotenv.config();
 
-// Connect to Database
-connectDB();
+// Connect to Database only if connection string is provided
+if (process.env.MONGODB_URI) {
+  connectDB();
+} else {
+  console.warn('MONGODB_URI is not set. API will run without a database connection.');
+}
 
 // Route files
 const authRoutes = require("./routes/auth");
@@ -32,19 +36,20 @@ const app = express();
 app.use(express.json());
 
 // Session middleware for anonymous cart support
-app.use(session({
+const sessionOptions = {
   secret: process.env.SESSION_SECRET || 'your-session-secret-change-this-in-production',
   resave: false,
   saveUninitialized: false,
-  store: MongoStore.create({
-    mongoUrl: process.env.MONGODB_URI
-  }),
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
-}));
+};
+if (process.env.MONGODB_URI) {
+  sessionOptions.store = MongoStore.create({ mongoUrl: process.env.MONGODB_URI });
+}
+app.use(session(sessionOptions));
 
 // Enable CORS with specific options
 const allowedOrigins = [
