@@ -47,13 +47,33 @@ const Login: React.FC = () => {
           user: response.data.user
         });
         
+        // Log the user in
         login(response.data.accessToken, response.data.refreshToken, response.data.user);
         
+        // Sync local cart items if any exist
+        const localCartItems = JSON.parse(localStorage.getItem('cartItems') || '[]');
+        if (localCartItems.length > 0) {
+          try {
+            await api.post('/api/cart/sync', { items: localCartItems });
+            // Clear local cart after successful sync
+            localStorage.removeItem('cartItems');
+          } catch (error) {
+            console.error('Failed to sync cart items:', error);
+          }
+        }
+
         toast({
           title: "Success",
           description: "Successfully logged in",
         });
-        navigate(from);
+
+        // Check if we should redirect to cart for checkout
+        const { state } = location;
+        if (state?.returnUrl === '/cart' && state?.message?.includes('checkout')) {
+          navigate('/cart');
+        } else {
+          navigate(from);
+        }
       }
     } catch (error) {
       console.error('Login error:', error);
