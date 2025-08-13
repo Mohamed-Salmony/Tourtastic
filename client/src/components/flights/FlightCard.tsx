@@ -69,13 +69,13 @@ const FlightCard: React.FC<FlightCardProps> = ({
                 <img 
                   src={getAirlineLogo(leg.segments[0].iata)} 
                   alt={leg.segments[0].iata}
-                  className="h-40 w-40 object-contain"
+                  className="h-20 w-20 sm:h-32 sm:w-32 lg:h-40 lg:w-40 object-contain"
                   onError={(e) => {
                     e.currentTarget.src = '/placeholder.svg';
                   }}
                 />
-                <div>
-                  <div className="font-medium text-gray-900">
+                <div className="min-w-0">
+                  <div className="font-medium text-gray-900 truncate">
                     {leg.segments[0].airline_name || leg.segments[0].iata}
                   </div>
                   <div className="text-sm text-gray-500">
@@ -85,11 +85,11 @@ const FlightCard: React.FC<FlightCardProps> = ({
               </div>
               
               {/* Flight Route */}
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap sm:flex-nowrap items-center gap-4">
                 {/* Departure */}
-                <div className="flex-1">
+                <div className="w-[45%] sm:w-auto sm:flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-2xl font-bold text-gray-900">
+                    <span className="text-xl sm:text-2xl font-bold text-gray-900">
                       {format(new Date(leg.segments[0].from.date), 'HH:mm')}
                     </span>
                     <div className="flex items-center gap-1">
@@ -99,25 +99,30 @@ const FlightCard: React.FC<FlightCardProps> = ({
                       </span>
                     </div>
                   </div>
-                  <div className="text-sm font-medium text-gray-700">
+                  <div className="text-sm font-medium text-gray-700 truncate max-w-[120px] sm:max-w-[150px]">
                     {leg.segments[0].from.airport}
                   </div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-gray-500 truncate max-w-[120px] sm:max-w-[150px]">
                     {leg.segments[0].from.city}
                   </div>
                 </div>
                 
                 {/* Flight Duration and Stops */}
-                <div className="flex-1 text-center">
-                  <div className="text-sm text-gray-600 mb-1">
+                <div className="w-[30%] sm:w-auto sm:flex-1 text-center px-2 mx-1">
+                  <div className="text-xs sm:text-sm text-gray-600 mb-1">
                     {leg.duration_formatted || `${Math.floor(leg.duration / 60)}h ${leg.duration % 60}m`}
                   </div>
-                  <div className="flex items-center justify-center mb-1">
+                  <div className="hidden sm:flex items-center justify-center mb-1">
                     <div className="h-px bg-gray-300 flex-1"></div>
                     <Plane className="h-4 w-4 text-tourtastic-blue mx-2" />
                     <div className="h-px bg-gray-300 flex-1"></div>
                   </div>
-                  <div className="text-xs text-gray-500">
+                  <div className="flex sm:hidden items-center justify-center mb-1">
+                    <div className="h-px bg-gray-300 flex-1 max-w-[30px]"></div>
+                    <Plane className="h-3 w-3 text-tourtastic-blue mx-1" />
+                    <div className="h-px bg-gray-300 flex-1 max-w-[30px]"></div>
+                  </div>
+                  <div className="text-[10px] sm:text-xs text-gray-500">
                     {leg.stops_count === 0 ? t('nonstop', 'Nonstop') : 
                      leg.stops_count === 1 ? t('oneStop', '1 stop') : 
                      t('multipleStops', `${leg.stops_count} stops`)}
@@ -125,7 +130,7 @@ const FlightCard: React.FC<FlightCardProps> = ({
                 </div>
                 
                 {/* Arrival */}
-                <div className="flex-1 text-right">
+                <div className="w-[45%] sm:w-auto sm:flex-1 flex flex-col ml-auto">
                   <div className="flex items-center justify-end gap-2 mb-1">
                     <div className="flex items-center gap-1">
                       {getTimeOfDayIcon(leg.segments[leg.segments.length - 1].to.date)}
@@ -133,14 +138,14 @@ const FlightCard: React.FC<FlightCardProps> = ({
                         {t(getTimeOfDay(leg.segments[leg.segments.length - 1].to.date), getTimeOfDay(leg.segments[leg.segments.length - 1].to.date))}
                       </span>
                     </div>
-                    <span className="text-2xl font-bold text-gray-900">
+                    <span className="text-xl sm:text-2xl font-bold text-gray-900">
                       {format(new Date(leg.segments[leg.segments.length - 1].to.date), 'HH:mm')}
                     </span>
                   </div>
-                  <div className="text-sm font-medium text-gray-700">
+                  <div className="text-sm font-medium text-gray-700 truncate max-w-[120px] sm:max-w-[150px] ml-auto">
                     {leg.segments[leg.segments.length - 1].to.airport}
                   </div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-gray-500 truncate max-w-[120px] sm:max-w-[150px] ml-auto">
                     {leg.segments[leg.segments.length - 1].to.city}
                   </div>
                 </div>
@@ -150,16 +155,16 @@ const FlightCard: React.FC<FlightCardProps> = ({
         </div>
         
         {/* Price and Action Section */}
-        <div className="flex flex-col items-center lg:items-end gap-3 w-full lg:w-auto lg:min-w-[220px]">
+        <div className="flex flex-col items-center lg:items-end gap-3 w-full lg:w-auto lg:min-w-[220px] px-2 sm:px-4">
           {/* Black price: adult base */}
-          <div className="text-2xl font-bold text-center lg:text-right">
+          <div className="text-xl sm:text-2xl font-bold text-center lg:text-right break-words">
             {flight.currency} {adultBase.toFixed(2)}
           </div>
-          <div className="text-xs text-gray-600 text-center lg:text-right">
+          <div className="text-xs text-gray-600 text-center lg:text-right whitespace-normal">
             {t('perAdult', 'per adult')} {t('base', 'Base')}
           </div>
           {/* Adult tax line */}
-          <div className="text-xs text-gray-600 text-center lg:text-right">
+          <div className="text-xs text-gray-600 text-center lg:text-right whitespace-normal">
             {t('tax', 'Tax')}: {flight.currency} {adultTax.toFixed(2)}
           </div>
 
@@ -175,20 +180,26 @@ const FlightCard: React.FC<FlightCardProps> = ({
             {t('total', 'Total')}: {flight.currency} {totalPrice.toFixed(2)}
           </div>
 
-          <div className="text-xs text-gray-600 text-center lg:text-right flex items-center justify-center lg:justify-end gap-1">
-            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="text-xs text-gray-600 text-center lg:text-right flex items-center justify-center lg:justify-end gap-1 px-2 max-w-full">
+            <svg className="h-3 w-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m0-10L4 7m8 4v10l-8 4m0-10L4 7m8 4v10l-8 4" />
             </svg>
-            <span>{t('baggage', 'Baggage')}: {flight.baggage_allowance || flight.legs[0]?.bags?.ADT?.checked?.desc || 'N/A'}</span>
+            <span className="truncate">{t('baggage', 'Baggage')}: {flight.baggage_allowance || flight.legs[0]?.bags?.ADT?.checked?.desc || 'N/A'}</span>
           </div>
           <Button
-            onClick={() => onFlightSelection(flight)}
+            onClick={() => {
+              if (selectedFlight?.trip_id === flight.trip_id && showDetails === flight.trip_id) {
+                onFlightSelection(null);
+              } else {
+                onFlightSelection(flight);
+              }
+            }}
             className="w-full lg:w-auto bg-tourtastic-blue hover:bg-tourtastic-dark-blue text-white transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-md hover:shadow-lg"
           >
             {selectedFlight?.trip_id === flight.trip_id ? (
               <div className="flex items-center gap-2">
                 <span>✓</span>
-                {t('selected', 'Selected')}
+                {showDetails === flight.trip_id ? t('collapse', 'Collapse') : t('selected', 'Selected')}
               </div>
             ) : (
               t('select', 'Select')

@@ -154,11 +154,19 @@ const Flights = () => {
 
     initializedFromStateRef.current = true;
   }, [location.state, onSubmit, setValue]);
-
-  const handleFlightSelection = useCallback((flight: Flight, searchIndex: number) => {
-    setSelectedFlights(prev => ({ ...prev, [searchIndex]: flight }));
-    setShowDetails(flight.trip_id);
-  }, []);
+  const handleFlightSelection = useCallback((flight: Flight | null, searchIndex: number) => {
+    if (flight === null) {
+      setSelectedFlights(prev => {
+        const newFlights = { ...prev };
+        delete newFlights[searchIndex];
+        return newFlights;
+      });
+      setShowDetails(null);
+    } else {
+      setSelectedFlights(prev => ({ ...prev, [searchIndex]: flight }));
+      setShowDetails(showDetails === flight.trip_id ? null : flight.trip_id);
+    }
+  }, [showDetails]);
 
   const handleAddToCart = useCallback(async (flight: Flight) => {
     try {
@@ -309,7 +317,16 @@ const Flights = () => {
                           <Calendar
                             mode="single"
                             selected={segment.date}
-                            onSelect={(date) => date && setValue(`flightSegments.${index}.date`, date)}
+                            onSelect={(date) => {
+                              if (date) {
+                                setValue(`flightSegments.${index}.date`, date);
+                                // Close the popover by finding and clicking the trigger button
+                                const popoverTrigger = document.querySelector(`#date-${index}`);
+                                if (popoverTrigger instanceof HTMLElement) {
+                                  popoverTrigger.click();
+                                }
+                              }
+                            }}
                             disabled={(date) => date < new Date()}
                             initialFocus
                             className={cn('p-3 pointer-events-auto')}
