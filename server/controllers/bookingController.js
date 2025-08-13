@@ -27,12 +27,36 @@ exports.createBooking = asyncHandler(async (req, res, next) => {
     return res.status(401).json({ success: false, message: "User not found" });
   }
 
-  const { type, destination, bookingDate, details, amount } = req.body;
+  const { flightDetails } = req.body;
 
-  // Basic validation
-  if (!type || !bookingDate || !details || !amount) {
-      return res.status(400).json({ success: false, message: "Missing required booking fields" });
+  // Basic validation for flight bookings
+  if (!flightDetails || !flightDetails.selectedFlight) {
+    return res.status(400).json({ success: false, message: "Missing required flight booking details" });
   }
+
+  // Extract flight details
+  const {
+    from,
+    to,
+    departureDate,
+    passengers,
+    selectedFlight
+  } = flightDetails;
+
+  // Format the booking details
+  const bookingData = {
+    type: 'Flight',
+    destination: `${from} to ${to}`,
+    bookingDate: new Date(departureDate),
+    details: {
+      from,
+      to,
+      departureDate,
+      passengers,
+      flight: selectedFlight
+    },
+    amount: selectedFlight.price.total,
+  };
 
   // Generate a unique booking ID
   const bookingId = await generateBookingId();

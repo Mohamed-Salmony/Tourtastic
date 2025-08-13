@@ -59,6 +59,23 @@ interface ApiResponse {
   data: FlightBooking[];
 }
 
+interface LocalCartItem {
+  from: string;
+  to: string;
+  departureTime: string;
+  passengers: {
+    adults: number;
+    children: number;
+    infants: number;
+  };
+  flightId: string;
+  airline: string;
+  arrivalTime: string;
+  price: number;
+  currency: string;
+  class: string;
+}
+
 const Cart = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -69,21 +86,68 @@ const Cart = () => {
 
   const fetchBookings = useCallback(async () => {
     try {
-      const response = await api.get<ApiResponse>('/cart');
-      if (response.data.success && Array.isArray(response.data.data)) {
-        setBookings(response.data.data);
+      // Get items from localStorage first
+      const localItems = JSON.parse(localStorage.getItem('cartItems') || '[]');
+      
+      // Convert local items to FlightBooking format
+      const localBookings: FlightBooking[] = localItems.map((item: LocalCartItem, index: number) => ({
+        _id: `local_${index}`,
+        bookingId: `LOCAL-${index + 1000}`,
+        customerName: 'Guest User',
+        customerEmail: '',
+        flightDetails: {
+          from: item.from,
+          to: item.to,
+          departureDate: item.departureTime,
+          passengers: item.passengers,
+          selectedFlight: {
+            flightId: item.flightId,
+            airline: item.airline,
+            departureTime: item.departureTime,
+            arrivalTime: item.arrivalTime,
+            price: {
+              total: item.price,
+              currency: item.currency
+            },
+            class: item.class
+          }
+        },
+        status: 'pending',
+        paymentDetails: {
+          status: 'pending',
+          currency: item.currency,
+          transactions: []
+        },
+        createdAt: new Date().toISOString()
+      }));
+
+      // If user is logged in, also get items from backend and merge
+      const token = localStorage.getItem('token');
+      if (token) {
+        try {
+          const response = await api.get<ApiResponse>('/cart');
+          if (response.data.success && Array.isArray(response.data.data)) {
+            // Merge local and server bookings
+            setBookings([...localBookings, ...response.data.data]);
+          } else {
+            setBookings(localBookings);
+            console.error('Invalid response format:', response.data);
+          }
+        } catch (error) {
+          console.error('Error fetching server bookings:', error);
+          setBookings(localBookings);
+        }
       } else {
-        setBookings([]);
-        console.error('Invalid response format:', response.data);
+        setBookings(localBookings);
       }
     } catch (error) {
-      console.error('Error fetching bookings:', error);
-      setBookings([]);
+      console.error('Error loading cart:', error);
       toast({
         title: t('error', 'Error'),
-        description: t('fetchBookingsError', 'Failed to fetch bookings. Please try again.'),
+        description: t('fetchBookingsError', 'Failed to load cart items. Please try again.'),
         variant: 'destructive',
       });
+      setBookings([]);
     } finally {
       setLoading(false);
     }
@@ -93,10 +157,42 @@ const Cart = () => {
     fetchBookings();
   }, [fetchBookings]);
 
+  const handleCheckout = () => {
+    // Check if user is logged in before proceeding to checkout
+    const token = localStorage.getItem('token');
+    if (!token) {
+      toast({
+        title: t('loginRequired', 'Login Required'),
+        description: t('pleaseLoginToCheckout', 'Please log in to complete your purchase'),
+        variant: 'destructive',
+      });
+      navigate('/login', { 
+        state: { 
+          returnUrl: '/cart',
+          message: 'Please log in to complete your purchase'
+        } 
+      });
+      return;
+    }
+    
+    // Proceed to checkout
+    navigate('/checkout');
+  };
+
   const handleDelete = async (booking: FlightBooking) => {
     try {
-      await api.delete(`/cart/${booking._id}`);
-      setBookings(bookings.filter(b => b._id !== booking._id));
+      if (booking._id.startsWith('local_')) {
+        // Handle local cart item deletion
+        const localItems = JSON.parse(localStorage.getItem('cartItems') || '[]');
+        const index = parseInt(booking._id.split('_')[1]);
+        localItems.splice(index, 1);
+        localStorage.setItem('cartItems', JSON.stringify(localItems));
+        setBookings(bookings.filter(b => b._id !== booking._id));
+      } else {
+        // Handle server-side cart item deletion
+        await api.delete(`/cart/${booking._id}`);
+        setBookings(bookings.filter(b => b._id !== booking._id));
+      }
       toast({
         title: t('success', 'Success'),
         description: t('bookingDeleted', 'Booking has been deleted successfully'),

@@ -15,6 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Flight, PassengerCount } from '@/services/flightService';
+import { Airport } from '@/services/airportService';
 import { toast } from '@/hooks/use-toast';
 import api from '@/config/api';
 import { MultiCityFlightResults } from '@/components/flights/MultiCityFlightResults';
@@ -48,6 +49,10 @@ const Flights = () => {
   const [fromAirportNames, setFromAirportNames] = useState<string[]>(['']);
   const [toAirportNames, setToAirportNames] = useState<string[]>(['']);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [fromSuggestions, setFromSuggestions] = useState<Airport[]>([]);
+  const [toSuggestions, setToSuggestions] = useState<Airport[]>([]);
+  const [showFromSuggestions, setShowFromSuggestions] = useState<number | null>(null);
+  const [showToSuggestions, setShowToSuggestions] = useState<number | null>(null);
   const initializedFromStateRef = useRef(false);
 
   const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm<SearchFormValues>({
@@ -168,9 +173,106 @@ const Flights = () => {
     }
   }, [showDetails]);
 
+  const handleFromInputChange = async (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
+    const value = e.target.value;
+    setFromAirportNames(values => {
+      const newValues = [...values];
+      newValues[index] = value;
+      return newValues;
+    });
+    setValue(`flightSegments.${index}.from`, value);
+    
+    if (value.length >= 2) {
+      setShowFromSuggestions(index);
+      try {
+        const res = await api.get(`/airports/search?q=${encodeURIComponent(value)}`);
+        setFromSuggestions(res.data.data);
+      } catch {
+        setFromSuggestions([]);
+      }
+    } else {
+      setShowFromSuggestions(null);
+      setFromSuggestions([]);
+    }
+  };
+
+  const handleToInputChange = async (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
+    const value = e.target.value;
+    setToAirportNames(values => {
+      const newValues = [...values];
+      newValues[index] = value;
+      return newValues;
+    });
+    setValue(`flightSegments.${index}.to`, value);
+    
+    if (value.length >= 2) {
+      setShowToSuggestions(index);
+      try {
+        const res = await api.get(`/airports/search?q=${encodeURIComponent(value)}`);
+        setToSuggestions(res.data.data);
+      } catch {
+        setToSuggestions([]);
+      }
+    } else {
+      setShowToSuggestions(null);
+      setToSuggestions([]);
+    }
+  };
+
+  const handleFromSuggestionClick = (airport: Airport, index: number) => {
+    setValue(`flightSegments.${index}.from`, airport.iata_code, { shouldValidate: true, shouldDirty: true });
+    setFromAirportNames(values => {
+      const newValues = [...values];
+      newValues[index] = `${airport.iata_code} - ${airport.name} (${airport.city || airport.municipality}, ${airport.country || airport.iso_country})`;
+      return newValues;
+    });
+    setShowFromSuggestions(null);
+  };
+
+  const handleToSuggestionClick = (airport: Airport, index: number) => {
+    setValue(`flightSegments.${index}.to`, airport.iata_code, { shouldValidate: true, shouldDirty: true });
+    setToAirportNames(values => {
+      const newValues = [...values];
+      newValues[index] = `${airport.iata_code} - ${airport.name} (${airport.city || airport.municipality}, ${airport.country || airport.iso_country})`;
+      return newValues;
+    });
+    setShowToSuggestions(null);
+  };
+
   const handleAddToCart = useCallback(async (flight: Flight) => {
     try {
-      const response = await api.post('/flights/bookings', {
+      // Store flight in local cart if user is not logged in
+      if (!localStorage.getItem('token')) {
+        const cartItems = JSON.parse(localStorage.getItem('cartItems') || '[]');
+        const newItem = {
+          from: flight.legs[0].from.city,
+          to: flight.legs[0].to.city,
+          flightId: flight.legs[0].segments[0].flightnumber,
+          airline: flight.legs[0].segments[0].airline_name,
+          departureTime: flight.legs[0].from.date,
+          arrivalTime: flight.legs[0].to.date,
+          price: flight.price,
+          currency: flight.currency,
+          passengers: {
+            adults: flight.search_query.adt || 1,
+            children: flight.search_query.chd || 0,
+            infants: flight.search_query.inf || 0
+          },
+          class: flight.search_query.options.cabin || 'economy'
+        };
+        cartItems.push(newItem);
+        localStorage.setItem('cartItems', JSON.stringify(cartItems));
+        
+        toast({
+          title: t('success', 'Success'),
+          description: t('flightAddedToCart', 'Flight has been added to your cart'),
+        });
+        navigate('/cart');
+        return;
+      }
+
+      // For logged in users, save to backend
+      const response = await api.post('/api/cart/items', {
         flightDetails: {
           from: flight.legs[0].from.city,
           to: flight.legs[0].to.city,
@@ -200,11 +302,25 @@ const Flights = () => {
           description: t('flightAddedToCart', 'Flight has been added to your cart'),
         });
         navigate('/cart');
+      } else {
+        throw new Error(response.data.message || 'Unknown error occurred');
       }
-    } catch (error) {
+    } catch (error: unknown) {
+      console.error('Cart error:', error);
+      let errorMessage = t('addToCartError', 'Failed to add flight to cart. Please try again.');
+      
+      if (error && typeof error === 'object' && 'response' in error &&
+          error.response && typeof error.response === 'object' && 
+          'data' in error.response && 
+          error.response.data && typeof error.response.data === 'object' &&
+          'message' in error.response.data && 
+          typeof error.response.data.message === 'string') {
+        errorMessage = error.response.data.message;
+      }
+      
       toast({
         title: t('error', 'Error'),
-        description: t('addToCartError', 'Failed to add flight to cart. Please try again.'),
+        description: errorMessage,
         variant: 'destructive',
       });
     }
@@ -236,27 +352,36 @@ const Flights = () => {
                       <div className="relative">
                         <Input
                           id={`from-${index}`}
-                          placeholder={t('departureCity', 'Departure city')}
-                          value={fromAirportNames[index] || segment.from || ''}
-                          {...register(`flightSegments.${index}.from`)}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            const newNames = [...fromAirportNames];
-                            newNames[index] = value;
-                            setFromAirportNames(newNames);
-                            const iataMatch = value.match(/^([A-Z]{3})\s-/);
-                            if (iataMatch) {
-                              setValue(`flightSegments.${index}.from`, iataMatch[1]);
-                            } else {
-                              setValue(`flightSegments.${index}.from`, value);
+                          placeholder={t('departureCity', 'Type 2-3 letters...')}
+                          value={fromAirportNames[index] || ''}
+                          onChange={(e) => handleFromInputChange(e, index)}
+                          autoComplete="off"
+                          onFocus={() => {
+                            if (fromAirportNames[index]?.length >= 2) {
+                              setShowFromSuggestions(index);
                             }
                           }}
+                          onBlur={() => setTimeout(() => setShowFromSuggestions(null), 150)}
                           className="pr-10"
                         />
                         {fromAirportNames[index] && fromAirportNames[index].includes(' - ') && (
                           <div className="absolute inset-y-0 right-0 flex items-center pr-3">
                             <span className="text-xs text-green-600">✓</span>
                           </div>
+                        )}
+                        {showFromSuggestions === index && fromSuggestions.length > 0 && (
+                          <ul className="absolute z-50 bg-white border w-full max-h-48 overflow-y-auto shadow-lg rounded mt-1">
+                            {fromSuggestions.map((a, i) => (
+                              <li
+                                key={`${a.iata_code || 'unknown'}-${i}`}
+                                className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                                onMouseDown={() => handleFromSuggestionClick(a, index)}
+                              >
+                                <div className="font-medium">{a.iata_code} - {a.name}</div>
+                                <div className="text-gray-500 text-xs">{a.city || a.municipality}, {a.country || a.iso_country}</div>
+                              </li>
+                            ))}
+                          </ul>
                         )}
                       </div>
                       {errors.flightSegments?.[index]?.from && (
@@ -269,27 +394,36 @@ const Flights = () => {
                       <div className="relative">
                         <Input
                           id={`to-${index}`}
-                          placeholder={t('destinationCity', 'Destination city')}
-                          value={toAirportNames[index] || segment.to || ''}
-                          {...register(`flightSegments.${index}.to`)}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            const newNames = [...toAirportNames];
-                            newNames[index] = value;
-                            setToAirportNames(newNames);
-                            const iataMatch = value.match(/^([A-Z]{3})\s-/);
-                            if (iataMatch) {
-                              setValue(`flightSegments.${index}.to`, iataMatch[1]);
-                            } else {
-                              setValue(`flightSegments.${index}.to`, value);
+                          placeholder={t('destinationCity', 'Type 2-3 letters...')}
+                          value={toAirportNames[index] || ''}
+                          onChange={(e) => handleToInputChange(e, index)}
+                          autoComplete="off"
+                          onFocus={() => {
+                            if (toAirportNames[index]?.length >= 2) {
+                              setShowToSuggestions(index);
                             }
                           }}
+                          onBlur={() => setTimeout(() => setShowToSuggestions(null), 150)}
                           className="pr-10"
                         />
                         {toAirportNames[index] && toAirportNames[index].includes(' - ') && (
                           <div className="absolute inset-y-0 right-0 flex items-center pr-3">
                             <span className="text-xs text-green-600">✓</span>
                           </div>
+                        )}
+                        {showToSuggestions === index && toSuggestions.length > 0 && (
+                          <ul className="absolute z-50 bg-white border w-full max-h-48 overflow-y-auto shadow-lg rounded mt-1">
+                            {toSuggestions.map((a, i) => (
+                              <li
+                                key={`${a.iata_code || 'unknown'}-${i}`}
+                                className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                                onMouseDown={() => handleToSuggestionClick(a, index)}
+                              >
+                                <div className="font-medium">{a.iata_code} - {a.name}</div>
+                                <div className="text-gray-500 text-xs">{a.city || a.municipality}, {a.country || a.iso_country}</div>
+                              </li>
+                            ))}
+                          </ul>
                         )}
                       </div>
                       {errors.flightSegments?.[index]?.to && (
