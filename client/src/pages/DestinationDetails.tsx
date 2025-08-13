@@ -112,9 +112,14 @@ const DestinationDetails: React.FC = () => {
   const [manualOrigin, setManualOrigin] = useState('');
 
   // Handler for flight selection
-  const handleFlightSelection = (flight: Flight) => {
-    setSelectedFlight(flight);
-    setShowDetails(showDetails === flight.trip_id ? null : flight.trip_id);
+  const handleFlightSelection = (flight: Flight | null) => {
+    if (flight === null) {
+      setSelectedFlight(null);
+      setShowDetails(null);
+    } else {
+      setSelectedFlight(flight);
+      setShowDetails(showDetails === flight.trip_id ? null : flight.trip_id);
+    }
   };
 
   // Handler for adding flight to cart
