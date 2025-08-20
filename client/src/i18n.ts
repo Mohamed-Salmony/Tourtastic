@@ -34,11 +34,18 @@ i18n
     }
   });
 
-// Load initial translations
-const initLang = localStorage.getItem('locale') || 'en';
-loadTranslations(initLang).then(translations => {
-  i18n.addResourceBundle(initLang, 'translation', translations);
-});
+// Load both English and Arabic translations on init
+const loadInitialTranslations = async () => {
+  const initLang = localStorage.getItem('locale') || 'en';
+  const languages = ['en', 'ar'];
+  
+  await Promise.all(languages.map(async (lang) => {
+    const translations = await loadTranslations(lang);
+    i18n.addResourceBundle(lang, 'translation', translations);
+  }));
+}
+
+loadInitialTranslations();
 
 // Set the document direction based on the language
 const setDocumentDirection = (language: string) => {

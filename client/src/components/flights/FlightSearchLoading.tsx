@@ -20,11 +20,11 @@ const FlightSearchLoading: React.FC<FlightSearchLoadingProps> = ({
   const { t } = useTranslation();
   
   const loadingMessages = [
-    'Searching for available flights...',
-    'Checking airline schedules...',
-    'Comparing prices...',
-    'Finding the best deals...',
-    'Almost there...'
+    t('searchingFlights', 'Searching for available flights...'),
+    t('checkingSchedules', 'Checking airline schedules...'),
+    t('comparingPrices', 'Comparing prices...'),
+    t('findingDeals', 'Finding the best deals...'),
+    t('almostThere', 'Almost there...')
   ];
   
   const getMessageByProgress = (prog: number) => {

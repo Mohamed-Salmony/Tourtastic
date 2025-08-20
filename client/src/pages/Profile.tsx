@@ -126,10 +126,21 @@ const Profile: React.FC = () => {
         setUser(userResponse.data.data);
         setEditFormData(userResponse.data.data);
 
-        // Fetch user's flight bookings
-        const bookingsResponse = await api.get('/flights/bookings');
+        // Fetch both cart items (pending) and confirmed bookings
+        const [cartResponse, bookingsResponse] = await Promise.all([
+          api.get('/cart'),
+          api.get('/bookings/my')
+        ]);
+        
+        console.log('Cart response:', cartResponse.data);
         console.log('Bookings response:', bookingsResponse.data);
-        setBookings(bookingsResponse.data.data);
+
+        // Merge cart items (pending) with confirmed bookings
+        const cartItems = cartResponse.data.data || [];
+        const confirmedBookings = bookingsResponse.data.data || [];
+        const allBookings = [...cartItems, ...confirmedBookings];
+
+        setBookings(allBookings);
 
         // Fetch user's wishlist
         const wishlistResponse = await api.get(`/users/${authUser._id}/wishlist`);
@@ -356,7 +367,14 @@ const Profile: React.FC = () => {
                               <TableRow key={booking._id}>
                                 <TableCell>
                                   <div className="flex items-center gap-2">
-                                    <Plane className="h-5 w-5 text-tourtastic-blue" />
+                                    <img 
+                                      src={`/${booking.flightDetails.selectedFlight.airline.replace(/\s+/g, '-')}-Logo.png`}
+                                      alt={booking.flightDetails.selectedFlight.airline}
+                                      className="h-8 w-8 object-contain"
+                                      onError={(e) => {
+                                        e.currentTarget.src = '/placeholder.svg';
+                                      }}
+                                    />
                                     <span className="font-medium">{booking.bookingId}</span>
                                   </div>
                                 </TableCell>

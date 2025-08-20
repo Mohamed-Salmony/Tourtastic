@@ -1,5 +1,10 @@
 // Helper function to get airline logo
 export const getAirlineLogo = (airlineCode: string) => {
+  if (!airlineCode) return '/placeholder.svg';
+  
+  // Normalize airline code to uppercase
+  const normalizedCode = airlineCode.trim().toUpperCase();
+  
   const logoMap: { [key: string]: string } = {
     'TK': '/Turkish-Airlines-Logo.png',
     'EK': '/Emirates-Logo.png',
@@ -15,6 +20,14 @@ export const getAirlineLogo = (airlineCode: string) => {
     'FZ': '/FlyDubai-Logo.png',
     'XY': '/Flynas-Logo.png',
     'PC': '/Pegasus-Airlines-Logo.png',
+    'HU': '/Hainan-Airlines-Logo.png',
+    'MU': '/China-Eastern-Airlines-Logo.png',
+    'SQ': '/Singapore-Airlines-Logo.png',
+    'OS': '/Austrian-Airlines-Logo.png',
+    'CA': '/Air-China-Logo.png',
+    'I2': '/Iberia-Express-Logo.png',
+    'LX': '/Swiss-International-Air-Lines-Logo.png',
+    'AF': '/Air-France-Logo.png',
     'XQ': '/SunExpress-Logo.png',
     'VF': '/AJet-logo.png',
     'A3': '/Aegean-Airlines-logo.png',
@@ -41,7 +54,11 @@ export const getAirlineLogo = (airlineCode: string) => {
     'BA': '/British-Airways-Logo.png',
     'LH': '/Lufthansa-Logo.png'
   };
-  return logoMap[airlineCode] || '/placeholder.svg';
+  
+  const logoPath = logoMap[normalizedCode] || '/placeholder.svg';
+  console.log(`Airline ${normalizedCode}: Found logo path: ${logoPath}`);
+  
+  return logoPath;
 };
 
 // Helper function to get time of day

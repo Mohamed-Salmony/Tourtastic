@@ -35,9 +35,19 @@ export interface MultiCitySearchApi {
   loadMore: (sectionIndex: number) => void;
 }
 
+interface PollingRef {
+  timeoutId?: ReturnType<typeof setTimeout>;
+  active: boolean;
+  idleCount: number;
+  lastFlightsCount: number;
+  emptyPollCount: number;
+  passengers?: PassengerCount;
+}
+
 // Module-level caches and locks (shared across hook instances)
 const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
-const MAX_IDLE_POLLS = 60; // ~120s if interval is 2s (allow slower providers)
+const MAX_IDLE_POLLS = 30; // ~60s if interval is 2s
+const MAX_IDLE_POLLS_NO_RESULTS = 15; // ~30s if no results found yet
 const segmentResultsCache = new Map<string, {
   flights: Flight[];
   progress: number;
@@ -46,8 +56,17 @@ const segmentResultsCache = new Map<string, {
   timestamp: number;
   searchId?: string;
 }>();
+interface PollingRef {
+  timeoutId?: ReturnType<typeof setTimeout>;
+  active: boolean;
+  idleCount: number;
+  lastFlightsCount: number;
+  emptyPollCount: number;
+  passengers?: PassengerCount;
+}
+
 const pendingSearches = new Map<string, Promise<string>>();
-const pollingRefs = new Map<string, { timeoutId?: ReturnType<typeof setTimeout>; active: boolean; idleCount: number; lastFlightsCount: number; passengers?: PassengerCount }>();
+const pollingRefs = new Map<string, PollingRef>();
 
 function buildSegmentKey(segment: SegmentInput, passengers: PassengerCount, cabin?: 'e' | 'p' | 'b' | 'f', direct?: boolean) {
   const fromCode = (segment.from || '').trim().toUpperCase();
@@ -88,7 +107,22 @@ export function useMultiCitySearch(): MultiCitySearchApi {
     const existing = pollingRefs.get(segmentKey);
     if (existing?.active) return; // Already polling
 
-    pollingRefs.set(segmentKey, { active: true, idleCount: 0, lastFlightsCount: 0, passengers });
+    const newRef: PollingRef = {
+      active: true,
+      idleCount: 0,
+      lastFlightsCount: 0,
+      emptyPollCount: 0,
+      passengers
+    };
+    pollingRefs.set(segmentKey, newRef);
+
+    // Update section to show loading state immediately
+    updateSection(sectionIndex, (prev) => ({
+      ...prev,
+      loading: true,
+      hasMore: true,
+      isComplete: false,
+    }));
 
     const pollOnce = async (after?: number) => {
       if (!mountedRef.current) return;
@@ -98,6 +132,50 @@ export function useMultiCitySearch(): MultiCitySearchApi {
         // Normalize result fields to avoid boolean coercion issues
         const normalizedComplete = typeof results.complete === 'number' ? results.complete : (results.complete ? 100 : 0);
         const normalizedLastAfter = typeof (results.last_result as unknown) === 'number' ? (results.last_result as unknown as number) : undefined;
+
+        // Get or initialize polling ref
+        const ref = pollingRefs.get(segmentKey) || {
+          active: true,
+          idleCount: 0,
+          lastFlightsCount: 0,
+          emptyPollCount: 0,
+          passengers
+        };
+
+        // Handle empty results or no-results status
+        if (results.status === 'no_results' || 
+            (!results.result || (Array.isArray(results.result) && results.result.length === 0))) {
+          // If search is complete, has no results, or status indicates no results
+          if (normalizedComplete >= 100 || results.status === 'no_results') {
+            updateSection(sectionIndex, (prev) => ({
+              ...prev,
+              loading: false,
+              isComplete: true,
+              hasMore: false,
+              error: results.message || (prev.flights.length === 0 ? 'No flights found for this route and date.' : undefined)
+            }));
+            return;
+          }
+          
+          // If we've been polling with no results for a while, mark as complete
+          ref.emptyPollCount += 1;
+          if (ref.emptyPollCount >= 5) { // Stop after 5 empty polls
+            updateSection(sectionIndex, (prev) => ({
+              ...prev,
+              loading: false,
+              isComplete: true,
+              hasMore: false,
+              error: 'No flights found after multiple attempts. Please try different search criteria.'
+            }));
+            pollingRefs.set(segmentKey, { ...ref, active: false });
+            return;
+          }
+        } else {
+          // Reset empty poll count if we got results
+          ref.emptyPollCount = 0;
+        }
+
+        pollingRefs.set(segmentKey, ref);
 
         // Override passenger counts in flights to reflect current search
         const refNow = pollingRefs.get(segmentKey);
@@ -156,45 +234,75 @@ export function useMultiCitySearch(): MultiCitySearchApi {
         });
 
         // Idle cutoff handling
-        const ref = pollingRefs.get(segmentKey) || { active: false, idleCount: 0, lastFlightsCount: 0, passengers };
+        const pollingRef = pollingRefs.get(segmentKey) || { 
+          active: false, 
+          idleCount: 0, 
+          lastFlightsCount: 0, 
+          emptyPollCount: 0,
+          passengers 
+        };
         if (newFlightsCountDelta === 0 && normalizedComplete < 100) {
-          ref.idleCount = (ref.idleCount || 0) + 1;
+          pollingRef.idleCount = (pollingRef.idleCount || 0) + 1;
         } else {
-          ref.idleCount = 0;
+          pollingRef.idleCount = 0;
         }
-        ref.lastFlightsCount = (ref.lastFlightsCount || 0) + newFlightsCountDelta;
+        pollingRef.lastFlightsCount = (pollingRef.lastFlightsCount || 0) + newFlightsCountDelta;
 
-        if (ref.idleCount >= MAX_IDLE_POLLS) {
+        // Use shorter timeout if we haven't found any results yet
+        const maxIdlePolls = pollingRef.lastFlightsCount === 0 ? MAX_IDLE_POLLS_NO_RESULTS : MAX_IDLE_POLLS;
+
+        if (pollingRef.idleCount >= maxIdlePolls) {
           // Stop polling to avoid infinite spinner; mark section complete with whatever results we have
-          if (ref.timeoutId) clearTimeout(ref.timeoutId);
-          ref.active = false;
-          pollingRefs.set(segmentKey, ref);
+          if (pollingRef.timeoutId) clearTimeout(pollingRef.timeoutId);
+          pollingRef.active = false;
+          pollingRefs.set(segmentKey, pollingRef);
+          updateSection(sectionIndex, (prev) => ({ ...prev, loading: false, isComplete: true, hasMore: prev.flights.length > prev.visibleCount }));
+          return;
+        }
+
+        // Check if complete and stop polling
+        if (normalizedComplete >= 100) {
+          if (pollingRef.timeoutId) clearTimeout(pollingRef.timeoutId);
+          pollingRef.active = false;
+          pollingRefs.set(segmentKey, pollingRef);
           updateSection(sectionIndex, (prev) => ({ ...prev, loading: false, isComplete: true, hasMore: prev.flights.length > prev.visibleCount }));
           return;
         }
 
         // Continue polling if not complete
-        if (normalizedComplete < 100 && ref.active !== false) {
+        if (pollingRef.active !== false) {
           const timeoutId = setTimeout(() => pollOnce(normalizedLastAfter), 2000);
-          ref.timeoutId = timeoutId;
-          ref.active = true;
-          pollingRefs.set(segmentKey, ref);
+          pollingRef.timeoutId = timeoutId;
+          pollingRef.active = true;
+          pollingRefs.set(segmentKey, pollingRef);
         } else {
-          if (ref.timeoutId) clearTimeout(ref.timeoutId);
-          ref.active = false;
-          pollingRefs.set(segmentKey, ref);
+          if (pollingRef.timeoutId) clearTimeout(pollingRef.timeoutId);
+          pollingRef.active = false;
+          pollingRefs.set(segmentKey, pollingRef);
         }
       } catch (err) {
         // Stop polling on error for this segment
-        const ref = pollingRefs.get(segmentKey);
-        if (ref?.timeoutId) clearTimeout(ref.timeoutId);
-        pollingRefs.set(segmentKey, { active: false, idleCount: 0, lastFlightsCount: 0, passengers });
+        const existingRef = pollingRefs.get(segmentKey);
+        if (existingRef?.timeoutId) clearTimeout(existingRef.timeoutId);
+        const newRef: PollingRef = {
+          active: false,
+          idleCount: 0,
+          lastFlightsCount: 0,
+          emptyPollCount: 0,
+          passengers
+        };
+        pollingRefs.set(segmentKey, newRef);
+
+        // If we have some results already, show them but mark as incomplete
+        // Otherwise, show the error
         updateSection(sectionIndex, (prev) => ({
           ...prev,
           loading: false,
           isComplete: true,
           hasMore: false,
-          error: 'Failed to fetch flight results. Please try again.',
+          error: prev.flights.length > 0 
+            ? 'Could not load more results. Some flights may be missing.'
+            : 'No flights found. Please try different dates or airports.',
         }));
       }
     };
@@ -209,6 +317,15 @@ export function useMultiCitySearch(): MultiCitySearchApi {
     cabin?: 'e' | 'p' | 'b' | 'f',
     direct?: boolean,
   ) => {
+    // Clear existing searches and results
+    segmentResultsCache.clear();
+    pendingSearches.clear();
+    pollingRefs.forEach((pollingRef) => {
+      if (pollingRef.timeoutId) clearTimeout(pollingRef.timeoutId);
+      pollingRef.active = false;
+    });
+    pollingRefs.clear();
+
     // Initialize sections for each provided segment
     const initialSections: SearchSection[] = segments.map((seg, idx) => {
       const displayFrom = seg.fromDisplay || seg.from;
@@ -269,7 +386,14 @@ export function useMultiCitySearch(): MultiCitySearchApi {
         try {
           searchId = await existingPromise;
         } catch (e) {
-          updateSection(idx, (prev) => ({ ...prev, loading: false, isComplete: true, hasMore: false, error: 'Search failed.' }));
+          const errorMessage = e instanceof Error ? e.message : 'Search failed.';
+          updateSection(idx, (prev) => ({ 
+            ...prev, 
+            loading: false, 
+            isComplete: true, 
+            hasMore: false, 
+            error: `Unable to search flights: ${errorMessage}` 
+          }));
           return;
         }
       } else {
@@ -285,6 +409,14 @@ export function useMultiCitySearch(): MultiCitySearchApi {
           cabin,
           direct,
         };
+
+        // Update section to show searching state
+        updateSection(idx, (prev) => ({
+          ...prev,
+          loading: true,
+          error: undefined,
+          hasMore: true,
+        }));
         const promise = (async () => {
           const resp = await searchFlights(searchParams);
           return resp.search_id;

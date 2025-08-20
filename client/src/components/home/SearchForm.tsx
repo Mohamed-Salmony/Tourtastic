@@ -16,6 +16,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import api from '@/config/api';
 import { Airport } from '@/services/airportService';
+import useLocale from '@/hooks/useLocale';
 
 const searchFormSchema = z.object({
   flightSegments: z.array(z.object({
@@ -48,7 +49,7 @@ const searchFormSchema = z.object({
 type SearchFormValues = z.infer<typeof searchFormSchema>;
 
 const SearchForm: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [fromSuggestions, setFromSuggestions] = useState<Airport[]>([]);
   const [toSuggestions, setToSuggestions] = useState<Airport[]>([]);
@@ -107,8 +108,17 @@ const SearchForm: React.FC = () => {
     if (value.length >= 2) {
       setShowFromSuggestions(index);
       try {
-        const res = await api.get(`/airports/search?q=${encodeURIComponent(value)}`);
-        setFromSuggestions(res.data.data);
+        const response = await api.get(`/airports/search?q=${encodeURIComponent(value)}&lang=${i18n.language}`);
+        if (response.data.success && response.data.data) {
+          const airports = response.data.data;
+          // Filter out any airports without proper translation data
+          const validAirports = airports.filter(airport => 
+            i18n.language === 'ar' ? 
+              airport.name_arbic && airport.municipality_arbic && airport.country_arbic :
+              airport.name && airport.municipality && airport.country
+          );
+          setFromSuggestions(validAirports);
+        }
       } catch {
         setFromSuggestions([]);
       }
@@ -130,8 +140,17 @@ const SearchForm: React.FC = () => {
     if (value.length >= 2) {
       setShowToSuggestions(index);
       try {
-        const res = await api.get(`/airports/search?q=${encodeURIComponent(value)}`);
-        setToSuggestions(res.data.data);
+        const response = await api.get(`/airports/search?q=${encodeURIComponent(value)}&lang=${i18n.language}`);
+        if (response.data.success && response.data.data) {
+          const airports = response.data.data;
+          // Filter out any airports without proper translation data
+          const validAirports = airports.filter(airport => 
+            i18n.language === 'ar' ? 
+              airport.name_arbic && airport.municipality_arbic && airport.country_arbic :
+              airport.name && airport.municipality && airport.country
+          );
+          setToSuggestions(validAirports);
+        }
       } catch {
         setToSuggestions([]);
       }
@@ -145,7 +164,11 @@ const SearchForm: React.FC = () => {
     setValue(`flightSegments.${index}.from`, airport.iata_code, { shouldValidate: true, shouldDirty: true });
     setFromDisplayValues(values => {
       const newValues = [...values];
-      newValues[index] = `${airport.iata_code} - ${airport.name} (${airport.city || airport.municipality}, ${airport.country || airport.iso_country})`;
+      if (i18n.language === 'ar' && airport.name_arbic && airport.municipality_arbic && airport.country_arbic) {
+        newValues[index] = `${airport.iata_code} - ${airport.name_arbic} (${airport.municipality_arbic}, ${airport.country_arbic})`;
+      } else {
+        newValues[index] = `${airport.iata_code} - ${airport.name} (${airport.municipality || airport.city}, ${airport.country || airport.iso_country})`;
+      }
       return newValues;
     });
     setShowFromSuggestions(null);
@@ -156,7 +179,11 @@ const SearchForm: React.FC = () => {
     setValue(`flightSegments.${index}.to`, airport.iata_code, { shouldValidate: true, shouldDirty: true });
     setToDisplayValues(values => {
       const newValues = [...values];
-      newValues[index] = `${airport.iata_code} - ${airport.name} (${airport.city || airport.municipality}, ${airport.country || airport.iso_country})`;
+      if (i18n.language === 'ar' && airport.name_arbic && airport.municipality_arbic && airport.country_arbic) {
+        newValues[index] = `${airport.iata_code} - ${airport.name_arbic} (${airport.municipality_arbic}, ${airport.country_arbic})`;
+      } else {
+        newValues[index] = `${airport.iata_code} - ${airport.name} (${airport.municipality || airport.city}, ${airport.country || airport.iso_country})`;
+      }
       return newValues;
     });
     setShowToSuggestions(null);
@@ -257,8 +284,16 @@ const SearchForm: React.FC = () => {
                           className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
                           onMouseDown={() => handleFromSuggestionClick(a, index)}
                         >
-                          <div className="font-medium">{a.iata_code} - {a.name}</div>
-                          <div className="text-gray-500 text-xs">{a.city || a.municipality}, {a.country || a.iso_country}</div>
+                          <div className="font-medium">
+                            {i18n.language === 'ar' 
+                              ? `${a.iata_code} - ${a.name_arbic}` 
+                              : `${a.iata_code} - ${a.name}`}
+                          </div>
+                          <div className="text-gray-500 text-xs">
+                            {i18n.language === 'ar'
+                              ? `${a.municipality_arbic}, ${a.country_arbic}`
+                              : `${a.municipality}, ${a.country}`}
+                          </div>
                         </li>
                       ))}
                     </ul>
@@ -294,8 +329,16 @@ const SearchForm: React.FC = () => {
                           className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
                           onMouseDown={() => handleToSuggestionClick(a, index)}
                         >
-                          <div className="font-medium">{a.iata_code} - {a.name}</div>
-                          <div className="text-gray-500 text-xs">{a.city || a.municipality}, {a.country || a.iso_country}</div>
+                          <div className="font-medium">
+                            {i18n.language === 'ar' 
+                              ? `${a.iata_code} - ${a.name_arbic}` 
+                              : `${a.iata_code} - ${a.name}`}
+                          </div>
+                          <div className="text-gray-500 text-xs">
+                            {i18n.language === 'ar'
+                              ? `${a.municipality_arbic}, ${a.country_arbic}`
+                              : `${a.municipality}, ${a.country}`}
+                          </div>
                         </li>
                       ))}
                     </ul>

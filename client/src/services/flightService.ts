@@ -28,6 +28,8 @@ export interface FlightSearchResults {
   complete: number; // Progress percentage (0-100)
   result: Flight[]; // Array of flights
   last_result: number; // Last result index for pagination
+  status?: 'ok' | 'no_results'; // Search status
+  message?: string; // Optional status message
 }
 
 export interface Airport {
@@ -57,7 +59,6 @@ export interface PriceBreakdown {
 }
 
 export interface FlightSegment {
-  [x: string]: Key;
   cabin: string;
   cabin_name: string;
   farebase: string;
@@ -177,17 +178,40 @@ export const searchFlights = async (params: FlightSearchParams): Promise<FlightS
     })
     .join(':');
 
-  try {
-    const response = await api.get(`/flights/search/${tripsString}/${params.passengers.adults}/${params.passengers.children}/${params.passengers.infants}`, {
-      params: {
-        cabin: params.cabin || 'e',
-        direct: params.direct ? 1 : 0
+  let retries = 3;
+  while (retries > 0) {
+    try {
+      const response = await api.get(`/flights/search/${tripsString}/${params.passengers.adults}/${params.passengers.children}/${params.passengers.infants}`, {
+        params: {
+          cabin: params.cabin || 'e',
+          direct: params.direct ? 1 : 0
+        }
+      });
+      return response.data;
+    } catch (error) {
+      retries--;
+      if (error.code === 'ECONNABORTED' || error.response?.status === 408) {
+        if (retries > 0) {
+          // Wait 1 second before retrying
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          continue;
+        }
+        throw new Error('Flight search timed out. Please try again with fewer search parameters.');
       }
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Error searching flights:', error);
-    throw error;
+      if (error.response?.status === 429) {
+        if (retries > 0) {
+          // Wait 2 seconds before retrying rate limited requests
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          continue;
+        }
+        throw new Error('Too many requests. Please wait a moment before trying again.');
+      }
+      if (retries === 0) {
+        console.error('Error searching flights:', error);
+        throw error;
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
   }
 };
 
@@ -203,22 +227,69 @@ export const getSearchResults = async (searchId: string, after?: number): Promis
     return cached.data;
   }
   
-  try {
-    const response = await api.get(`/flights/results/${searchId}`, {
-      params: after ? { after } : undefined
-    });
-    
-    // Validate response structure
-    if (!response.data || typeof response.data.complete !== 'number') {
-      throw new Error('Invalid response structure from flight search API');
+  let retries = 3;
+  let lastError = null;
+  
+  while (retries > 0) {
+    try {
+      const response = await api.get(`/flights/results/${searchId}`, {
+        params: after ? { after } : undefined
+      });
+      
+      // Validate response structure
+      if (!response.data || typeof response.data.complete !== 'number') {
+        throw new Error('Invalid response structure from flight search API');
+      }
+
+      // Check if the search is stalled with no results
+      const hasResults = Array.isArray(response.data.result) && response.data.result.length > 0;
+      const searchProgress = response.data.complete || 0;
+      const isStalled = !hasResults && searchProgress >= 50;
+      
+      if (isStalled && retries > 1) {
+        // If search appears stalled but we have retries left, wait and retry
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        retries--;
+        continue;
+      }
+
+      const data = {
+        ...response.data,
+        // If search is stalled, mark it as complete to prevent further polling
+        complete: isStalled ? 100 : response.data.complete,
+        status: isStalled ? 'no_results' : (response.data.status || 'ok'),
+        message: isStalled ? 'No flights found for this route and date combination.' : response.data.message
+      };
+      
+      searchCache.set(cacheKey, { data, timestamp: Date.now() });
+      return data;
+      
+    } catch (error) {
+      lastError = error;
+      retries--;
+      
+      if (error.response?.status === 404) {
+        throw new Error('Search results not found or expired');
+      }
+      
+      if (error.code === 'ECONNABORTED' || error.response?.status === 408) {
+        if (retries > 0) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          continue;
+        }
+        throw new Error('Timeout while fetching search results. Please try again.');
+      }
+      
+      if (retries === 0) {
+        console.error('Error fetching search results:', error);
+        throw lastError;
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
-    
-    searchCache.set(cacheKey, { data: response.data, timestamp: Date.now() });
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching search results:', error);
-    throw error;
   }
+  
+  throw lastError;
 };
 
 

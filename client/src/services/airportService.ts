@@ -4,12 +4,15 @@ import { getCapitalAirportFromCoordinates } from './geolocationService';
 export interface Airport {
   code?: string;
   name: string;
+  name_arbic?: string;
   city?: string;
   country?: string;
+  country_arbic?: string;
   latitude?: number;
   longitude?: number;
   iata_code: string;
   municipality?: string;
+  municipality_arbic?: string;
   iso_country?: string;
   type?: string;
   scheduled_service?: string;

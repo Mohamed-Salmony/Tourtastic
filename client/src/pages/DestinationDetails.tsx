@@ -55,42 +55,8 @@ const getTimeOfDayIcon = (timeOfDay: string) => {
   }
 };
 
-const getAirlineLogo = (airlineName: string): string => {
-  const logoMap: Record<string, string> = {
-    'EgyptAir': '/egyptair-logo.png',
-    'Emirates': '/Emirates-Logo.png',
-    'Turkish Airlines': '/Turkish-Airlines-Logo.png',
-    'Qatar Airways': '/Qatar Airways Logo.png',
-    'Saudi Arabian Airlines': '/Saudi-Arabian-Airlines-Logo.png',
-    'Kuwait Airways': '/Kuwait-Airways-logo.png',
-    'Oman Air': '/Oman-Air-Logo.png',
-    'Etihad Airways': '/Etihad-Airways-Logo.png',
-    'FlyDubai': '/FlyDubai-Logo.png',
-    'Air Algerie': '/Air-Algerie-Logo.png',
-    'Tunisair': '/Tunisair-logo.png',
-    'Royal Jordanian': '/Royal-Jordanian-logo.png',
-    'Middle East Airlines': '/Middle-East-Airlines-Logo.png',
-    'Nile Air': '/Nile-air-logo.png',
-    'Flynas': '/Flynas-Logo.png',
-    'Gulf Air': '/Gulf-Air-logo.png',
-    'Pegasus Airlines': '/Pegasus-Airlines-Logo.png',
-    'AJet': '/AJet-logo.png',
-    'Aegean Airlines': '/Aegean-Airlines-logo.png',
-    'Air India': '/Air-India-Logo.png',
-    'Ethiopian Airlines': '/Ethiopian-Airlines-Logo.png',
-    'Hahn Air': '/Hahn-Air-Logo.png',
-    'Nemsa Airlines': '/Nemsa-Airlines-Logo.png',
-    'Pakistan International Airlines': '/Pakistan-International-Airlines-Logo.png',
-    'Air Cairo': '/Air-Cairo-Logo.png',
-    'Air Arabia': '/Air-Arabia-Logo.png',
-    'flyadeal': '/Flyadeal-Logo.svg',
-    'Air Arabia Egypt': '/Air-Arabia-Egypt-Logo.png',
-    'Jazeera Airways': '/Jazeera-Airways-Logo.png',
-    'British Airways': '/British-Airways-Logo.png',
-    'Lufthansa': '/Lufthansa-Logo.png'
-  };
-  return logoMap[airlineName] || '/Tourtastic-logo.png';
-};
+// Import getAirlineLogo from flightHelpers
+import { getAirlineLogo } from '../components/flights/utils/flightHelpers';
 
 const DestinationDetails: React.FC = () => {
   const { t } = useTranslation();
@@ -125,10 +91,28 @@ const DestinationDetails: React.FC = () => {
   // Handler for adding flight to cart
   const handleAddToCart = async (flight: Flight) => {
     try {
-      const response = await api.post('/cart/add', {
-        type: 'flight',
-        flightData: flight,
-        destinationId: destinationId
+      const response = await api.post('/cart', {
+        flightDetails: {
+          from: flight.legs[0].from.city,
+          to: flight.legs[0].to.city,
+          departureDate: flight.legs[0].from.date,
+          passengers: {
+            adults: flight.search_query.adt || 1,
+            children: flight.search_query.chd || 0,
+            infants: flight.search_query.inf || 0
+          },
+          selectedFlight: {
+            flightId: flight.legs[0].segments[0].flightnumber,
+            airline: flight.legs[0].segments[0].airline_name,
+            departureTime: flight.legs[0].from.date,
+            arrivalTime: flight.legs[0].to.date,
+            price: {
+              total: flight.price,
+              currency: flight.currency
+            },
+            class: flight.search_query.options.cabin || 'economy'
+          }
+        }
       });
       
       if (response.data.success) {
@@ -186,47 +170,84 @@ const DestinationDetails: React.FC = () => {
     getUserLocation();
   }, []);
 
-  const pollSearchResults = useCallback(async (searchId: string, maxAttempts = 10) => {
+  const pollSearchResults = useCallback(async (searchId: string, maxAttempts = 15) => {
     setIsPolling(true);
     let attempts = 0;
+    let lastComplete = 0;
+    let stuckCounter = 0;
+    let hasFoundResults = false;
     
     const poll = async () => {
       try {
         const results = await getSearchResults(searchId);
         console.log('Poll results:', results);
         
-        if (results.complete === 100 && results.result && results.result.length > 0) {
-          console.log('Found flights:', JSON.stringify(results.result, null, 2));
-          setFlights(results.result);
+        // Update flights if we have results
+        if (results.result && Array.isArray(results.result)) {
+          if (results.result.length > 0) {
+            console.log('Found flights:', JSON.stringify(results.result, null, 2));
+            setFlights(results.result);
+            hasFoundResults = true;
+          }
+        }
+
+        // Check completion status
+        const isComplete = results.complete >= 100;
+        const isStuck = results.complete === lastComplete;
+        
+        if (isStuck) {
+          stuckCounter++;
+        } else {
+          stuckCounter = 0;
+          lastComplete = results.complete;
+        }
+        
+        // Determine if we should continue polling
+        const shouldStopPolling = 
+          isComplete || 
+          (stuckCounter >= 3 && results.complete > 50) || // Only stop if we've made significant progress
+          attempts >= maxAttempts;
+        
+        if (shouldStopPolling) {
           setIsPolling(false);
           setIsLoading(false);
-        } else if (attempts < maxAttempts) {
-          attempts++;
-          console.log(`Poll attempt ${attempts} of ${maxAttempts}`);
-          setTimeout(poll, 3000);
-        } else {
+          
+          // Only show no results message if we're completely done and found nothing
+          if (!hasFoundResults && results.complete >= 100 && (!results.result || results.result.length === 0)) {
+            toast({
+              title: t('noFlights', 'No Flights Found'),
+              description: t('noFlightsAvailable', 'No flights are currently available for this destination. Please try different dates or check back later.'),
+              variant: 'default',
+            });
+          }
+          return;
+        }
+        
+        // Continue polling
+        attempts++;
+        console.log(`Poll attempt ${attempts} of ${maxAttempts}, completion: ${results.complete}%`);
+        setTimeout(poll, 2000);
+      } catch (error) {
+        console.error('Poll error:', error);
+        // Only show error if we haven't found any flights yet
+        if (flights.length === 0) {
           setIsPolling(false);
           setIsLoading(false);
           toast({
-            title: t('noFlights', 'No Flights Found'),
-            description: t('noFlightsAvailable', 'No flights are currently available for this destination. Please try different dates or check back later.'),
-            variant: 'default',
+            title: t('error', 'Error'),
+            description: t('flightSearchError', 'Failed to fetch flight results. Please try again.'),
+            variant: 'destructive',
           });
+        } else {
+          // If we already have flights, just stop polling silently
+          setIsPolling(false);
+          setIsLoading(false);
         }
-      } catch (error) {
-        console.error('Poll error:', error);
-        setIsPolling(false);
-        setIsLoading(false);
-        toast({
-          title: t('error', 'Error'),
-          description: t('flightSearchError', 'Failed to fetch flight results. Please try again.'),
-          variant: 'destructive',
-        });
       }
     };
 
     await poll();
-  }, [t, toast]);
+  }, [t, toast, flights.length]);
 
   // Fetch destination details
   useEffect(() => {
@@ -268,26 +289,28 @@ const DestinationDetails: React.FC = () => {
 
     setIsLoading(true);
     try {
-      const today = new Date();
-      const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      const formattedStartDate = today.toISOString().split('T')[0];
+      const currentDate = new Date();
+      const lastDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+      const formattedStartDate = currentDate.toISOString().split('T')[0];
       const formattedEndDate = lastDayOfMonth.toISOString().split('T')[0];
   
       console.log('Nearest airport:', nearestAirport);
       console.log('Destination airport code:', destination.quickInfo.airport);
       console.log('Destination object:', destination);
   
+      // Calculate date 15 days from now
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + 15);
+      const searchDate = format(futureDate, 'yyyy-MM-dd');
+
+      console.log('Searching for flights on:', searchDate); // Debug log
+
       const searchParams: FlightSearchParams = {
         flightSegments: [
           {
             from: nearestAirport.code,
             to: destination.quickInfo.airport,
-            date: formattedStartDate
-          },
-          {
-            from: destination.quickInfo.airport,
-            to: nearestAirport.code,
-            date: formattedEndDate
+            date: searchDate
           }
         ],
         passengers: {
@@ -295,7 +318,8 @@ const DestinationDetails: React.FC = () => {
           children: 0,
           infants: 0
         },
-        cabin: 'e'
+        cabin: 'e',
+        direct: false // Allow connections for better results
       };
 
       console.log('Search params:', searchParams);
