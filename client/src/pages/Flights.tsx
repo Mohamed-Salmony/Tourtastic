@@ -14,6 +14,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Slider } from '@/components/ui/slider';
 import { Flight, PassengerCount } from '@/services/flightService';
 import { Airport } from '@/services/airportService';
 import { toast } from '@/hooks/use-toast';
@@ -39,6 +42,148 @@ const searchFormSchema = z.object({
 
 type SearchFormValues = z.infer<typeof searchFormSchema>;
 
+type TimeOfDay = 'morning' | 'afternoon' | 'evening' | 'night';
+
+interface FilterState {
+  sortBy: 'price_asc' | 'price_desc' | 'duration_asc' | 'duration_desc';
+  selectedAirlines: string[];
+  timeOfDay: {
+    departure: TimeOfDay[];
+    arrival: TimeOfDay[];
+  };
+  priceRange: {
+    min: number;
+    max: number;
+  };
+}
+
+interface FilterSidebarProps {
+  filters: FilterState;
+  setFilters: React.Dispatch<React.SetStateAction<FilterState>>;
+  availableAirlines: string[];
+}
+
+const FilterSidebar: React.FC<FilterSidebarProps> = ({
+  filters,
+  setFilters,
+  availableAirlines,
+}) => {
+  const { t } = useTranslation();
+
+  return (
+    <Card className="sticky top-4 p-4">
+      <CardContent className="space-y-6">
+        {/* Sort By Filter */}
+        <div>
+          <h3 className="font-semibold mb-3">{t('sortBy', 'Sort By')}</h3>
+          <RadioGroup
+            value={filters.sortBy}
+            onValueChange={(value: FilterState['sortBy']) => 
+              setFilters(prev => ({ ...prev, sortBy: value }))
+            }
+            className="space-y-2"
+          >
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="price_asc" id="price_asc" />
+              <Label htmlFor="price_asc">{t('priceLowToHigh', 'Price: Low to High')}</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="price_desc" id="price_desc" />
+              <Label htmlFor="price_desc">{t('priceHighToLow', 'Price: High to Low')}</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="duration_asc" id="duration_asc" />
+              <Label htmlFor="duration_asc">{t('durationShortest', 'Duration: Shortest')}</Label>
+            </div>
+          </RadioGroup>
+        </div>
+
+        {/* Airlines Filter */}
+        <div>
+          <h3 className="font-semibold mb-3">{t('airlines', 'Airlines')}</h3>
+          <div className="space-y-2 max-h-48 overflow-y-auto">
+            {availableAirlines.map(airline => (
+              <div key={airline} className="flex items-center space-x-2">
+                <Checkbox
+                  id={airline}
+                  checked={filters.selectedAirlines.includes(airline)}
+                  onCheckedChange={(checked) => {
+                    setFilters(prev => ({
+                      ...prev,
+                      selectedAirlines: checked 
+                        ? [...prev.selectedAirlines, airline]
+                        : prev.selectedAirlines.filter(a => a !== airline)
+                    }));
+                  }}
+                />
+                <Label htmlFor={airline}>{airline}</Label>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Departure Time Filter */}
+        <div>
+          <h3 className="font-semibold mb-3">{t('departureTime', 'Departure Time')}</h3>
+          <div className="space-y-2">
+            {(['morning', 'afternoon', 'evening', 'night'] as const).map((time) => (
+              <div key={time} className="flex items-center space-x-2">
+                <Checkbox
+                  id={`departure_${time}`}
+                  checked={filters.timeOfDay.departure.includes(time)}
+                  onCheckedChange={(checked) => {
+                    setFilters(prev => ({
+                      ...prev,
+                      timeOfDay: {
+                        ...prev.timeOfDay,
+                        departure: checked
+                          ? [...prev.timeOfDay.departure, time]
+                          : prev.timeOfDay.departure.filter(t => t !== time)
+                      }
+                    }));
+                  }}
+                />
+                <Label htmlFor={`departure_${time}`} className="capitalize">
+                  {t(time, time)} 
+                  <span className="text-gray-500 text-sm ml-1">
+                    {time === 'morning' && '(5AM - 11:59AM)'}
+                    {time === 'afternoon' && '(12PM - 4:59PM)'}
+                    {time === 'evening' && '(5PM - 8:59PM)'}
+                    {time === 'night' && '(9PM - 4:59AM)'}
+                  </span>
+                </Label>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Price Range Filter */}
+        <div>
+          <h3 className="font-semibold mb-3">{t('priceRange', 'Price Range')}</h3>
+          <div className="space-y-4">
+            <Slider
+              value={[filters.priceRange.min, filters.priceRange.max]}
+              min={0}
+              max={10000}
+              step={100}
+              onValueChange={([min, max]) => {
+                setFilters(prev => ({
+                  ...prev,
+                  priceRange: { min, max }
+                }));
+              }}
+            />
+            <div className="flex justify-between text-sm">
+              <span>{filters.priceRange.min}</span>
+              <span>{filters.priceRange.max}</span>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
 const Flights = () => {
   const { t } = useTranslation();
   const location = useLocation();
@@ -46,6 +191,19 @@ const Flights = () => {
   const [hasSearched, setHasSearched] = useState(false);
   const [selectedFlights, setSelectedFlights] = useState<Record<number, Flight>>({});
   const [showDetails, setShowDetails] = useState<string | null>(null);
+  const [availableAirlines, setAvailableAirlines] = useState<string[]>([]);
+  const [filters, setFilters] = useState<FilterState>({
+    sortBy: 'price_asc',
+    selectedAirlines: [],
+    timeOfDay: {
+      departure: [],
+      arrival: []
+    },
+    priceRange: {
+      min: 0,
+      max: 10000
+    }
+  });
   const [fromAirportNames, setFromAirportNames] = useState<string[]>(['']);
   const [toAirportNames, setToAirportNames] = useState<string[]>(['']);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -75,6 +233,24 @@ const Flights = () => {
   const direct = watch('direct');
 
   const { searchSections, startMultiSearch, loadMore } = useMultiCitySearch();
+
+  // Update available airlines whenever search results change
+  useEffect(() => {
+    if (searchSections.length > 0) {
+      const uniqueAirlines = new Set<string>();
+      searchSections.forEach(section => {
+        section.flights.forEach(flight => {
+          if (flight.legs?.[0]?.segments?.[0]?.airline_name) {
+            uniqueAirlines.add(flight.legs[0].segments[0].airline_name);
+          }
+        });
+      });
+      
+      // Update available airlines for filtering
+      const sortedAirlines = Array.from(uniqueAirlines).sort();
+      setAvailableAirlines(sortedAirlines);
+    }
+  }, [searchSections]);
 
   const onSubmit = useCallback(async (data: SearchFormValues) => {
     try {
@@ -623,15 +799,180 @@ const Flights = () => {
       {/* Results Section */}
       {hasSearched && (
         <div className="container-custom py-8">
-          <MultiCityFlightResults
-            searchSections={searchSections}
-            passengers={{ adults: passengers.adults, children: passengers.children, infants: passengers.infants }}
-            onFlightSelection={handleFlightSelection}
-            onLoadMore={loadMore}
-            onAddToCart={handleAddToCart}
-            selectedFlights={selectedFlights}
-            showDetails={showDetails}
-          />
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            {/* Filters Sidebar */}
+            <div className="md:col-span-1">
+              <Card className="sticky top-4 p-4">
+                <CardContent className="space-y-6">
+                  {/* Sort By Filter */}
+                  <div>
+                    <h3 className="font-semibold mb-3">{t('sortBy', 'Sort By')}</h3>
+                    <RadioGroup
+                      value={filters.sortBy}
+                      onValueChange={(value: FilterState['sortBy']) => 
+                        setFilters(prev => ({ ...prev, sortBy: value }))
+                      }
+                      className="space-y-2"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="price_asc" id="price_asc" />
+                        <Label htmlFor="price_asc">{t('priceLowToHigh', 'Price: Low to High')}</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="price_desc" id="price_desc" />
+                        <Label htmlFor="price_desc">{t('priceHighToLow', 'Price: High to Low')}</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="duration_asc" id="duration_asc" />
+                        <Label htmlFor="duration_asc">{t('durationShortest', 'Duration: Shortest')}</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+
+                  {/* Airlines Filter */}
+                  <div>
+                    <h3 className="font-semibold mb-3">{t('airlines', 'Airlines')}</h3>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {availableAirlines.map(airline => (
+                        <div key={airline} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={airline}
+                            checked={filters.selectedAirlines.includes(airline)}
+                            onCheckedChange={() => {
+                              setFilters(prev => ({
+                                ...prev,
+                                selectedAirlines: prev.selectedAirlines.includes(airline)
+                                  ? prev.selectedAirlines.filter(a => a !== airline)
+                                  : [...prev.selectedAirlines, airline]
+                              }));
+                            }}
+                          />
+                          <Label htmlFor={airline}>{airline}</Label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Departure Time Filter */}
+                  <div>
+                    <h3 className="font-semibold mb-3">{t('departureTime', 'Departure Time')}</h3>
+                    <div className="space-y-2">
+                      {(['morning', 'afternoon', 'evening', 'night'] as const).map((time) => (
+                        <div key={time} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`departure_${time}`}
+                            checked={filters.timeOfDay.departure.includes(time)}
+                            onCheckedChange={(checked) => {
+                              setFilters(prev => ({
+                                ...prev,
+                                timeOfDay: {
+                                  ...prev.timeOfDay,
+                                  departure: checked
+                                    ? [...prev.timeOfDay.departure, time]
+                                    : prev.timeOfDay.departure.filter(t => t !== time)
+                                }
+                              }));
+                            }}
+                          />
+                          <Label htmlFor={`departure_${time}`} className="capitalize">
+                            {t(time, time)} 
+                            <span className="text-gray-500 text-sm ml-1">
+                              {time === 'morning' && '(5AM - 11:59AM)'}
+                              {time === 'afternoon' && '(12PM - 4:59PM)'}
+                              {time === 'evening' && '(5PM - 8:59PM)'}
+                              {time === 'night' && '(9PM - 4:59AM)'}
+                            </span>
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Price Range Filter */}
+                  <div>
+                    <h3 className="font-semibold mb-3">{t('priceRange', 'Price Range')}</h3>
+                    <div className="space-y-4">
+                      <Slider
+                        value={[filters.priceRange.min, filters.priceRange.max]}
+                        min={0}
+                        max={10000}
+                        step={100}
+                        onValueChange={([min, max]) => {
+                          setFilters(prev => ({
+                            ...prev,
+                            priceRange: { min, max }
+                          }));
+                        }}
+                      />
+                      <div className="flex justify-between text-sm">
+                        <span>{filters.priceRange.min}</span>
+                        <span>{filters.priceRange.max}</span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Results */}
+            <div className="md:col-span-3">
+              <MultiCityFlightResults
+                searchSections={searchSections.map(section => ({
+                  ...section,
+                  flights: section.flights
+                    .filter(flight => {
+                      // Apply airline filter
+                      if (filters.selectedAirlines.length > 0 &&
+                          !filters.selectedAirlines.includes(flight.legs[0].segments[0].airline_name)) {
+                        return false;
+                      }                      // Apply price range filter
+                      if (flight.price < filters.priceRange.min || 
+                          flight.price > filters.priceRange.max) {
+                        return false;
+                      }
+
+                      // Apply time of day filter for departure
+                      if (filters.timeOfDay.departure.length > 0) {
+                        const hour = new Date(flight.legs[0].from.date).getHours();
+                        const timeOfDay = 
+                          hour >= 5 && hour < 12 ? 'morning' :
+                          hour >= 12 && hour < 17 ? 'afternoon' :
+                          hour >= 17 && hour < 21 ? 'evening' : 'night';
+                        
+                        if (!filters.timeOfDay.departure.includes(timeOfDay)) {
+                          return false;
+                        }
+                      }
+
+                      return true;
+                    })
+                    .sort((a, b) => {
+                      switch (filters.sortBy) {
+                        case 'price_asc':
+                          return a.price - b.price;
+                        case 'price_desc':
+                          return b.price - a.price;
+                        case 'duration_asc': {
+                          const durationA = new Date(a.legs[0].to.date).getTime() - 
+                                          new Date(a.legs[0].from.date).getTime();
+                          const durationB = new Date(b.legs[0].to.date).getTime() - 
+                                          new Date(b.legs[0].from.date).getTime();
+                          return durationA - durationB;
+                        }
+                        default:
+                          return 0;
+                      }
+                    })
+                }))}
+                passengers={{ adults: passengers.adults, children: passengers.children, infants: passengers.infants }}
+                onFlightSelection={handleFlightSelection}
+                onLoadMore={loadMore}
+                onAddToCart={handleAddToCart}
+                selectedFlights={selectedFlights}
+                showDetails={showDetails}
+              />
+            </div>
+          </div>
         </div>
       )}
     </>

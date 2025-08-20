@@ -265,35 +265,60 @@ const Cart = () => {
             const paymentStatus = booking?.paymentDetails?.status || 'pending';
 
             return (
-              <Card key={booking._id} className="p-4 md:p-6">
+              <Card key={booking._id} className="p-4 md:p-6 bg-gradient-to-br from-white to-gray-50 border-2 hover:shadow-lg transition-all duration-300">
                 <CardContent className="p-0">
                   <div className="flex flex-col lg:flex-row justify-between gap-6">
                     {/* Flight Details */}
                     <div className="flex-1 text-center md:text-left">
-                      <div className="flex items-center justify-center md:justify-start gap-2 mb-4">
-                        <Plane className="h-5 w-5 text-tourtastic-blue" />
-                        <h2 className="text-xl font-semibold">{airline}</h2>
-                        <span className="text-sm text-gray-500">({flightId})</span>
+                      <div className="flex items-center justify-center md:justify-start gap-4 mb-6 bg-tourtastic-blue bg-opacity-10 p-6 rounded-lg">
+                        <div className="relative h-24 w-24 flex-shrink-0">
+                          <img
+                            src={`/${airline.replace(/\s+/g, '-')}-Logo.png`}
+                            alt={`${airline} logo`}
+                            className="object-contain w-full h-full"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.src = '/placeholder.svg';
+                            }}
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <h2 className="text-xl font-bold text-tourtastic-blue">{airline}</h2>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-600">Flight {flightId}</span>
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div>
-                          <div className="text-sm text-gray-500 mb-1">{t('route', 'Route')}</div>
-                          <div className="font-medium">
-                            {from} → {to}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-white p-4 rounded-lg shadow-sm">
+                        <div className="border-r border-gray-200 pr-4">
+                          <div className="flex items-center gap-2 text-tourtastic-blue mb-2">
+                            <Calendar className="h-4 w-4" />
+                            <div className="text-sm font-medium">{t('route', 'Route')}</div>
+                          </div>
+                          <div className="font-semibold text-lg">
+                            <span className="text-gray-700">{from}</span>
+                            <span className="mx-2 text-tourtastic-blue">→</span>
+                            <span className="text-gray-700">{to}</span>
+                          </div>
+                        </div>
+
+                        <div className="border-r border-gray-200 pr-4">
+                          <div className="flex items-center gap-2 text-tourtastic-blue mb-2">
+                            <Calendar className="h-4 w-4" />
+                            <div className="text-sm font-medium">{t('departure', 'Departure')}</div>
+                          </div>
+                          <div className="font-semibold text-lg text-gray-700">
+                            {departureDate ? format(new Date(departureDate), 'MMM dd, yyyy hh:mm a') : 'N/A'}
                           </div>
                         </div>
 
                         <div>
-                          <div className="text-sm text-gray-500 mb-1">{t('departure', 'Departure')}</div>
-                          <div className="font-medium">
-                            {departureDate ? format(new Date(departureDate), 'MMM dd, yyyy HH:mm') : 'N/A'}
+                          <div className="flex items-center gap-2 text-tourtastic-blue mb-2">
+                            <Users className="h-4 w-4" />
+                            <div className="text-sm font-medium">{t('passengers', 'Passengers')}</div>
                           </div>
-                        </div>
-
-                        <div>
-                          <div className="text-sm text-gray-500 mb-1">{t('passengers', 'Passengers')}</div>
-                          <div className="font-medium">
+                          <div className="font-semibold text-lg text-gray-700">
                             {passengers.adults} {t('adults', 'Adults')}
                             {passengers.children > 0 && `, ${passengers.children} ${t('children', 'Children')}`}
                             {passengers.infants > 0 && `, ${passengers.infants} ${t('infants', 'Infants')}`}
@@ -301,52 +326,87 @@ const Cart = () => {
                         </div>
                       </div>
 
-                      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <div className="text-sm text-gray-500 mb-1">{t('class', 'Class')}</div>
-                          <div className="font-medium capitalize">{cabinClass}</div>
+                      <div className="mt-6 flex flex-wrap gap-4">
+                        <div className="flex-1 min-w-[200px] bg-gray-50 p-3 rounded-lg">
+                          <div className="flex items-center gap-2 text-tourtastic-blue mb-2">
+                            <div className="text-sm font-medium">{t('class', 'Class')}</div>
+                          </div>
+                          <div className="font-semibold text-lg text-gray-700">
+                            {(() => {
+                              const classCode = cabinClass.toLowerCase();
+                              switch(classCode) {
+                                case 'y':
+                                case 'e':
+                                case 'economy':
+                                  return t('economy', 'Economy Class');
+                                case 'w':
+                                case 'pe':
+                                case 'premium_economy':
+                                  return t('premiumEconomy', 'Premium Economy Class');
+                                case 'c':
+                                case 'b':
+                                case 'business':
+                                  return t('business', 'Business Class');
+                                case 'f':
+                                case 'first':
+                                  return t('first', 'First Class');
+                                default:
+                                  // If it's a single letter or short code, try to map it to a full name
+                                  if (classCode.length <= 2) {
+                                    return t('economy', 'Economy Class'); // Default to Economy if unknown short code
+                                  }
+                                  return t(classCode, classCode.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
+                              }
+                            })()}
+                          </div>
                         </div>
 
-                        <div>
-                          <div className="text-sm text-gray-500 mb-1">{t('bookingStatus', 'Booking Status')}</div>
-                          <div className="font-medium capitalize">{status}</div>
+                        <div className="flex-1 min-w-[200px] bg-gray-50 p-3 rounded-lg">
+                          <div className="flex items-center gap-2 text-tourtastic-blue mb-2">
+                            <div className="text-sm font-medium">{t('bookingStatus', 'Booking Status')}</div>
+                          </div>
+                          <div className={`font-semibold text-lg capitalize ${
+                            status === 'pending' ? 'text-yellow-600' : 
+                            status === 'confirmed' ? 'text-green-600' : 
+                            'text-gray-700'
+                          }`}>{status}</div>
                         </div>
                       </div>
                     </div>
 
                     {/* Price and Actions */}
-                    <div className="lg:w-64 flex flex-col justify-between items-center md:items-end">
-                      <div className="mb-4 text-center md:text-right">
-                        <div className="text-sm text-gray-500 mb-1">{t('totalPrice', 'Total Price')}</div>
-                        <div className="text-2xl font-bold">
+                    <div className="lg:w-72 flex flex-col justify-between items-center md:items-end">
+                      <div className="w-full bg-tourtastic-blue bg-opacity-10 rounded-lg p-4 text-center md:text-right mb-4">
+                        <div className="text-sm font-medium text-tourtastic-blue mb-1">{t('totalPrice', 'Total Price')}</div>
+                        <div className="text-3xl font-bold text-tourtastic-blue">
                           {price.currency} {price.total}
                         </div>
                       </div>
 
-                      <div className="flex flex-col gap-2 w-full md:w-auto">
+                      <div className="flex flex-col gap-3 w-full">
                         <Button
                           onClick={() => handleProceedToPayment(booking)}
-                          className="w-full bg-tourtastic-blue hover:bg-tourtastic-dark-blue text-white flex items-center justify-center gap-2"
+                          className="w-full bg-tourtastic-blue hover:bg-tourtastic-dark-blue text-white flex items-center justify-center gap-2 py-6 rounded-lg shadow-md hover:shadow-lg transition-all duration-300"
                           disabled={paymentStatus === 'completed' || processingPayment === booking._id}
                         >
-                          <CreditCard className="h-4 w-4" />
+                          <CreditCard className="h-5 w-5" />
                           {processingPayment === booking._id ? (
-                            <span className="animate-pulse">{t('processing', 'Processing...')}</span>
+                            <span className="animate-pulse text-lg">{t('processing', 'Processing...')}</span>
                           ) : paymentStatus === 'completed' ? (
-                            t('paid', 'Paid')
+                            <span className="text-lg">{t('paid', 'Paid')}</span>
                           ) : (
-                            t('proceedToPayment', 'Proceed to Payment')
+                            <span className="text-lg">{t('proceedToPayment', 'Proceed to Payment')}</span>
                           )}
                         </Button>
 
                         <Button
                           onClick={() => handleDelete(booking)}
                           variant="outline"
-                          className="w-full text-red-500 hover:text-red-600 hover:bg-red-50"
+                          className="w-full text-red-500 hover:text-red-600 hover:bg-red-50 py-4 rounded-lg border-2 border-red-200 hover:border-red-400 transition-all duration-300"
                           disabled={status !== 'pending' || processingPayment === booking._id}
                         >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          {t('delete', 'Delete')}
+                          <Trash2 className="h-5 w-5 mr-2" />
+                          <span className="text-lg">{t('delete', 'Delete')}</span>
                         </Button>
                       </div>
                     </div>

@@ -25,9 +25,10 @@ const getSeeruApiInstance = () => {
 // @access  Public
 // Add timeout configuration to Seeru API calls
 const seeruApiConfig = {
-  timeout: 30000, // 30 seconds timeout
-  retry: 3,
-  retryDelay: 1000
+  timeout: 15000, // 15 seconds timeout for quicker feedback
+  retry: 2,
+  retryDelay: 1000,
+  maxEmptyPolls: 5 // Stop after 5 empty results
 };
 
 // Update the searchFlights function to use timeout
@@ -108,10 +109,17 @@ exports.getFlightSearchResults = asyncHandler(async (req, res) => {
     
     const response = await seeruApi.get(resultUrl, { params });
 
+    // Check if the search is stalled with no results
+    const hasNoResults = !Array.isArray(response.data.result) || response.data.result.length === 0;
+    const searchProgress = typeof response.data.complete === 'number' ? response.data.complete : 0;
+    const isStalled = hasNoResults && searchProgress >= 50; // Consider stalled if no results at 50% progress
+
     // Normalize complete and last_result
-    const completePercent = typeof response.data.complete === 'number'
-      ? response.data.complete
-      : (response.data.complete ? 100 : 0);
+    const completePercent = isStalled ? 100 : (
+      typeof response.data.complete === 'number'
+        ? response.data.complete
+        : (response.data.complete ? 100 : 0)
+    );
     const lastResult = typeof response.data.last_result === 'number' ? response.data.last_result : undefined;
 
     // Dedupe by trip_id within this batch in case Seeru returns duplicates in same payload
@@ -130,11 +138,17 @@ exports.getFlightSearchResults = asyncHandler(async (req, res) => {
       }
     });
 
+    const transformedFlights = Array.from(tripIdToTransformed.values());
     const transformedResults = {
       complete: completePercent,
-      result: Array.from(tripIdToTransformed.values()),
-      last_result: lastResult
+      result: transformedFlights,
+      last_result: lastResult,
+      status: transformedFlights.length === 0 && completePercent >= 50 ? 'no_results' : 'ok'
     };
+    
+    if (transformedFlights.length === 0 && completePercent >= 100) {
+      transformedResults.message = 'No flights found for this route and date combination.';
+    }
     
     res.status(200).json(transformedResults);
     
@@ -423,7 +437,15 @@ function getAirlineName(iataCode) {
     'J9': 'Jazeera Airways',
     'R5': 'Royal Jordanian',
     'BA': 'British Airways',
-    'LH': 'Lufthansa'
+    'LH': 'Lufthansa',
+    'OS': 'Austrian Airlines',
+    'CA': 'Air China',
+    'I2': 'Iberia Express',
+    'LX': 'Swiss International Air Lines',
+    'HU': 'Hainan Airlines',
+    'MU': 'China Eastern Airlines',
+    'AF': 'Air France',
+    'SQ': 'Singapore Airlines'
   };
   return airlineMap[iataCode] || iataCode;
 }

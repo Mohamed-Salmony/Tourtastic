@@ -71,10 +71,14 @@ const Register: React.FC = () => {
       const responseData = response.data;
       if (responseData.success) {
         // Store the token
-        localStorage.setItem('token', responseData.token);
+        localStorage.setItem('token', responseData.accessToken);
         
         // Automatically log in the user
-        login(responseData.accessToken, responseData.refreshToken, responseData.user);
+        login(
+          responseData.accessToken,
+          responseData.refreshToken,
+          responseData.user
+        );
         
         toast({
           title: "Success",

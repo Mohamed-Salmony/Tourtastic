@@ -42,13 +42,14 @@ const Login: React.FC = () => {
       console.log('Login response:', response.data);
 
       if (response.data.success) {
-        console.log('Login successful, calling login function with:', {
-          token: response.data.token,
-          user: response.data.user
-        });
+        console.log('Login successful, calling login function');
         
-        // Log the user in
-        login(response.data.accessToken, response.data.refreshToken, response.data.user);
+        // Log the user in with both tokens and user data
+        login(
+          response.data.accessToken,
+          response.data.refreshToken,
+          response.data.user
+        );
         
         // Sync local cart items if any exist
         const localCartItems = JSON.parse(localStorage.getItem('cartItems') || '[]');

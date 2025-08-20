@@ -20,7 +20,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   }, [isRTL, i18n.language]);
 
   return (
-    <div className={`flex flex-col min-h-screen ${isRTL ? 'rtl' : 'ltr'}`}>
+    <div 
+      className={`flex flex-col min-h-screen ${isRTL ? 'rtl' : 'ltr'}`}
+      style={{
+        direction: isRTL ? 'rtl' : 'ltr',
+        textAlign: isRTL ? 'right' : 'left'
+      }}
+    >
       <Header />
       <main className="flex-grow pt-16">
         {children}

@@ -19,14 +19,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, []);
 
-  const login = (newToken: string) => {
-    localStorage.setItem('token', newToken);
-    setToken(newToken);
+  const login = (tokens: { accessToken: string, refreshToken: string }) => {
+    localStorage.setItem('token', tokens.accessToken);
+    localStorage.setItem('refreshToken', tokens.refreshToken);
+    setToken(tokens.accessToken);
     setIsAuthenticated(true);
   };
 
   const logout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
     setToken(null);
     setIsAuthenticated(false);
     navigate('/login');

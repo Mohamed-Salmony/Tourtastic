@@ -16,7 +16,7 @@ const Newsletter: React.FC = () => {
     
     // Simulate API call
     setTimeout(() => {
-      toast.success('Thank you for subscribing to our newsletter!');
+      toast.success(t('newsletter.success', 'Thank you for subscribing to our newsletter!'));
       setEmail('');
       setIsSubmitting(false);
     }, 1000);
