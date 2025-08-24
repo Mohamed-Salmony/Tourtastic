@@ -7,12 +7,24 @@ const NotificationSchema = new mongoose.Schema({
     required: true
   },
   title: {
-    type: String,
-    required: true
+    en: {
+      type: String,
+      required: true
+    },
+    ar: {
+      type: String,
+      required: true
+    }
   },
   message: {
-    type: String,
-    required: true
+    en: {
+      type: String,
+      required: true
+    },
+    ar: {
+      type: String,
+      required: true
+    }
   },
   type: {
     type: String,

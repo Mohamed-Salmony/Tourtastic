@@ -17,18 +17,23 @@ import {
 } from '@/components/ui/card';
 import { useTranslation } from 'react-i18next';
 
-// Form schema for validation
-const contactFormSchema = z.object({
-  name: z.string().min(2, { message: 'Name must be at least 2 characters' }),
-  email: z.string().email({ message: 'Please enter a valid email address' }),
-  subject: z.string().min(5, { message: 'Subject must be at least 5 characters' }),
-  message: z.string().min(10, { message: 'Message must be at least 10 characters' }),
-});
-
-type ContactFormValues = z.infer<typeof contactFormSchema>;
+type ContactFormValues = {
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+};
 
 const Contact: React.FC = () => {
   const { t } = useTranslation();
+  
+  // Form schema for validation
+  const contactFormSchema = z.object({
+    name: z.string().min(2, { message: t('nameValidation', 'Name must be at least 2 characters') }),
+    email: z.string().email({ message: t('emailValidation', 'Please enter a valid email address') }),
+    subject: z.string().min(5, { message: t('subjectValidation', 'Subject must be at least 5 characters') }),
+    message: z.string().min(10, { message: t('messageValidation', 'Message must be at least 10 characters') }),
+  });
   const { 
     register, 
     handleSubmit, 
@@ -40,13 +45,22 @@ const Contact: React.FC = () => {
 
   const onSubmit = async (data: ContactFormValues) => {
     try {
-      // Simulate API call with timeout
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      console.log('Form data:', data);
-      toast.success('Your message has been sent! We will get back to you soon.');
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      toast.success(t('contactFormSuccess', 'Your message has been sent! We will get back to you soon.'));
       reset();
     } catch (error) {
-      toast.error('Failed to send message. Please try again later.');
+      toast.error(t('contactFormError', 'Failed to send message. Please try again later.'));
       console.error('Contact form error:', error);
     }
   };
@@ -55,9 +69,9 @@ const Contact: React.FC = () => {
     <>
       <div className="bg-gradient-to-r from-gray-50 to-gray-100 py-12">
         <div className="container-custom">
-          <h1 className="text-4xl font-bold mb-4">Contact Us</h1>
+          <h1 className="text-4xl font-bold mb-4">{t('contactUs', 'Contact Us')}</h1>
           <p className="text-gray-600">
-            Have questions? We're here to help. Reach out to our team for assistance.
+            {t('contactIntro', "Have questions? We're here to help. Reach out to our team for assistance.")}
           </p>
         </div>
       </div>

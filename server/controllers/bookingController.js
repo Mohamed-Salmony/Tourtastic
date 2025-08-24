@@ -1,10 +1,47 @@
-const Booking = require("../models/Booking");
+const FlightBooking = require("../models/FlightBooking");
 const User = require("../models/User"); // Needed to get user details
 const asyncHandler = require("../middleware/asyncHandler");
+const fs = require('fs');
+const path = require('path');
+
+// Load airports data to try to resolve IATA codes when missing
+const airportsJsonPath = path.join(__dirname, '../data/airports.json');
+let airports = [];
+try {
+  airports = JSON.parse(fs.readFileSync(airportsJsonPath, 'utf8'));
+} catch (err) {
+  console.warn('Could not load airports.json for IATA resolution:', err.message);
+}
+
+const findAirportIataForLabel = (label) => {
+  if (!label) return null;
+  const s = String(label).trim().toLowerCase();
+  // If it's already a 3-letter IATA
+  if (/^[a-z]{3}$/.test(s)) return s.toUpperCase();
+
+  // Try to match exact iata_code
+  const byIata = airports.find(a => a.iata_code && a.iata_code.toLowerCase() === s);
+  if (byIata) return byIata.iata_code;
+
+  // Try matching by name, municipality or Arabic equivalents
+  const byName = airports.find(a => {
+    return (
+      (a.name && a.name.toLowerCase().includes(s)) ||
+      (a.name_arbic && a.name_arbic.toLowerCase().includes(s)) ||
+      (a.municipality && a.municipality.toLowerCase().includes(s)) ||
+      (a.municipality_arbic && a.municipality_arbic.toLowerCase().includes(s)) ||
+      (a.country && a.country.toLowerCase().includes(s)) ||
+      (a.country_arbic && a.country_arbic.toLowerCase().includes(s))
+    );
+  });
+  if (byName) return byName.iata_code;
+
+  return null;
+};
 
 // Helper function to generate a unique booking ID (Example: BK-1001)
 async function generateBookingId() {
-  const lastBooking = await Booking.findOne().sort({ createdAt: -1 });
+  const lastBooking = await FlightBooking.findOne().sort({ createdAt: -1 });
   let nextIdNumber = 1001;
   if (lastBooking && lastBooking.bookingId) {
     const lastIdNumber = parseInt(lastBooking.bookingId.split("-")[1]);
@@ -29,6 +66,8 @@ exports.createBooking = asyncHandler(async (req, res, next) => {
 
   const { flightDetails } = req.body;
 
+  console.log('createBooking called by user:', req.user ? req.user.id : 'no-user', 'flightDetails present:', !!flightDetails);
+
   // Basic validation for flight bookings
   if (!flightDetails || !flightDetails.selectedFlight) {
     return res.status(400).json({ success: false, message: "Missing required flight booking details" });
@@ -43,6 +82,14 @@ exports.createBooking = asyncHandler(async (req, res, next) => {
     selectedFlight
   } = flightDetails;
 
+  // Attempt to resolve IATA codes if not provided in the payload
+  const resolvedFromIata = flightDetails.fromIata || findAirportIataForLabel(from) || null;
+  const resolvedToIata = flightDetails.toIata || findAirportIataForLabel(to) || null;
+
+  // Resolve airline code/logo from selectedFlight if not top-level provided
+  const resolvedAirlineCode = flightDetails.airlineCode || selectedFlight?.airlineCode || selectedFlight?.airline_code || null;
+  const resolvedAirlineLogo = flightDetails.airlineLogo || selectedFlight?.airlineLogo || selectedFlight?.airline_logo_url || null;
+
   // Format the booking details
   const bookingData = {
     type: 'Flight',
@@ -55,23 +102,100 @@ exports.createBooking = asyncHandler(async (req, res, next) => {
       passengers,
       flight: selectedFlight
     },
-    amount: selectedFlight.price.total,
+    // amount will be resolved below from selectedFlight (robustly)
+    amount: null,
   };
 
   // Generate a unique booking ID
   const bookingId = await generateBookingId();
 
-  const booking = await Booking.create({
+  // Use values from bookingData when creating the DB record
+  const { type, destination, bookingDate, details, amount } = bookingData;
+
+  // Normalize selectedFlight/raw flight object to extract core fields required by schema
+  const rawFlight = details.flight || selectedFlight || {};
+
+  const extractFlightId = (f) => {
+    return (
+      f.flightId || f.flightnumber || f.trip_id ||
+      (f.legs && f.legs[0] && f.legs[0].segments && f.legs[0].segments[0] && (f.legs[0].segments[0].flightnumber || f.legs[0].segments[0].flightId)) ||
+      ''
+    );
+  };
+
+  const extractAirline = (f) => {
+    return (
+      f.airline || f.airline_name ||
+      (f.legs && f.legs[0] && f.legs[0].segments && f.legs[0].segments[0] && (f.legs[0].segments[0].airline_name || f.legs[0].segments[0].airline)) ||
+      ''
+    );
+  };
+
+  const extractDate = (val) => {
+    if (!val) return null;
+    const d = new Date(val);
+    if (!isNaN(d.getTime())) return d;
+    return null;
+  };
+
+  const flightIdVal = extractFlightId(rawFlight);
+  const airlineVal = extractAirline(rawFlight);
+  const departureVal = extractDate(rawFlight.departureTime) || extractDate(rawFlight.legs?.[0]?.from?.date) || extractDate(details.departureDate) || new Date();
+  const arrivalVal = extractDate(rawFlight.arrivalTime) || extractDate(rawFlight.legs?.[0]?.to?.date) || new Date(departureVal.getTime() + 2 * 60 * 60 * 1000); // default +2h
+
+  // Normalize price object
+  let priceObj = { total: 0, currency: 'USD' };
+  if (rawFlight.price && typeof rawFlight.price === 'object') {
+    priceObj.total = Number(rawFlight.price.total || rawFlight.price.amount || 0) || 0;
+    priceObj.currency = rawFlight.price.currency || rawFlight.price.currency_code || 'USD';
+  } else if (typeof rawFlight.price === 'number') {
+    priceObj.total = rawFlight.price;
+    priceObj.currency = rawFlight.currency || 'USD';
+  } else if (selectedFlight && selectedFlight.price && typeof selectedFlight.price === 'object') {
+    priceObj.total = Number(selectedFlight.price.total || 0) || 0;
+    priceObj.currency = selectedFlight.price.currency || 'USD';
+  }
+
+  // set bookingData.amount for bookkeeping
+  bookingData.amount = priceObj.total;
+
+  // Create a FlightBooking document (specific collection for flights)
+  const booking = await FlightBooking.create({
     bookingId,
     userId: req.user.id,
-    customerName: user.name, // Denormalize user name
-    customerEmail: user.email, // Denormalize user email
-    type,
-    destination, // Optional based on type
-    bookingDate,
-    details, // Contains flight/hotel specifics from user selection
-    amount,
-    status: "pending", // Initial status
+    customerName: user.name,
+    customerEmail: user.email,
+    flightDetails: {
+      from: details.from,
+      to: details.to,
+      fromIata: resolvedFromIata,
+      toIata: resolvedToIata,
+      departureDate: details.departureDate,
+      passengers: details.passengers,
+      selectedFlight: {
+        flightId: flightIdVal || '',
+        airline: airlineVal || '',
+        departureTime: departureVal,
+        arrivalTime: arrivalVal,
+        price: priceObj,
+        class: details.flight?.class || details.flight?.cabin || 'economy',
+        airlineCode: resolvedAirlineCode,
+        airlineLogo: resolvedAirlineLogo,
+        // store raw provider flight object for full UI rendering
+        raw: details.flight || selectedFlight || {}
+      }
+    },
+    status: "pending",
+    paymentStatus: "pending",
+    ticketDetails: {
+      additionalDocuments: []
+    },
+    paymentDetails: {
+      status: "pending",
+      currency: details.flight?.price?.currency || 'USD',
+      transactions: []
+    },
+    timeline: [{ status: 'created', timestamp: new Date(), description: 'Booking created and added to cart' }]
   });
 
   res.status(201).json({
@@ -84,13 +208,32 @@ exports.createBooking = asyncHandler(async (req, res, next) => {
 // @route   GET /api/bookings/my
 // @access  Private
 exports.getMyBookings = asyncHandler(async (req, res, next) => {
-  const bookings = await Booking.find({ userId: req.user.id }).sort({ createdAt: -1 });
+  const bookings = await FlightBooking.find({ userId: req.user.id }).sort({ createdAt: -1 });
 
   res.status(200).json({
     success: true,
     count: bookings.length,
     data: bookings,
   });
+});
+
+// @desc    Delete a user's own booking
+// @route   DELETE /api/bookings/:id
+// @access  Private (user must own the booking)
+exports.deleteBooking = asyncHandler(async (req, res, next) => {
+  const booking = await FlightBooking.findById(req.params.id);
+  if (!booking) {
+    return res.status(404).json({ success: false, message: 'Booking not found' });
+  }
+
+  // Only allow deletion if the booking belongs to the requesting user
+  if (booking.userId.toString() !== req.user.id.toString()) {
+    return res.status(403).json({ success: false, message: 'Not authorized to delete this booking' });
+  }
+
+  await booking.deleteOne();
+
+  res.status(200).json({ success: true, data: {} });
 });
 
 // Note: Admin booking management (get all, get by ID, update, delete) will be in adminController

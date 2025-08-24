@@ -26,6 +26,15 @@ const AdminUsers = lazy(() => import('./pages/admin/Users'));
 const AdminDestinations = lazy(() => import('./pages/admin/Destinations'));
 const AdminReports = lazy(() => import('./pages/admin/Reports'));
 
+// Support pages
+const Support247 = lazy(() => import('./pages/support/Support247'));
+const HelpCenter = lazy(() => import('./pages/support/HelpCenter'));
+const FAQs = lazy(() => import('./pages/support/FAQs'));
+const BookingPolicy = lazy(() => import('./pages/support/BookingPolicy'));
+const PrivacyPolicy = lazy(() => import('./pages/support/PrivacyPolicy'));
+const TermsConditions = lazy(() => import('./pages/support/TermsConditions'));
+const CookiePolicy = lazy(() => import('./pages/support/CookiePolicy'));
+
 // Loading component
 const PageLoader = () => (
   <div className="flex items-center justify-center min-h-[400px]">
@@ -61,6 +70,15 @@ const AppRoutes = () => {
         <Route path="/admin/destinations" element={<RequireAuth><Suspense fallback={<PageLoader />}><AdminLayout><AdminDestinations /></AdminLayout></Suspense></RequireAuth>} />
         <Route path="/admin/reports" element={<RequireAuth><Suspense fallback={<PageLoader />}><AdminLayout><AdminReports /></AdminLayout></Suspense></RequireAuth>} />
         <Route path="/admin/profile" element={<RequireAuth><Suspense fallback={<PageLoader />}><AdminLayout><AdminProfile /></AdminLayout></Suspense></RequireAuth>} />
+
+        {/* Support Pages */}
+        <Route path="/support/247-support" element={<Suspense fallback={<PageLoader />}><Support247 /></Suspense>} />
+        <Route path="/support/help-center" element={<Suspense fallback={<PageLoader />}><HelpCenter /></Suspense>} />
+        <Route path="/support/faqs" element={<Suspense fallback={<PageLoader />}><FAQs /></Suspense>} />
+        <Route path="/support/booking-policy" element={<Suspense fallback={<PageLoader />}><BookingPolicy /></Suspense>} />
+        <Route path="/support/privacy-policy" element={<Suspense fallback={<PageLoader />}><PrivacyPolicy /></Suspense>} />
+        <Route path="/support/terms-conditions" element={<Suspense fallback={<PageLoader />}><TermsConditions /></Suspense>} />
+        <Route path="/support/cookie-policy" element={<Suspense fallback={<PageLoader />}><CookiePolicy /></Suspense>} />
 
         {/* 404 Route */}
         <Route path="*" element={<Suspense fallback={<PageLoader />}><NotFound /></Suspense>} />

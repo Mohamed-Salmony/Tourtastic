@@ -12,11 +12,20 @@ const Footer: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {/* Logo and About */}
           <div>
-            <Logo className="text-white mb-4" />
+            <div className="flex items-center">
+              <Link to="/" className="block">
+                <img 
+                  src="/Tourtastic-logo-White.png" 
+                  alt="Tourtastic" 
+                  className="h-40 mb-2 transition-opacity hover:opacity-90"
+                />
+              </Link>
+            </div>
+            <p className="text-sm text-gray-400">{t('tagline', 'Your journey remarkable')}</p>
             <p className="text-gray-300 mt-4 text-sm">
               {t('footerAbout', 'Tourtastic is your premium travel partner, offering exceptional flight booking services to destinations around the world.')}
             </p>
-            <div className="flex space-x-4 mt-6">
+            <div className="flex space-s-4 mt-6 rtl:space-x-reverse">
               <a href="#" className="text-gray-400 hover:text-tourtastic-blue transition-colors">
                 <Facebook size={20} />
               </a>
@@ -69,29 +78,34 @@ const Footer: React.FC = () => {
             <h3 className="text-lg font-bold mb-4">{t('support', 'Support')}</h3>
             <ul className="space-y-2">
               <li>
-                <a href="#" className="text-gray-300 hover:text-tourtastic-blue transition-colors text-sm">
+                <Link to="/support/247-support" className="text-gray-300 hover:text-tourtastic-blue transition-colors text-sm">
+                  {t('support', '24/7 Support')}
+                </Link>
+              </li>
+              <li>
+                <Link to="/support/help-center" className="text-gray-300 hover:text-tourtastic-blue transition-colors text-sm">
                   {t('helpCenter', 'Help Center')}
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#" className="text-gray-300 hover:text-tourtastic-blue transition-colors text-sm">
+                <Link to="/support/faqs" className="text-gray-300 hover:text-tourtastic-blue transition-colors text-sm">
                   {t('faqs', 'FAQs')}
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#" className="text-gray-300 hover:text-tourtastic-blue transition-colors text-sm">
+                <Link to="/support/booking-policy" className="text-gray-300 hover:text-tourtastic-blue transition-colors text-sm">
                   {t('bookingPolicy', 'Booking Policy')}
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#" className="text-gray-300 hover:text-tourtastic-blue transition-colors text-sm">
+                <Link to="/support/privacy-policy" className="text-gray-300 hover:text-tourtastic-blue transition-colors text-sm">
                   {t('privacyPolicy', 'Privacy Policy')}
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#" className="text-gray-300 hover:text-tourtastic-blue transition-colors text-sm">
+                <Link to="/support/terms-conditions" className="text-gray-300 hover:text-tourtastic-blue transition-colors text-sm">
                   {t('termsConditions', 'Terms & Conditions')}
-                </a>
+                </Link>
               </li>
             </ul>
           </div>
@@ -108,14 +122,14 @@ const Footer: React.FC = () => {
               </li>
               <li className="flex items-center">
                 <Phone size={18} className="mr-2 text-tourtastic-blue flex-shrink-0" />
-                <a href="tel:+963983697317" className="text-gray-300 hover:text-tourtastic-blue transition-colors text-sm">
-                  +963 983 697 317
+                <a href="tel:+963983697317" dir="ltr" className="text-gray-300 hover:text-tourtastic-blue transition-colors text-sm">
+                  {t('footerPhone', '+963 983 697 317')}
                 </a>
               </li>
               <li className="flex items-center">
                 <Mail size={18} className="mr-2 text-tourtastic-blue flex-shrink-0" />
-                <a href="mailto:info@tourtastic.com" className="text-gray-300 hover:text-tourtastic-blue transition-colors text-sm">
-                  info@tourtastic.com
+                <a href="mailto:info@tourtastic.com" dir="ltr" className="text-gray-300 hover:text-tourtastic-blue transition-colors text-sm">
+                  {t('footerEmail', 'info@tourtastic.com')}
                 </a>
               </li>
             </ul>
@@ -124,25 +138,25 @@ const Footer: React.FC = () => {
 
         <div className="border-t border-gray-800 mt-10 pt-6">
           <div className="flex flex-col md:flex-row justify-between items-center">
-            <p className="text-gray-400 text-sm">
-              &copy; {new Date().getFullYear()} Tourtastic. {t('allRightsReserved', 'All rights reserved.')}
+            <p className="text-gray-400 text-sm text-center md:text-start">
+              {t('copyright', '© 2025 تورتاستيك. جميع الحقوق محفوظة.')}
             </p>
             <div className="mt-4 md:mt-0">
-              <ul className="flex space-x-6">
+              <ul className="flex rtl:space-x-reverse space-x-6">
                 <li>
-                  <a href="#" className="text-gray-400 hover:text-tourtastic-blue transition-colors text-xs">
+                  <Link to="/support/privacy-policy" className="text-gray-400 hover:text-tourtastic-blue transition-colors text-xs">
                     {t('privacyPolicy', 'Privacy Policy')}
-                  </a>
+                  </Link>
                 </li>
                 <li>
-                  <a href="#" className="text-gray-400 hover:text-tourtastic-blue transition-colors text-xs">
+                  <Link to="/support/terms-conditions" className="text-gray-400 hover:text-tourtastic-blue transition-colors text-xs">
                     {t('termsConditions', 'Terms of Service')}
-                  </a>
+                  </Link>
                 </li>
                 <li>
-                  <a href="#" className="text-gray-400 hover:text-tourtastic-blue transition-colors text-xs">
+                  <Link to="/support/cookie-policy" className="text-gray-400 hover:text-tourtastic-blue transition-colors text-xs">
                     {t('cookiePolicy', 'Cookie Policy')}
-                  </a>
+                  </Link>
                 </li>
               </ul>
             </div>

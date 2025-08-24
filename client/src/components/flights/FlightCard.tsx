@@ -56,7 +56,22 @@ const FlightCard: React.FC<FlightCardProps> = ({
           {/* Date and Flight Number */}
           <div className="flex items-center gap-4 text-sm text-gray-600">
             <span className="font-medium">
-              {format(new Date(flight.legs[0].segments[0].from.date), 'EEE, MMM d')}
+              {t(`months.${format(new Date(flight.legs[0].segments[0].from.date), 'MMM')}`, {
+                Jan: 'يناير',
+                Feb: 'فبراير',
+                Mar: 'مارس',
+                Apr: 'أبريل',
+                May: 'مايو',
+                Jun: 'يونيو',
+                Jul: 'يوليو',
+                Aug: 'أغسطس',
+                Sep: 'سبتمبر',
+                Oct: 'أكتوبر',
+                Nov: 'نوفمبر',
+                Dec: 'ديسمبر'
+              }[format(new Date(flight.legs[0].segments[0].from.date), 'MMM')])}{' '}
+              {format(new Date(flight.legs[0].segments[0].from.date), 'dd')},{' '}
+              {format(new Date(flight.legs[0].segments[0].from.date), 'yyyy')}
             </span>
             <span>•</span>
             <span>{flight.legs[0].segments[0].flightnumber}</span>
@@ -76,7 +91,14 @@ const FlightCard: React.FC<FlightCardProps> = ({
                 />
                 <div className="min-w-0">
                   <div className="font-medium text-gray-900 truncate">
-                    {leg.segments[0].airline_name || leg.segments[0].iata}
+                    {t(`airlines.${leg.segments[0].airline_name}`, {
+                      'Flynas': 'طيران ناس',
+                      'flyadeal': 'طيران أديل',
+                      'Air Arabia Egypt': 'العربية للطيران مصر',
+                      'Air Cairo': 'مصر للطيران القاهرة',
+                      'EgyptAir': 'مصر للطيران',
+                      'Saudi Arabian Airlines': 'الخطوط السعودية'
+                    }[leg.segments[0].airline_name] || leg.segments[0].airline_name)}
                   </div>
                   <div className="text-sm text-gray-500">
                     {leg.segments[0].iata} {leg.segments[0].flightnumber}
@@ -85,7 +107,7 @@ const FlightCard: React.FC<FlightCardProps> = ({
               </div>
               
               {/* Flight Route */}
-              <div className="flex flex-wrap sm:flex-nowrap items-center gap-4">
+                <div className="flex flex-wrap sm:flex-nowrap items-center gap-4">
                 {/* Departure */}
                 <div className="w-[45%] sm:w-auto sm:flex-1">
                   <div className="flex items-center gap-2 mb-1">
@@ -95,22 +117,33 @@ const FlightCard: React.FC<FlightCardProps> = ({
                     <div className="flex items-center gap-1">
                       {getTimeOfDayIcon(leg.segments[0].from.date)}
                       <span className={`text-xs ${getTimeOfDayWithColor(leg.segments[0].from.date).color}`}>
-                        {t(getTimeOfDay(leg.segments[0].from.date), getTimeOfDay(leg.segments[0].from.date))}
+                        {t(`timeOfDay.${getTimeOfDay(leg.segments[0].from.date)}`, getTimeOfDayWithColor(leg.segments[0].from.date).text)}
                       </span>
                     </div>
                   </div>
                   <div className="text-sm font-medium text-gray-700 truncate max-w-[120px] sm:max-w-[150px]">
-                    {leg.segments[0].from.airport}
+                    {t(`airports.${leg.segments[0].from.airport}`, leg.segments[0].from.airport)}
                   </div>
                   <div className="text-xs text-gray-500 truncate max-w-[120px] sm:max-w-[150px]">
-                    {leg.segments[0].from.city}
+                    {t(`cities.${leg.segments[0].from.city}`, {
+                      'Cairo': 'القاهرة',
+                      'Jeddah': 'جدة'
+                    }[leg.segments[0].from.city] || leg.segments[0].from.city)}
                   </div>
                 </div>
                 
                 {/* Flight Duration and Stops */}
                 <div className="w-[30%] sm:w-auto sm:flex-1 text-center px-2 mx-1">
-                  <div className="text-xs sm:text-sm text-gray-600 mb-1">
-                    {leg.duration_formatted || `${Math.floor(leg.duration / 60)}h ${leg.duration % 60}m`}
+                  <div className="text-xs sm:text-sm text-gray-600 mb-1 text-center">
+                    {leg.duration_formatted || `${Math.floor(leg.duration / 60)} ${t('hour', {
+                      count: Math.floor(leg.duration / 60),
+                      one: 'ساعة',
+                      other: 'ساعات'
+                    })} ${leg.duration % 60} ${t('minute', {
+                      count: leg.duration % 60,
+                      one: 'دقيقة',
+                      other: 'دقائق'
+                    })}`}
                   </div>
                   <div className="hidden sm:flex items-center justify-center mb-1">
                     <div className="h-px bg-gray-300 flex-1"></div>
@@ -123,19 +156,17 @@ const FlightCard: React.FC<FlightCardProps> = ({
                     <div className="h-px bg-gray-300 flex-1 max-w-[30px]"></div>
                   </div>
                   <div className="text-[10px] sm:text-xs text-gray-500">
-                    {leg.stops_count === 0 ? t('nonstop', 'Nonstop') : 
-                     leg.stops_count === 1 ? t('oneStop', '1 stop') : 
-                     t('multipleStops', `${leg.stops_count} stops`)}
+                    {leg.stops_count === 0 ? t('direct', 'مباشرة') : 
+                     leg.stops_count === 1 ? t('oneStop', 'محطة واحدة') : 
+                     t('multipleStops', `${leg.stops_count} محطات`)}
                   </div>
-                </div>
-                
-                {/* Arrival */}
+                </div>                {/* Arrival */}
                 <div className="w-[45%] sm:w-auto sm:flex-1 flex flex-col ml-auto">
                   <div className="flex items-center justify-end gap-2 mb-1">
                     <div className="flex items-center gap-1">
                       {getTimeOfDayIcon(leg.segments[leg.segments.length - 1].to.date)}
                       <span className={`text-xs ${getTimeOfDayWithColor(leg.segments[leg.segments.length - 1].to.date).color}`}>
-                        {t(getTimeOfDay(leg.segments[leg.segments.length - 1].to.date), getTimeOfDay(leg.segments[leg.segments.length - 1].to.date))}
+                        {t(`timeOfDay.${getTimeOfDay(leg.segments[leg.segments.length - 1].to.date)}`, getTimeOfDayWithColor(leg.segments[leg.segments.length - 1].to.date).text)}
                       </span>
                     </div>
                     <span className="text-xl sm:text-2xl font-bold text-gray-900">
@@ -143,10 +174,13 @@ const FlightCard: React.FC<FlightCardProps> = ({
                     </span>
                   </div>
                   <div className="text-sm font-medium text-gray-700 truncate max-w-[120px] sm:max-w-[150px] ml-auto">
-                    {leg.segments[leg.segments.length - 1].to.airport}
+                    {t(`airports.${leg.segments[leg.segments.length - 1].to.airport}`, leg.segments[leg.segments.length - 1].to.airport)}
                   </div>
                   <div className="text-xs text-gray-500 truncate max-w-[120px] sm:max-w-[150px] ml-auto">
-                    {leg.segments[leg.segments.length - 1].to.city}
+                    {t(`cities.${leg.segments[leg.segments.length - 1].to.city}`, {
+                      'Cairo': 'القاهرة',
+                      'Jeddah': 'جدة'
+                    }[leg.segments[leg.segments.length - 1].to.city] || leg.segments[leg.segments.length - 1].to.city)}
                   </div>
                 </div>
               </div>
@@ -161,30 +195,30 @@ const FlightCard: React.FC<FlightCardProps> = ({
             {flight.currency} {adultBase.toFixed(2)}
           </div>
           <div className="text-xs text-gray-600 text-center lg:text-right whitespace-normal">
-            {t('perAdult', 'per adult')} {t('base', 'Base')}
+            {t('perAdult', 'للبالغ')} {t('base', 'السعر الأساسي')}
           </div>
           {/* Adult tax line */}
           <div className="text-xs text-gray-600 text-center lg:text-right whitespace-normal">
-            {t('tax', 'Tax')}: {flight.currency} {adultTax.toFixed(2)}
+            {t('tax', 'الضرائب')}: {flight.currency} {adultTax.toFixed(2)}
           </div>
 
           {/* Passenger counts */}
           <div className="text-xs text-gray-700 text-center lg:text-right">
-            {(flight.search_query?.adt || 0) > 0 && `${flight.search_query.adt} ${t('adults', 'Adults')}`}
-            {(flight.search_query?.chd || 0) > 0 && `, ${flight.search_query.chd} ${t('children', 'Children')}`}
-            {(flight.search_query?.inf || 0) > 0 && `, ${flight.search_query.inf} ${t('infants', 'Infants')}`}
+            {(flight.search_query?.adt || 0) > 0 && `${flight.search_query.adt} ${t('adults', 'بالغ')}`}
+            {(flight.search_query?.chd || 0) > 0 && ` ${flight.search_query.chd} ${t('children', 'طفل')}`}
+            {(flight.search_query?.inf || 0) > 0 && ` ${flight.search_query.inf} ${t('infants', 'رضيع')}`}
           </div>
           
           {/* Blue total */}
           <div className="text-xs font-semibold text-tourtastic-blue text-center lg:text-right">
-            {t('total', 'Total')}: {flight.currency} {totalPrice.toFixed(2)}
+            {t('total', 'المجموع')}: {flight.currency} {totalPrice.toFixed(2)}
           </div>
 
           <div className="text-xs text-gray-600 text-center lg:text-right flex items-center justify-center lg:justify-end gap-1 px-2 max-w-full">
             <svg className="h-3 w-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m0-10L4 7m8 4v10l-8 4m0-10L4 7m8 4v10l-8 4" />
             </svg>
-            <span className="truncate">{t('baggage', 'Baggage')}: {flight.baggage_allowance || flight.legs[0]?.bags?.ADT?.checked?.desc || 'N/A'}</span>
+            <span className="truncate">{t('baggage', 'الأمتعة')}: {flight.baggage_allowance || flight.legs[0]?.bags?.ADT?.checked?.desc || t('noBaggageIncluded', 'لا تشمل أمتعة')}</span>
           </div>
           <Button
             onClick={() => {
@@ -194,15 +228,15 @@ const FlightCard: React.FC<FlightCardProps> = ({
                 onFlightSelection(flight);
               }
             }}
-            className="w-full lg:w-auto bg-tourtastic-blue hover:bg-tourtastic-dark-blue text-white transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-md hover:shadow-lg"
+            className="w-full lg:w-auto bg-tourtastic-blue hover:bg-tourtastic-dark-blue text-white transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-md hover:shadow-lg dir-rtl"
           >
             {selectedFlight?.trip_id === flight.trip_id ? (
               <div className="flex items-center gap-2">
                 <span>✓</span>
-                {showDetails === flight.trip_id ? t('collapse', 'Collapse') : t('selected', 'Selected')}
+                {showDetails === flight.trip_id ? t('collapse', 'طي التفاصيل') : t('selected', 'تم الاختيار')}
               </div>
             ) : (
-              t('select', 'Select')
+              t('select', 'اختيار الرحلة')
             )}
           </Button>
         </div>

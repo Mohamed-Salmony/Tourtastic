@@ -1,0 +1,15 @@
+{
+  "destinations": "الوجهات",
+  "searchDestinations": "البحث عن الوجهات...",
+  "sortBy": "ترتيب حسب",
+  "popular": "الأكثر شعبية",
+  "rating": "التقييم",
+  "addToWishlist": "إضافة إلى المفضلة",
+  "removeFromWishlist": "إزالة من المفضلة",
+  "loading": "جاري التحميل...",
+  "error": "خطأ",
+  "loginToAddWishlist": "يرجى تسجيل الدخول لإضافة الوجهات إلى المفضلة",
+  "addedToWishlist": "تمت الإضافة إلى المفضلة",
+  "removedFromWishlist": "تمت الإزالة من المفضلة",
+  "failedToUpdateWishlist": "فشل في تحديث المفضلة"
+}

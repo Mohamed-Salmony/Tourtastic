@@ -40,6 +40,9 @@ export interface Airport {
   country_iso: string;
   terminal: string;
   airport_name: string;
+  // Optional IATA fields that may be present on flight result airports
+  iata?: string;
+  iata_code?: string;
 }
 
 export interface BaggageInfo {
@@ -74,6 +77,7 @@ export interface FlightSegment {
   duration: number;
   // Enhanced fields
   airline_code?: string;
+  airline_iata?: string;
   duration_formatted?: string;
 }
 

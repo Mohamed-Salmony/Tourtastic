@@ -48,6 +48,12 @@ const loadInitialTranslations = async () => {
 loadInitialTranslations();
 
 // Set the document direction based on the language
+i18n.on('languageChanged', (lng) => {
+  document.dir = lng === 'ar' ? 'rtl' : 'ltr';
+  document.documentElement.lang = lng;
+  document.documentElement.classList.remove('ltr', 'rtl');
+  document.documentElement.classList.add(lng === 'ar' ? 'rtl' : 'ltr');
+});
 const setDocumentDirection = (language: string) => {
   document.documentElement.dir = language === 'ar' ? 'rtl' : 'ltr';
   document.documentElement.lang = language;

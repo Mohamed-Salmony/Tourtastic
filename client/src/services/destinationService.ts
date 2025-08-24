@@ -1,19 +1,33 @@
 import api  from '../config/api';
 
+interface LocalizedString {
+  en: string;
+  ar: string;
+}
+
+interface LocalizedArray {
+  en: string;
+  ar: string;
+}
+
 export interface Destination {
   _id: string;
-  name: string;
-  country: string;
-  description: string;
+  name: LocalizedString;
+  country: LocalizedString;
+  description: LocalizedString;
   rating: number;
   image: string;
-  topAttractions: string[];
-  localCuisine: string[];
-  shopping: string[];
-  bestTimeToVisit: string;
+  topAttractions: LocalizedArray[];
+  localCuisine: LocalizedArray[];
+  shopping: LocalizedArray[];
+  bestTimeToVisit: LocalizedString;
   quickInfo: {
-    airport: string;
-    timeZone: string;
+    airport: string | {
+      code: string;
+      en: string;
+      ar: string;
+    };
+    timeZone: string | LocalizedString;
   };
   // Remove airportCode since it doesn't exist in the database model
   popular: boolean;

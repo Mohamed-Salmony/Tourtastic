@@ -17,7 +17,12 @@ api.interceptors.request.use((config) => {
   const refreshToken = localStorage.getItem('refreshToken');
   const sessionId = localStorage.getItem('sessionId');
   
-  // Only add token if it exists
+  // Add Authorization header if token exists
+  if (token) {
+    config.headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  return config;
   if (token) {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));

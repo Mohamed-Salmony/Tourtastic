@@ -6,11 +6,11 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Destination, getAllDestinations } from '@/services/destinationService';
 import { Loader2 } from 'lucide-react';
 import { wishlistService } from '@/services/wishlistService';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
 const Destinations: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const [destinations, setDestinations] = useState<Destination[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,11 +28,11 @@ const Destinations: React.FC = () => {
         // Fetch user's wishlist if logged in
         if (user) {
           const wishlistData = await wishlistService.getWishlist(user._id);
-          // Extract just the destination IDs from the wishlist data
-          setWishlist(wishlistData.map(item => item._id.toString()));
+          // wishlistData contains the full destination objects
+          const wishlistIds = wishlistData.map(destination => destination._id.toString());
+          setWishlist(wishlistIds);
         }
       } catch (error) {
-        console.error("Error fetching data:", error);
         setError("Failed to load destinations. Please try again later.");
       } finally {
         setLoading(false);
@@ -47,7 +47,7 @@ const Destinations: React.FC = () => {
     e.stopPropagation(); // Prevent event bubbling
 
     if (!user) {
-      toast.error('Please log in to add destinations to your wishlist');
+      toast.error(t('loginToAddWishlist', 'Please login to add destinations to wishlist'));
       return;
     }
 
@@ -55,16 +55,16 @@ const Destinations: React.FC = () => {
       const destinationIdStr = destinationId.toString();
       if (wishlist.includes(destinationIdStr)) {
         await wishlistService.removeFromWishlist(user._id, destinationIdStr);
-        setWishlist(wishlist.filter(id => id !== destinationIdStr));
-        toast.success('Removed from wishlist');
+        setWishlist(prev => prev.filter(id => id !== destinationIdStr));
+        toast.success(t('removedFromWishlist', 'Removed from Wishlist'));
       } else {
         await wishlistService.addToWishlist(user._id, destinationIdStr);
-        setWishlist([...wishlist, destinationIdStr]);
-        toast.success('Added to wishlist');
+        setWishlist(prev => [...prev, destinationIdStr]);
+        toast.success(t('addedToWishlist', 'Added to Wishlist'));
       }
     } catch (error) {
-      console.error('Error toggling wishlist:', error);
-      toast.error('Failed to update wishlist');
+      const errorMessage = error instanceof Error ? error.message : t('failedToUpdateWishlist', 'Failed to update wishlist');
+      toast.error(errorMessage);
     }
   };
 
@@ -74,7 +74,7 @@ const Destinations: React.FC = () => {
         <div className="container-custom">
           <div className="flex justify-center items-center h-48">
             <Loader2 className="h-8 w-8 animate-spin text-primary-500" />
-            <p className="ml-2 text-gray-600">Loading destinations...</p>
+            <p className="ml-2 text-gray-600">{t('loading', 'Loading...')}</p>
           </div>
         </div>
       </section>
@@ -98,9 +98,9 @@ const Destinations: React.FC = () => {
       <div className="container-custom">
         <div className="flex justify-between items-end mb-10">
           <div>
-            <h2 className="section-title">{t('popularDestinations')}</h2>
+            <h2 className="section-title">{String(t('popularDestinations'))}</h2>
             <p className="text-gray-600 max-w-2xl">
-              {t('discoverMostSought')}
+              {String(t('discoverMostSought'))}
             </p>
           </div>
           <Link to="/destinations" className="text-tourtastic-blue hover:text-tourtastic-dark-blue transition-colors hidden md:block">
@@ -119,7 +119,7 @@ const Destinations: React.FC = () => {
                 <CardHeader className="p-0 relative group">
                   <img 
                     src={destination.image} 
-                    alt={destination.name} 
+                    alt={destination.name[i18n.language]} 
                     className="w-full h-48 object-cover rounded-t-md transition-transform duration-300 group-hover:scale-110" 
                   />
                   <div className="absolute top-2 right-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded-md text-sm flex items-center gap-1">
@@ -129,8 +129,8 @@ const Destinations: React.FC = () => {
                   <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-300 rounded-t-md"></div>
                 </CardHeader>
                 <CardContent className="p-4">
-                  <h2 className="text-xl font-bold mb-2">{destination.name}</h2>
-                  <p className="text-gray-600 dark:text-gray-400">{destination.country}</p>
+                  <h2 className="text-xl font-bold mb-2">{destination.name[i18n.language]}</h2>
+                  <p className="text-gray-600 dark:text-gray-400">{destination.country[i18n.language]}</p>
                   <button
                     onClick={(e) => handleWishlistToggle(destination._id, e)}
                     className="mt-4 w-full bg-primary-50 hover:bg-primary-100 text-primary-600 py-2 px-4 rounded-md transition-colors flex items-center justify-center gap-2"
@@ -138,7 +138,7 @@ const Destinations: React.FC = () => {
                     <Heart 
                       className={`w-5 h-5 ${wishlist.includes(destination._id.toString()) ? 'text-red-500 fill-current' : 'text-primary-600'}`} 
                     />
-                    <span>{wishlist.includes(destination._id.toString()) ? 'Remove from Wishlist' : 'Add to Wishlist'}</span>
+                    <span>{wishlist.includes(destination._id.toString()) ? t('removeFromWishlist', 'Remove from Wishlist') : t('addToWishlist', 'Add to Wishlist')}</span>
                   </button>
                 </CardContent>
               </Card>

@@ -1,16 +1,12 @@
 import api from '../config/api';
 
 interface WishlistItem {
-  id: string;
-  destinationId: string;
-  destination?: {
-    id: string;
-    name: string;
-    image: string;
-    country: string;
-    rating: number;
-  };
-  createdAt: string;
+  _id: string;
+  name: { [key: string]: string };
+  country: { [key: string]: string };
+  image: string;
+  rating: number;
+  popular: boolean;
 }
 
 class WishlistService {
@@ -24,11 +20,21 @@ class WishlistService {
 
   async addToWishlist(id: string, destinationId: string): Promise<void> {
     console.log('Adding to wishlist:', { id, destinationId });
-    const response = await api.post(`/users/${id}/wishlist`, {
-      destinationId: destinationId
-    });
-    if (!response.data.success) {
-      throw new Error(response.data.message || 'Failed to add to wishlist');
+    try {
+      const response = await api.post(`/users/${id}/wishlist`, {
+        destinationId: destinationId
+      });
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Failed to add to wishlist');
+      }
+    } catch (error) {
+      if (error && typeof error === 'object' && 'response' in error) {
+        const apiError = error as { response?: { data?: { error?: string } } };
+        if (apiError.response?.data?.error) {
+          throw new Error(apiError.response.data.error);
+        }
+      }
+      throw error;
     }
   }
 
