@@ -266,8 +266,14 @@ exports.checkout = asyncHandler(async (req, res) => {
         // Create notification for regular booking
         await Notification.create({
           userId: req.user.id,
-          title: "Booking Confirmed",
-          message: `Your ${item.type} booking for ${item.destination || 'your selected destination'} has been confirmed.`,
+          title: {
+            en: "Booking Confirmed",
+            ar: "تم تأكيد الحجز"
+          },
+          message: {
+            en: `Your ${item.type} booking for ${item.destination || 'your selected destination'} has been confirmed.`,
+            ar: `تم تأكيد حجز ${item.type} الخاص بك لـ ${item.destination || 'الوجهة المختارة'}.`
+          },
           type: "booking"
         });
       }),
@@ -278,8 +284,14 @@ exports.checkout = asyncHandler(async (req, res) => {
         // Create notification for flight booking
         await Notification.create({
           userId: req.user.id,
-          title: "Flight Booking Confirmed",
-          message: `Your flight from ${item.flightDetails.from} to ${item.flightDetails.to} has been confirmed.`,
+          title: {
+            en: "Flight Booking Confirmed",
+            ar: "تم تأكيد حجز الرحلة"
+          },
+          message: {
+            en: `Your flight from ${item.flightDetails.from} to ${item.flightDetails.to} has been confirmed.`,
+            ar: `تم تأكيد حجز رحلتك من ${item.flightDetails.from} إلى ${item.flightDetails.to}.`
+          },
           type: "booking"
         });
       })

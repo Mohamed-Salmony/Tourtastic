@@ -7,7 +7,7 @@ import Logo from '@/assets/logo';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import axios from 'axios';
 
 // Add the Notification interface
@@ -259,7 +259,7 @@ const Header: React.FC = () => {
                     onClick={toggleMenu}
                   >
                     <Bell className="h-5 w-5 mr-2" />
-                    {t('notifications')}
+                    {t('notifications.title')}
                     {hasUnreadNotifications && (
                       <span className="absolute top-2 right-2 block h-2 w-2 rounded-full bg-tourtastic-blue" />
                     )}
@@ -302,6 +302,18 @@ const Header: React.FC = () => {
                 </>
               )}
               
+              {/* Language Toggle for Mobile */}
+              <button
+                onClick={() => {
+                  toggleLocale();
+                  toggleMenu();
+                }}
+                className="py-2 px-4 text-gray-800 flex items-center w-full"
+              >
+                <Globe className="h-5 w-5 mr-2" />
+                {currentLocale === 'en' ? 'EN' : 'AR'}
+              </button>
+
               {/* Mobile Cart - Always Visible */}
               <Link 
                 to="/cart" 

@@ -2,14 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
-import { 
-  Star, 
-  MapPin, 
-  Clock, 
-  Plane, 
-  Landmark, 
-  Utensils, 
-  ShoppingBag, 
+import {
+  Star,
+  MapPin,
+  Clock,
+  Plane,
+  Landmark,
+  Utensils,
+  ShoppingBag,
   Camera,
   Sunrise,
   Sun,
@@ -20,7 +20,7 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { useToast } from '../hooks/use-toast';
-import  PlaneAnimation  from '../components/ui/PlaneAnimation';
+import PlaneAnimation from '../components/ui/PlaneAnimation';
 import api from '../config/api';
 import { Destination } from '../services/destinationService';
 import { Flight, FlightSearchParams, searchFlights, getSearchResults } from '../services/flightService';
@@ -59,8 +59,9 @@ const getTimeOfDayIcon = (timeOfDay: string) => {
 import { getAirlineLogo } from '../components/flights/utils/flightHelpers';
 
 const DestinationDetails: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
+  const currentLang = i18n.language || 'en';
   const navigate = useNavigate();
   const { destinationId } = useParams<{ destinationId: string }>();
   const [destination, setDestination] = useState<Destination | null>(null);
@@ -71,11 +72,12 @@ const DestinationDetails: React.FC = () => {
   const [isPolling, setIsPolling] = useState(false);
   const [selectedFlight, setSelectedFlight] = useState<Flight | null>(null);
   const [sortBy, setSortBy] = useState('price');
-  const [selectedClass, setSelectedClass] = useState('all');
   const [nearestAirport, setNearestAirport] = useState<Airport | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState<string | null>(null);
   const [manualOrigin, setManualOrigin] = useState('');
+  const [visibleFlights, setVisibleFlights] = useState(10);
+  const [results, setResults] = useState<{ complete: number; result: Flight[] } | null>(null);
 
   // Handler for flight selection
   const handleFlightSelection = (flight: Flight | null) => {
@@ -91,10 +93,11 @@ const DestinationDetails: React.FC = () => {
   // Handler for adding flight to cart
   const handleAddToCart = async (flight: Flight) => {
     try {
+      // Use nearestAirport as origin and destination airport as destination
       const response = await api.post('/cart', {
         flightDetails: {
-          from: flight.legs[0].from.city,
-          to: flight.legs[0].to.city,
+          from: nearestAirport?.city || flight.legs[0].from.city,
+          to: destination?.name[currentLang] || flight.legs[0].to.city,
           departureDate: flight.legs[0].from.date,
           passengers: {
             adults: flight.search_query.adt || 1,
@@ -114,7 +117,7 @@ const DestinationDetails: React.FC = () => {
           }
         }
       });
-      
+
       if (response.data.success) {
         toast({
           title: t('success', 'Success'),
@@ -141,7 +144,7 @@ const DestinationDetails: React.FC = () => {
             try {
               const { latitude, longitude } = position.coords;
               console.log('User location:', { latitude, longitude });
-              
+
               // Use capital airport instead of nearest airport
               const airport = await findCapitalAirport(latitude, longitude);
               console.log('Found capital airport:', airport);
@@ -176,44 +179,45 @@ const DestinationDetails: React.FC = () => {
     let lastComplete = 0;
     let stuckCounter = 0;
     let hasFoundResults = false;
-    
+
     const poll = async () => {
       try {
-        const results = await getSearchResults(searchId);
-        console.log('Poll results:', results);
-        
+        const pollResults = await getSearchResults(searchId);
+        console.log('Poll results:', pollResults);
+        setResults(pollResults);
+
         // Update flights if we have results
-        if (results.result && Array.isArray(results.result)) {
-          if (results.result.length > 0) {
-            console.log('Found flights:', JSON.stringify(results.result, null, 2));
-            setFlights(results.result);
+        if (pollResults.result && Array.isArray(pollResults.result)) {
+          if (pollResults.result.length > 0) {
+            console.log('Found flights:', JSON.stringify(pollResults.result, null, 2));
+            setFlights(pollResults.result);
             hasFoundResults = true;
           }
         }
 
         // Check completion status
-        const isComplete = results.complete >= 100;
-        const isStuck = results.complete === lastComplete;
-        
+        const isComplete = pollResults.complete >= 100;
+        const isStuck = pollResults.complete === lastComplete;
+
         if (isStuck) {
           stuckCounter++;
         } else {
           stuckCounter = 0;
-          lastComplete = results.complete;
+          lastComplete = pollResults.complete;
         }
-        
+
         // Determine if we should continue polling
-        const shouldStopPolling = 
-          isComplete || 
-          (stuckCounter >= 3 && results.complete > 50) || // Only stop if we've made significant progress
+        const shouldStopPolling =
+          isComplete ||
+          (stuckCounter >= 3 && pollResults.complete > 50) || // Only stop if we've made significant progress
           attempts >= maxAttempts;
-        
+
         if (shouldStopPolling) {
           setIsPolling(false);
           setIsLoading(false);
           
           // Only show no results message if we're completely done and found nothing
-          if (!hasFoundResults && results.complete >= 100 && (!results.result || results.result.length === 0)) {
+          if (!hasFoundResults && pollResults.complete >= 100 && (!pollResults.result || pollResults.result.length === 0)) {
             toast({
               title: t('noFlights', 'No Flights Found'),
               description: t('noFlightsAvailable', 'No flights are currently available for this destination. Please try different dates or check back later.'),
@@ -222,10 +226,10 @@ const DestinationDetails: React.FC = () => {
           }
           return;
         }
-        
+
         // Continue polling
         attempts++;
-        console.log(`Poll attempt ${attempts} of ${maxAttempts}, completion: ${results.complete}%`);
+        console.log(`Poll attempt ${attempts} of ${maxAttempts}, completion: ${pollResults.complete}%`);
         setTimeout(poll, 2000);
       } catch (error) {
         console.error('Poll error:', error);
@@ -247,6 +251,10 @@ const DestinationDetails: React.FC = () => {
     };
 
     await poll();
+    // Reset results when polling stops
+    return () => {
+      setResults(null);
+    };
   }, [t, toast, flights.length]);
 
   // Fetch destination details
@@ -275,13 +283,18 @@ const DestinationDetails: React.FC = () => {
 
   const searchFlightsForDestination = useCallback(async () => {
     if (!destinationId || !nearestAirport || !destination) return;
-    
-    // Validate airport codes - use destination.quickInfo.airport instead of destination.airportCode
-    if (!nearestAirport.code || nearestAirport.code.length !== 3 || !destination.quickInfo.airport || destination.quickInfo.airport.length !== 3) {
-      console.error('Invalid airport codes:', { origin: nearestAirport.code, destination: destination.quickInfo.airport });
+
+    // Validate airport codes
+    // Handle both string and object airport data structures
+    const destinationAirportCode = typeof destination.quickInfo.airport === 'string'
+      ? destination.quickInfo.airport
+      : destination.quickInfo.airport.code;
+
+    if (!nearestAirport.code || nearestAirport.code.length !== 3 || !destinationAirportCode || destinationAirportCode.length !== 3) {
+      console.error('Invalid airport codes:', { origin: nearestAirport.code, destination: destinationAirportCode });
       toast({
-        title: 'Error',
-        description: 'Invalid airport codes. Please try again later.',
+        title: t('error', 'Error'),
+        description: t('invalidAirportCodes', 'Invalid airport codes. Please try again later.'),
         variant: 'destructive',
       });
       return;
@@ -293,11 +306,11 @@ const DestinationDetails: React.FC = () => {
       const lastDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
       const formattedStartDate = currentDate.toISOString().split('T')[0];
       const formattedEndDate = lastDayOfMonth.toISOString().split('T')[0];
-  
+
       console.log('Nearest airport:', nearestAirport);
       console.log('Destination airport code:', destination.quickInfo.airport);
       console.log('Destination object:', destination);
-  
+
       // Calculate date 15 days from now
       const futureDate = new Date();
       futureDate.setDate(futureDate.getDate() + 15);
@@ -309,7 +322,9 @@ const DestinationDetails: React.FC = () => {
         flightSegments: [
           {
             from: nearestAirport.code,
-            to: destination.quickInfo.airport,
+            to: typeof destination.quickInfo.airport === 'string'
+              ? destination.quickInfo.airport
+              : destination.quickInfo.airport.code,
             date: searchDate
           }
         ],
@@ -325,7 +340,7 @@ const DestinationDetails: React.FC = () => {
       console.log('Search params:', searchParams);
       const searchResponse = await searchFlights(searchParams);
       console.log('Search response:', searchResponse);
-      
+
       if (searchResponse.search_id) {
         await pollSearchResults(searchResponse.search_id);
       } else {
@@ -354,12 +369,13 @@ const DestinationDetails: React.FC = () => {
     }
   }, [nearestAirport, destination, searchFlightsForDestination, isLoading, flights.length]);
 
+  // Handle loading more flights
+  const handleLoadMore = () => {
+    setVisibleFlights(prev => prev + 10);
+  };
+
   // Filter and sort flights
   const filteredAndSortedFlights = flights
-    .filter(flight => {
-      if (selectedClass === 'all') return true;
-      return flight.legs[0]?.cabin?.toLowerCase() === selectedClass;
-    })
     .sort((a, b) => {
       switch (sortBy) {
         case 'price':
@@ -371,7 +387,8 @@ const DestinationDetails: React.FC = () => {
         default:
           return 0;
       }
-    });
+    })
+    .slice(0, visibleFlights);
 
   if (loadingDestination) {
     return (
@@ -410,14 +427,14 @@ const DestinationDetails: React.FC = () => {
       <section className="relative h-[400px] bg-cover bg-center" style={{ backgroundImage: `url(${destination.image})` }}>
         <div className="absolute inset-0 bg-black bg-opacity-50" />
         <div className="relative container mx-auto px-4 h-full flex flex-col justify-end pb-12">
-          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">{destination.name}</h1>
-          <div className="flex items-center gap-4 text-white">
+          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>{destination.name[currentLang]}</h1>
+          <div className="flex items-center gap-4 text-white" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
             <div className="flex items-center">
               <Star className="w-5 h-5 text-yellow-400 mr-1" fill="currentColor" />
               <span>{destination.rating.toFixed(1)}</span>
             </div>
             <span>•</span>
-            <span>{destination.country}</span>
+            <span>{destination.country[currentLang]}</span>
           </div>
         </div>
       </section>
@@ -429,27 +446,34 @@ const DestinationDetails: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               {/* Main Description */}
               <div className="md:col-span-2">
-                <h2 className="text-3xl font-bold mb-6">{t('discover', 'Discover')} {destination.name}</h2>
-                <p className="text-gray-600 leading-relaxed text-lg mb-6">{destination.description}</p>
-                
+                <h2 className="text-3xl font-bold mb-6" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
+                  {t('discover', currentLang === 'ar' ? 'اكتشف' : 'Discover')} {destination.name[currentLang]}
+                </h2>
+                <p className="text-gray-600 leading-relaxed text-lg mb-6" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
+                  {destination.description[currentLang]}
+                </p>
+
                 {/* Key Highlights */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8">
                   <div className="flex items-start gap-3">
                     <Landmark className="w-5 h-5 text-primary-500 mt-1" />
                     <div>
-                      <h3 className="font-semibold mb-1">{t('topAttractions', 'Top Attractions')}</h3>
-                      <p className="text-gray-600 text-sm">
-                        {destination.topAttractions.join(', ')}
+                      <h3 className="font-semibold mb-1" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
+                        {t('topAttractions', currentLang === 'ar' ? 'أهم المعالم' : 'Top Attractions')}
+                      </h3>
+                      <p className="text-gray-600 text-sm" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
+                        {destination?.topAttractions?.map(attraction => attraction[currentLang]).join(', ') ||
+                          t('noAttractions', currentLang === 'ar' ? 'لا توجد معالم مدرجة' : 'No attractions listed')}
                       </p>
                     </div>
-                  </div>
-                  
-                  <div className="flex items-start gap-3">
+                  </div>                  <div className="flex items-start gap-3">
                     <Utensils className="w-5 h-5 text-primary-500 mt-1" />
                     <div>
-                      <h3 className="font-semibold mb-1">{t('localCuisine', 'Local Cuisine')}</h3>
+                      <h3 className="font-semibold mb-1" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
+                        {t('localCuisine', currentLang === 'ar' ? 'المأكولات المحلية' : 'Local Cuisine')}
+                      </h3>
                       <p className="text-gray-600 text-sm">
-                        {destination.localCuisine.join(', ')}
+                        {destination?.localCuisine?.map(cuisine => cuisine[currentLang]).join(', ') || t('noCuisine', 'No cuisine information available')}
                       </p>
                     </div>
                   </div>
@@ -457,9 +481,12 @@ const DestinationDetails: React.FC = () => {
                   <div className="flex items-start gap-3">
                     <ShoppingBag className="w-5 h-5 text-primary-500 mt-1" />
                     <div>
-                      <h3 className="font-semibold mb-1">{t('shopping', 'Shopping')}</h3>
-                      <p className="text-gray-600 text-sm">
-                        {destination.shopping.join(', ')}
+                      <h3 className="font-semibold mb-1" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
+                        {t('shopping', currentLang === 'ar' ? 'التسوق' : 'Shopping')}
+                      </h3>
+                      <p className="text-gray-600 text-sm" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
+                        {destination?.shopping?.map(shop => shop[currentLang]).join(', ') ||
+                          t('noShopping', currentLang === 'ar' ? 'لا توجد معلومات تسوق متاحة' : 'No shopping information available')}
                       </p>
                     </div>
                   </div>
@@ -467,9 +494,11 @@ const DestinationDetails: React.FC = () => {
                   <div className="flex items-start gap-3">
                     <Camera className="w-5 h-5 text-primary-500 mt-1" />
                     <div>
-                      <h3 className="font-semibold mb-1">{t('bestTimeToVisit', 'Best Time to Visit')}</h3>
-                      <p className="text-gray-600 text-sm">
-                        {destination.bestTimeToVisit}
+                      <h3 className="font-semibold mb-1" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
+                        {t('bestTimeToVisit', currentLang === 'ar' ? 'أفضل وقت للزيارة' : 'Best Time to Visit')}
+                      </h3>
+                      <p className="text-gray-600 text-sm" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
+                        {destination.bestTimeToVisit[currentLang]}
                       </p>
                     </div>
                   </div>
@@ -478,29 +507,45 @@ const DestinationDetails: React.FC = () => {
 
               {/* Quick Info Sidebar */}
               <div className="bg-gray-50 p-6 rounded-lg">
-                <h3 className="text-xl font-semibold mb-4">{t('quickInfo', 'Quick Info')}</h3>
+                <h3 className="text-xl font-semibold mb-4" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
+                  {t('quickInfo', currentLang === 'ar' ? 'معلومات سريعة' : 'Quick Info')}
+                </h3>
                 <div className="space-y-4">
                   <div className="flex items-center gap-3">
                     <MapPin className="w-5 h-5 text-primary-500" />
                     <div>
-                      <p className="text-sm text-gray-500">{t('airport', 'Airport')}</p>
-                      <p className="font-medium">{destination.quickInfo.airport}</p>
+                      <p className="text-sm text-gray-500" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
+                        {t('airport', currentLang === 'ar' ? 'المطار' : 'Airport')}
+                      </p>
+                      <p className="font-medium" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
+                        {typeof destination.quickInfo.airport === 'string'
+                          ? destination.quickInfo.airport
+                          : destination.quickInfo.airport[currentLang] || destination.quickInfo.airport.code}
+                      </p>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center gap-3">
                     <Clock className="w-5 h-5 text-primary-500" />
                     <div>
-                      <p className="text-sm text-gray-500">{t('timeZone', 'Time Zone')}</p>
-                      <p className="font-medium">{destination.quickInfo.timeZone}</p>
+                      <p className="text-sm text-gray-500" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
+                        {t('timeZone', currentLang === 'ar' ? 'المنطقة الزمنية' : 'Time Zone')}
+                      </p>
+                      <p className="font-medium" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
+                        {typeof destination.quickInfo.timeZone === 'string'
+                          ? destination.quickInfo.timeZone
+                          : destination.quickInfo.timeZone[currentLang]}
+                      </p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-3">
                     <Star className="w-5 h-5 text-primary-500" />
                     <div>
-                      <p className="text-sm text-gray-500">{t('rating', 'Rating')}</p>
-                      <p className="font-medium">{destination.rating.toFixed(1)}/5.0</p>
+                      <p className="text-sm text-gray-500" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
+                        {t('rating', currentLang === 'ar' ? 'التقييم' : 'Rating')}
+                      </p>
+                      <p className="font-medium" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>{destination.rating.toFixed(1)}/5.0</p>
                     </div>
                   </div>
                 </div>
@@ -514,67 +559,72 @@ const DestinationDetails: React.FC = () => {
       <section className="py-12 bg-gray-50">
         <div className="container mx-auto px-4">
           <div className="max-w-6xl mx-auto">
-            <h2 className="text-3xl font-bold mb-8 text-center">
-              {t('availableFlights', 'Available Flights')} {nearestAirport && `from ${nearestAirport.city}`}
+            <h2 className="text-3xl font-bold mb-8 text-center" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
+              {t('availableFlights', currentLang === 'ar' ? 'الرحلات المتاحة' : 'Available Flights')}
+              {nearestAirport && (currentLang === 'ar' ? ` من ${nearestAirport.city}` : ` from ${nearestAirport.city}`)}
             </h2>
 
             {/* Filters Section */}
             <div className="flex flex-wrap gap-4 items-center justify-between mb-8 p-4 bg-white rounded-lg shadow-sm">
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium">{t('sortBy', 'Sort by')}:</label>
+                  <label className="text-sm font-medium" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
+                    {t('sortBy', currentLang === 'ar' ? 'ترتيب حسب' : 'Sort by')}:
+                  </label>
                   <Select value={sortBy} onValueChange={setSortBy}>
                     <SelectTrigger className="w-32">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="price">{t('price', 'Price')}</SelectItem>
-                      <SelectItem value="duration">{t('duration', 'Duration')}</SelectItem>
-                      <SelectItem value="departure">{t('departure', 'Departure')}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium">{t('class', 'Class')}:</label>
-                  <Select value={selectedClass} onValueChange={setSelectedClass}>
-                    <SelectTrigger className="w-32">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">{t('all', 'All')}</SelectItem>
-                      <SelectItem value="economy">{t('economy', 'Economy')}</SelectItem>
-                      <SelectItem value="business">{t('business', 'Business')}</SelectItem>
-                      <SelectItem value="first">{t('first', 'First')}</SelectItem>
+                      <SelectItem value="price">{t('price', currentLang === 'ar' ? 'السعر' : 'Price')}</SelectItem>
+                      <SelectItem value="duration">{t('duration', currentLang === 'ar' ? 'المدة' : 'Duration')}</SelectItem>
+                      <SelectItem value="departure">{t('departure', currentLang === 'ar' ? 'المغادرة' : 'Departure')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
-              <div className="text-sm text-gray-600">
-                {filteredAndSortedFlights.length} {t('flightsFound', 'flights found')}
+              <div className="text-sm text-gray-600" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
+                {t('showingFlights', currentLang === 'ar' 
+                  ? `عرض ${Math.min(visibleFlights, filteredAndSortedFlights.length)} من ${flights.length} رحلة`
+                  : `Showing ${Math.min(visibleFlights, filteredAndSortedFlights.length)} of ${flights.length} flights`)}
               </div>
             </div>
 
             {/* Loading State */}
             {(isLoading || isPolling) && (
               <div className="text-center py-12">
-                <PlaneAnimation size="lg" />
+                <PlaneAnimation size="lg" progress={isPolling ? results?.complete || 0 : undefined} />
                 <p className="text-lg text-gray-600 mt-4">
-                  {isPolling ? t('searchingFlights', 'Searching for flights...') : t('loading', 'Loading...')}
+                  {isPolling 
+                    ? t('searchingFlightsProgress', 'Searching for flights... {{progress}}% complete', { progress: Math.round(results?.complete || 0) })
+                    : t('loading', 'Loading...')}
                 </p>
               </div>
             )}
 
             {/* Flight Results */}
             {!isLoading && !isPolling && filteredAndSortedFlights.length > 0 && (
-              <FlightResults
-                flights={filteredAndSortedFlights}
-                selectedFlight={selectedFlight}
-                showDetails={showDetails}
-                onFlightSelection={handleFlightSelection}
-                onAddToCart={handleAddToCart}
-              />
+              <>
+                <FlightResults
+                  flights={filteredAndSortedFlights}
+                  selectedFlight={selectedFlight}
+                  showDetails={showDetails}
+                  onFlightSelection={handleFlightSelection}
+                  onAddToCart={handleAddToCart}
+                />
+                {filteredAndSortedFlights.length < flights.length && (
+                  <div className="text-center mt-6">
+                    <Button
+                      onClick={handleLoadMore}
+                      variant="outline"
+                      className="px-6"
+                    >
+                      {t('loadMore', currentLang === 'ar' ? 'تحميل المزيد' : 'Load More')}
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
 
             {/* No Flights Message */}

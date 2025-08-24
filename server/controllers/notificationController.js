@@ -58,6 +58,14 @@ exports.markAllAsRead = asyncHandler(async (req, res) => {
 exports.createNotification = asyncHandler(async (req, res) => {
   const { userId, title, message, type } = req.body;
 
+  // Validate that title and message have both languages
+  if (!title.en || !title.ar || !message.en || !message.ar) {
+    return res.status(400).json({
+      success: false,
+      message: "Title and message must include both English and Arabic versions"
+    });
+  }
+
   const notification = await Notification.create({
     userId,
     title,

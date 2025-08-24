@@ -4,28 +4,57 @@ import { Plane } from 'lucide-react';
 interface PlaneAnimationProps {
   size?: 'sm' | 'md' | 'lg';
   className?: string;
+  progress?: number;
 }
 
-const PlaneAnimation: React.FC<PlaneAnimationProps> = ({ size = 'md', className = '' }) => {
+const PlaneAnimation: React.FC<PlaneAnimationProps> = ({ size = 'md', className = '', progress }) => {
   const sizeClasses = {
     sm: 'w-8 h-8',
     md: 'w-12 h-12',
     lg: 'w-16 h-16'
   };
 
+  const progressWidth = progress ? `${progress}%` : '0%';
+
   return (
     <div className={`relative ${className}`}>
-      {/* Runway/Path */}
+      {/* Progress Circle */}
       <div className="absolute inset-0 flex items-center justify-center">
-        <div className="w-32 h-0.5 bg-gray-300 relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-blue-400 to-transparent animate-pulse"></div>
+        <div className="relative">
+          <svg className="transform -rotate-90 w-32 h-32">
+            <circle
+              cx="64"
+              cy="64"
+              r="30"
+              stroke="#E5E7EB"
+              strokeWidth="6"
+              fill="none"
+              className="opacity-25"
+            />
+            <circle
+              cx="64"
+              cy="64"
+              r="30"
+              stroke="#3B82F6"
+              strokeWidth="6"
+              fill="none"
+              strokeLinecap="round"
+              className="transition-all duration-500"
+              strokeDasharray={`${progress ? (progress * 1.88) : 0}, 188.4`}
+            />
+          </svg>
+          {progress && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-sm font-semibold text-blue-600">{Math.round(progress)}%</span>
+            </div>
+          )}
         </div>
       </div>
       
       {/* Animated Plane */}
       <div className="relative z-10 flex items-center justify-center">
-        <div className="animate-bounce">
-          <Plane className={`${sizeClasses[size]} text-blue-600 transform rotate-45 animate-pulse`} />
+        <div className="animate-float">
+          <Plane className={`${sizeClasses[size]} text-blue-600 transform rotate-45`} />
         </div>
       </div>
       

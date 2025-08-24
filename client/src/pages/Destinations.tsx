@@ -14,12 +14,13 @@ import {
 import { useTranslation } from 'react-i18next';
 import { Destination, getAllDestinations } from '@/services/destinationService';
 import { wishlistService } from '@/services/wishlistService';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
 const Destinations = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const currentLang = i18n.language || 'en';
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
@@ -29,26 +30,42 @@ const Destinations = () => {
   const [errorDestinations, setErrorDestinations] = useState<string | null>(null);
   const [wishlist, setWishlist] = useState<string[]>([]);
 
+  // Separate effect for loading wishlist to handle user changes
+  useEffect(() => {
+    const fetchWishlist = async () => {
+      if (user) {
+        try {
+          const wishlistData = await wishlistService.getWishlist(user._id);
+          // wishlistData contains the full destination objects
+          console.log('Fetched wishlist data:', wishlistData);
+          const wishlistIds = wishlistData.map(destination => destination._id.toString());
+          console.log('Extracted wishlist IDs:', wishlistIds);
+          setWishlist(wishlistIds);
+        } catch (error) {
+          console.error("Error fetching wishlist:", error);
+          toast.error(t('failedToLoadWishlist', 'Failed to load wishlist'));
+        }
+      } else {
+        setWishlist([]);
+      }
+    };
+    fetchWishlist();
+  }, [user, t]);
+
   useEffect(() => {
     const fetchData = async () => {
       try {
         const data = await getAllDestinations();
         setDestinations(data);
-
-        // Fetch user's wishlist if logged in
-        if (user) {
-          const wishlistData = await wishlistService.getWishlist(user._id);
-          setWishlist(wishlistData);
-        }
       } catch (error) {
         console.error("Error fetching data:", error);
-        setErrorDestinations("Failed to load destinations. Please try again later.");
+        setErrorDestinations(t('failedToLoadDestinations', 'Failed to load destinations. Please try again later.'));
       } finally {
         setLoadingDestinations(false);
       }
     };
     fetchData();
-  }, [user]);
+  }, [user, t]);
 
   // Handle sort change
   const handleSortChange = (value: string) => {
@@ -73,33 +90,50 @@ const Destinations = () => {
     e.stopPropagation(); // Prevent event bubbling
 
     if (!user) {
-      toast.error('Please log in to add destinations to your wishlist');
+      toast.error(t('loginToAddWishlist', 'Please login to add destinations to wishlist'));
       return;
     }
 
     try {
-      if (wishlist.includes(destinationId)) {
-        await wishlistService.removeFromWishlist(user._id, destinationId);
-        setWishlist(wishlist.filter(id => id !== destinationId));
-        toast.success('Removed from wishlist');
+      console.log('Toggling wishlist for:', {
+        userId: user._id,
+        destinationId: destinationId,
+        currentWishlist: wishlist
+      });
+      
+      const destinationIdStr = destinationId.toString();
+      if (wishlist.includes(destinationIdStr)) {
+        await wishlistService.removeFromWishlist(user._id, destinationIdStr);
+        setWishlist(prev => prev.filter(id => id !== destinationIdStr));
+        toast.success(t('removedFromWishlist', 'Removed from Wishlist'));
       } else {
-        await wishlistService.addToWishlist(user._id, destinationId);
-        setWishlist([...wishlist, destinationId]);
-        toast.success('Added to wishlist');
+        await wishlistService.addToWishlist(user._id, destinationIdStr);
+        setWishlist(prev => [...prev, destinationIdStr]);
+        toast.success(t('addedToWishlist', 'Added to Wishlist'));
       }
     } catch (error) {
-      console.error('Error toggling wishlist:', error);
-      toast.error('Failed to update wishlist');
+      const errorMessage = error instanceof Error ? error.message : t('failedToUpdateWishlist', 'فشل في تحديث المفضلة');
+      toast.error(errorMessage);
     }
   };
 
   // Filter destinations based on search term
+
   const filteredDestinations = destinations.filter(destination => {
     if (!searchTerm) return true;
-    return (
-      destination.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      destination.country.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    
+    const searchLower = searchTerm.toLowerCase();
+    const name = destination.name[currentLang];
+    const country = destination.country[currentLang];
+    
+    // For Arabic, don't lowercase the search term or the content
+    if (currentLang === 'ar') {
+      return name.includes(searchTerm) || country.includes(searchTerm);
+    }
+    
+    // For other languages, use case-insensitive search
+    return name.toLowerCase().includes(searchLower) || 
+           country.toLowerCase().includes(searchLower);
   });
 
   // Sort destinations based on selected criteria
@@ -122,7 +156,7 @@ const Destinations = () => {
       <section className="py-16">
         <div className="container mx-auto px-4 text-center">
           <Loader2 className="h-12 w-12 animate-spin text-primary-500 mx-auto mb-4" />
-          <p className="text-lg text-gray-600">Loading destinations...</p>
+          <p className="text-lg text-gray-600">{t('loading', 'Loading...')}</p>
         </div>
       </section>
     );
@@ -151,21 +185,22 @@ const Destinations = () => {
               <div className="relative">
                 <Input
                   type="text"
-                  placeholder={t('searchDestinations', 'Search destinations...')}
+                  dir={currentLang === 'ar' ? 'rtl' : 'ltr'}
+                  placeholder={t('searchDestinations...')}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className="px-10"
                 />
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <Search className="absolute rtl:right-3 ltr:left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               </div>
             </form>
-            <Select value={sortBy} onValueChange={handleSortChange}>
+            <Select value={sortBy} onValueChange={handleSortChange} dir="rtl">
               <SelectTrigger className="w-full md:w-[200px]">
-                <SelectValue placeholder={t('sortBy', 'Sort by')} />
+                <SelectValue placeholder={t('sortBy', 'ترتيب حسب')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="popular">{t('popular', 'Popular')}</SelectItem>
-                <SelectItem value="rating">{t('rating', 'Rating')}</SelectItem>
+                <SelectItem value="popular">{t('popular', 'الأكثر شعبية')}</SelectItem>
+                <SelectItem value="rating">{t('rating', 'التقييم')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -178,7 +213,7 @@ const Destinations = () => {
                   <CardHeader className="p-0 relative group">
                     <img 
                       src={destination.image} 
-                      alt={destination.name} 
+                      alt={destination.name[currentLang]} 
                       className="w-full h-48 object-cover rounded-t-md transition-transform duration-300 group-hover:scale-110" 
                     />
                     <div className="absolute top-2 right-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded-md text-sm flex items-center gap-1">
@@ -188,16 +223,28 @@ const Destinations = () => {
                     <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-300 rounded-t-md"></div>
                   </CardHeader>
                   <CardContent className="p-4 text-center">
-                    <h2 className="text-xl font-bold mb-2">{destination.name}</h2>
-                    <p className="text-gray-600 dark:text-gray-400">{destination.country}</p>
+                    <h2 className="text-xl font-bold mb-2" dir="auto">{destination.name[currentLang]}</h2>
+                    <p className="text-gray-600 dark:text-gray-400" dir="auto">{destination.country[currentLang]}</p>
                     <button
                       onClick={(e) => handleWishlistToggle(destination._id, e)}
-                      className="mt-4 w-full bg-primary-50 hover:bg-primary-100 text-primary-600 py-2 px-4 rounded-md transition-colors flex items-center justify-center gap-2"
+                      className={`mt-4 w-full ${
+                        wishlist.includes(destination._id.toString())
+                          ? 'bg-red-50 hover:bg-red-100 text-red-600'
+                          : 'bg-primary-50 hover:bg-primary-100 text-primary-600'
+                      } py-2 px-4 rounded-md transition-colors flex items-center justify-center gap-2`}
                     >
                       <Heart 
-                        className={`w-5 h-5 ${wishlist.includes(destination._id) ? 'text-red-500 fill-current' : 'text-primary-600'}`} 
+                        className={`w-5 h-5 ${
+                          wishlist.includes(destination._id.toString())
+                            ? 'text-red-500 fill-current'
+                            : 'text-primary-600'
+                        }`}
                       />
-                      <span>{wishlist.includes(destination._id) ? 'Remove from Wishlist' : 'Add to Wishlist'}</span>
+                      <span>
+                        {wishlist.includes(destination._id.toString())
+                          ? t('removeFromWishlist', 'Remove from Wishlist')
+                          : t('addToWishlist', 'Add to Wishlist')}
+                      </span>
                     </button>
                   </CardContent>
                 </Card>

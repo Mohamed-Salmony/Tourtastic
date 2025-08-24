@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import i18n from '@/i18n';
 
 // Notification type icon mapping
 const typeIcons = {
@@ -50,8 +51,14 @@ const getIconColor = (type: string) => {
 
 interface Notification {
   _id: string;
-  title: string;
-  message: string;
+  title: {
+    en: string;
+    ar: string;
+  };
+  message: {
+    en: string;
+    ar: string;
+  };
   type: string;
   read: boolean;
   createdAt: string;
@@ -65,45 +72,45 @@ const Notifications = () => {
   const [loading, setLoading] = useState(true);
 
   // Get auth token from localStorage
-  const getAuthToken = () => {
+  const getAuthToken = useCallback(() => {
     const token = localStorage.getItem('token');
     if (!token) {
       navigate('/login');
       return null;
     }
     return token;
-  };
+  }, [navigate]);
 
   // Configure axios with auth token
-  const configureAxios = () => {
+  const configureAxios = useCallback(() => {
     const token = getAuthToken();
     if (token) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     }
-  };
+  }, [getAuthToken]);
 
   // Fetch notifications
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     try {
       configureAxios();
       const response = await axios.get('/api/notifications');
       setNotifications(response.data.data);
       setLoading(false);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error fetching notifications:', error);
-      if (error.response?.status === 401) {
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
         // If unauthorized, redirect to login
         navigate('/login');
       } else {
-        toast.error('Failed to load notifications');
+        toast.error(t('notifications.fetchError'));
       }
       setLoading(false);
     }
-  };
+  }, [navigate, t, configureAxios]);
 
   useEffect(() => {
     fetchNotifications();
-  }, []);
+  }, [fetchNotifications]);
 
   // Get filtered notifications based on active tab
   const filteredNotifications = activeTab === 'all' 
@@ -118,13 +125,13 @@ const Notifications = () => {
       setNotifications(notifications.map(notification => 
         notification._id === id ? { ...notification, read: true } : notification
       ));
-      toast.success('Notification marked as read');
-    } catch (error: any) {
+      toast.success(t('notifications.markAsReadSuccess'));
+    } catch (error) {
       console.error('Error marking notification as read:', error);
-      if (error.response?.status === 401) {
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
         navigate('/login');
       } else {
-        toast.error('Failed to mark notification as read');
+        toast.error(t('notifications.markAsReadError'));
       }
     }
   };
@@ -135,13 +142,13 @@ const Notifications = () => {
       configureAxios();
       await axios.put('/api/notifications/read-all');
       setNotifications(notifications.map(notification => ({ ...notification, read: true })));
-      toast.success('All notifications marked as read');
-    } catch (error: any) {
+      toast.success(t('notifications.markAllAsReadSuccess'));
+    } catch (error) {
       console.error('Error marking all notifications as read:', error);
-      if (error.response?.status === 401) {
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
         navigate('/login');
       } else {
-        toast.error('Failed to mark all notifications as read');
+        toast.error(t('notifications.markAllAsReadError'));
       }
     }
   };
@@ -151,15 +158,25 @@ const Notifications = () => {
     const date = new Date(timestamp);
     const now = new Date();
     const diffInDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+    const isArabic = i18n.language === 'ar';
     
     if (diffInDays === 0) {
-      return `Today at ${format(date, 'h:mm a')}`;
+      return isArabic 
+        ? `اليوم ${format(date, 'h:mm a')}` 
+        : `Today at ${format(date, 'h:mm a')}`;
     } else if (diffInDays === 1) {
-      return `Yesterday at ${format(date, 'h:mm a')}`;
+      return isArabic
+        ? `أمس ${format(date, 'h:mm a')}`
+        : `Yesterday at ${format(date, 'h:mm a')}`;
     } else if (diffInDays < 7) {
-      return `${diffInDays} days ago`;
+      return isArabic
+        ? `منذ ${diffInDays} ${diffInDays === 1 ? 'يوم' : 'أيام'}`
+        : `${diffInDays} days ago`;
     } else {
-      return format(date, 'MMM d, yyyy');
+      // For Arabic, we'll use a different date format
+      return isArabic
+        ? format(date, 'dd/MM/yyyy')
+        : format(date, 'MMM d, yyyy');
     }
   };
 
@@ -179,15 +196,15 @@ const Notifications = () => {
         <div className="container-custom">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-4xl font-bold mb-4">{t('notifications', 'Notifications')}</h1>
+              <h1 className="text-4xl font-bold mb-4">{t('notifications.title')}</h1>
               <p className="text-gray-600">
-                {t('notifications.description', 'Stay updated with your bookings, payments, and special offers.')}
+                {t('notifications.description')}
               </p>
             </div>
             
             {filteredNotifications.some(notification => !notification.read) && (
               <Button onClick={markAllAsRead}>
-                {t('notifications.markAllAsRead', 'Mark All as Read')}
+                {t('notifications.markAllAsRead')}
               </Button>
             )}
           </div>
@@ -198,8 +215,8 @@ const Notifications = () => {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="flex justify-between items-center mb-6">
             <TabsList>
-              <TabsTrigger value="all">{t('notifications.tabs.all', 'All')}</TabsTrigger>
-              <TabsTrigger value="unread">{t('notifications.tabs.unread', 'Unread')}</TabsTrigger>
+              <TabsTrigger value="all">{t('notifications.tabs.all')}</TabsTrigger>
+              <TabsTrigger value="unread">{t('notifications.tabs.unread')}</TabsTrigger>
             </TabsList>
           </div>
           
@@ -247,9 +264,9 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
       <Card>
         <CardContent className="p-6 text-center">
           <Bell className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-xl font-medium mb-2">{t('notifications.empty', 'No notifications')}</h3>
+          <h3 className="text-xl font-medium mb-2">{t('notifications.empty')}</h3>
           <p className="text-gray-500">
-            {t('notifications.emptyDescription', "You're all caught up! There are no notifications to display.")}
+            {t('notifications.emptyDescription')}
           </p>
         </CardContent>
       </Card>
@@ -274,16 +291,20 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
                 
                 <div className="flex-1">
                   <div className="flex justify-between">
-                    <h3 className="text-lg font-medium">{notification.title}</h3>
+                    <h3 className="text-lg font-medium">
+                      {i18n.language === 'ar' ? notification.title.ar : notification.title.en}
+                    </h3>
                     <span className="text-sm text-gray-500">{formatTimestamp(notification.createdAt)}</span>
                   </div>
                   
-                  <p className="text-gray-600 mt-1">{notification.message}</p>
+                  <p className="text-gray-600 mt-1">
+                    {i18n.language === 'ar' ? notification.message.ar : notification.message.en}
+                  </p>
                   
                   {!notification.read && (
                     <div className="mt-3 flex justify-end">
                       <Button variant="ghost" size="sm" onClick={() => markAsRead(notification._id)}>
-                        {t('notifications.markAsRead', 'Mark as Read')}
+                        {t('notifications.markAsRead')}
                       </Button>
                     </div>
                   )}

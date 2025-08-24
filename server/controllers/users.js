@@ -105,7 +105,7 @@ exports.addToWishlist = asyncHandler(async (req, res, next) => {
     console.log('Destination already in wishlist:', req.body.destinationId);
     return res.status(400).json({
       success: false,
-      error: 'Destination already in wishlist'
+      error: 'This destination is already in your wishlist'
     });
   }
 

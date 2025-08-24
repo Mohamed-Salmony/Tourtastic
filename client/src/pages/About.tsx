@@ -79,70 +79,9 @@ const About: React.FC = () => {
             <div className="rounded-lg overflow-hidden mb-8">
               <img 
                 src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1471&q=80" 
-                alt="Tourtastic Team" 
+                alt={t('tourteamPhoto', 'فريق تورتاستيك')} 
                 className="w-full h-auto object-cover"
               />
-            </div>
-
-            <div>
-              <h2 className="text-2xl font-bold mb-4 section-title">Our Team</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Card className="card-shadow">
-                  <CardContent className="p-6 text-center">
-                    <div className="w-24 h-24 rounded-full overflow-hidden mx-auto mb-4">
-                      <img 
-                        src="https://images.unsplash.com/photo-1580489944761-15a19d654956?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=761&q=80" 
-                        alt="Sarah Johnson" 
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <h3 className="font-bold text-lg">Sarah Johnson</h3>
-                    <p className="text-tourtastic-blue">CEO & Founder</p>
-                  </CardContent>
-                </Card>
-
-                <Card className="card-shadow">
-                  <CardContent className="p-6 text-center">
-                    <div className="w-24 h-24 rounded-full overflow-hidden mx-auto mb-4">
-                      <img 
-                        src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=687&q=80" 
-                        alt="Michael Chen" 
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <h3 className="font-bold text-lg">Michael Chen</h3>
-                    <p className="text-tourtastic-blue">CTO</p>
-                  </CardContent>
-                </Card>
-
-                <Card className="card-shadow">
-                  <CardContent className="p-6 text-center">
-                    <div className="w-24 h-24 rounded-full overflow-hidden mx-auto mb-4">
-                      <img 
-                        src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=688&q=80" 
-                        alt="Elena Rodriguez" 
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <h3 className="font-bold text-lg">Elena Rodriguez</h3>
-                    <p className="text-tourtastic-blue">Head of Operations</p>
-                  </CardContent>
-                </Card>
-
-                <Card className="card-shadow">
-                  <CardContent className="p-6 text-center">
-                    <div className="w-24 h-24 rounded-full overflow-hidden mx-auto mb-4">
-                      <img 
-                        src="https://images.unsplash.com/photo-1531384441138-2736e62e0919?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=687&q=80" 
-                        alt="James Wilson" 
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <h3 className="font-bold text-lg">James Wilson</h3>
-                    <p className="text-tourtastic-blue">Marketing Director</p>
-                  </CardContent>
-                </Card>
-              </div>
             </div>
           </div>
         </div>

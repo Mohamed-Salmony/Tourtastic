@@ -81,6 +81,12 @@ const FlightBookingSchema = new mongoose.Schema({
         required: true,
         default: 'economy'
       }
+      ,
+      // Store entire raw flight object returned from provider so UI can re-render exactly
+      raw: {
+        type: mongoose.Schema.Types.Mixed,
+        default: {}
+      }
     }
   },
   status: {

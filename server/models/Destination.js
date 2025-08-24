@@ -2,18 +2,38 @@ const mongoose = require("mongoose");
 
 const DestinationSchema = new mongoose.Schema({
   name: {
-    type: String,
-    required: [true, "Please add a destination name"],
-    trim: true,
+    en: {
+      type: String,
+      required: [true, "Please add an English destination name"],
+      trim: true,
+    },
+    ar: {
+      type: String,
+      required: [true, "Please add an Arabic destination name"],
+      trim: true,
+    }
   },
   country: {
-    type: String,
-    required: [true, "Please add a country"],
-    trim: true,
+    en: {
+      type: String,
+      required: [true, "Please add an English country name"],
+      trim: true,
+    },
+    ar: {
+      type: String,
+      required: [true, "Please add an Arabic country name"],
+      trim: true,
+    }
   },
   description: {
-    type: String,
-    required: [true, "Please add a description"],
+    en: {
+      type: String,
+      required: [true, "Please add an English description"],
+    },
+    ar: {
+      type: String,
+      required: [true, "Please add an Arabic description"],
+    }
   },
   rating: {
     type: Number,
@@ -25,27 +45,66 @@ const DestinationSchema = new mongoose.Schema({
     type: String,
     required: [true, "Please add an image URL"],
   },
-  topAttractions: [{
-    type: String,
-  }],
-  localCuisine: [{
-    type: String,
-  }],
-  shopping: [{
-    type: String,
-  }],
+  topAttractions: {
+    en: [{
+      type: String,
+      required: [true, "Please add English top attractions"],
+    }],
+    ar: [{
+      type: String,
+      required: [true, "Please add Arabic top attractions"],
+    }]
+  },
+  localCuisine: {
+    en: [{
+      type: String,
+      required: [true, "Please add English local cuisine"],
+    }],
+    ar: [{
+      type: String,
+      required: [true, "Please add Arabic local cuisine"],
+    }]
+  },
+  shopping: {
+    en: [{
+      type: String,
+      required: [true, "Please add English shopping locations"],
+    }],
+    ar: [{
+      type: String,
+      required: [true, "Please add Arabic shopping locations"],
+    }]
+  },
   bestTimeToVisit: {
-    type: String,
-    required: [true, "Please add best time to visit"],
+    en: {
+      type: String,
+      required: [true, "Please add English best time to visit"],
+    },
+    ar: {
+      type: String,
+      required: [true, "Please add Arabic best time to visit"],
+    }
   },
   quickInfo: {
     airport: {
-      type: String,
-      required: [true, "Please add airport code"],
+      en: {
+        type: String,
+        required: [true, "Please add English airport name"],
+      },
+      ar: {
+        type: String,
+        required: [true, "Please add Arabic airport name"],
+      }
     },
     timeZone: {
-      type: String,
-      required: [true, "Please add time zone"],
+      en: {
+        type: String,
+        required: [true, "Please add English time zone"],
+      },
+      ar: {
+        type: String,
+        required: [true, "Please add Arabic time zone"],
+      }
     },
   },
   popular: {

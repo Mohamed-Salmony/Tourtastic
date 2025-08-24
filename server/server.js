@@ -29,6 +29,7 @@ const paymentRoutes = require("./routes/payment");
 const airports = require('./routes/airports');
 const notificationRoutes = require('./routes/notificationRoutes');
 const flightRoutes = require('./routes/flights');
+const contactRoutes = require('./routes/contact');
 
 const app = express();
 
@@ -97,6 +98,7 @@ app.use("/api/payment", paymentRoutes);
 app.use('/api/airports', airports);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/flights', flightRoutes);
+app.use('/api/contact', contactRoutes);
 
 // Serve static files from the uploads directory
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));

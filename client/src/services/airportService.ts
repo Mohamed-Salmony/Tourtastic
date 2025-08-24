@@ -11,6 +11,8 @@ export interface Airport {
   latitude?: number;
   longitude?: number;
   iata_code: string;
+  // Some payloads use `iata` instead of `iata_code` — accept both
+  iata?: string;
   municipality?: string;
   municipality_arbic?: string;
   iso_country?: string;

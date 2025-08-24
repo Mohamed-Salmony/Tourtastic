@@ -265,7 +265,7 @@ const SearchForm: React.FC = () => {
                   <Input
                     id={`from-${index}`}
                     ref={fromInputRef}
-                    placeholder={t('departureCity', 'Type 2-3 letters...')}
+                    placeholder={t('typeToSearch', 'Type 2-3 characters...')}
                     value={fromDisplayValues[index] || ''}
                     onChange={e => handleFromInputChange(e, index)}
                     autoComplete="off"
@@ -310,7 +310,7 @@ const SearchForm: React.FC = () => {
                   <Input
                     id={`to-${index}`}
                     ref={toInputRef}
-                    placeholder={t('destinationCity', 'Type 2-3 letters...')}
+                    placeholder={t('typeToSearch', 'Type 2-3 characters...')}
                     value={toDisplayValues[index] || ''}
                     onChange={e => handleToInputChange(e, index)}
                     autoComplete="off"

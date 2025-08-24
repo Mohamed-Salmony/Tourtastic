@@ -56,15 +56,15 @@ const MultiCityFlightResults: React.FC<MultiCityFlightResultsProps> = ({
   const renderSearchSection = useCallback((section: SearchSection) => {
     const searchParam = section.searchParams[0];
 
-    // Prefer city + country from first flight when available
+    // Get city and country from first flight when available
     const firstFlight = section.flights[0];
     const fromCity = firstFlight?.legs?.[0]?.from?.city || '';
     const fromCountry = firstFlight?.legs?.[0]?.from?.country || firstFlight?.legs?.[0]?.from?.country_iso || '';
     const toCity = firstFlight?.legs?.[0]?.to?.city || '';
     const toCountry = firstFlight?.legs?.[0]?.to?.country || firstFlight?.legs?.[0]?.to?.country_iso || '';
 
-    let headerFrom = fromCity && (fromCountry ? `${fromCity}, ${fromCountry}` : fromCity);
-    let headerTo = toCity && (toCountry ? `${toCity}, ${toCountry}` : toCity);
+    let headerFrom = fromCity && (fromCountry ? t('cityAndCountry', '${city}، ${country}', { city: fromCity, country: fromCountry }) : fromCity);
+    let headerTo = toCity && (toCountry ? t('cityAndCountry', '${city}، ${country}', { city: toCity, country: toCountry }) : toCity);
 
     // If no flights yet, parse display strings
     if (!headerFrom) {
@@ -79,11 +79,44 @@ const MultiCityFlightResults: React.FC<MultiCityFlightResultsProps> = ({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Plane className="h-5 w-5 text-tourtastic-blue" />
-            <span className="text-lg font-semibold">
-              {headerFrom} → {headerTo}
+            <span className="text-lg font-semibold text-right">
+              {`${t(`cities.${fromCity}`, {
+                'Cairo': 'القاهرة',
+                'Jeddah': 'جدة',
+                'Medina': 'المدينة المنورة',
+                'Dubai': 'دبي'
+              }[fromCity] || fromCity)}، ${t(`countries.${fromCountry}`, {
+                'Egypt': 'مصر',
+                'Saudi Arabia': 'المملكة العربية السعودية',
+                'United Arab Emirates': 'الإمارات العربية المتحدة',
+                'UAE': 'الإمارات العربية المتحدة'
+              }[fromCountry] || fromCountry)} ← ${t(`cities.${toCity}`, {
+                'Cairo': 'القاهرة',
+                'Jeddah': 'جدة',
+                'Medina': 'المدينة المنورة',
+                'Dubai': 'دبي'
+              }[toCity] || toCity)}، ${t(`countries.${toCountry}`, {
+                'Egypt': 'مصر',
+                'Saudi Arabia': 'المملكة العربية السعودية',
+                'United Arab Emirates': 'الإمارات العربية المتحدة',
+                'UAE': 'الإمارات العربية المتحدة'
+              }[toCountry] || toCountry)}`}
             </span>
-            <span className="text-sm text-gray-500 ml-auto">
-              {format(searchParam.date, 'MMM dd, yyyy')}
+            <span className="text-sm text-gray-500 mr-auto">
+              {t('dateFormat', `${t(`months.${format(searchParam.date, 'MMM')}`, {
+                  'Jan': 'يناير',
+                  'Feb': 'فبراير',
+                  'Mar': 'مارس',
+                  'Apr': 'أبريل',
+                  'May': 'مايو',
+                  'Jun': 'يونيو',
+                  'Jul': 'يوليو',
+                  'Aug': 'أغسطس',
+                  'Sep': 'سبتمبر',
+                  'Oct': 'أكتوبر',
+                  'Nov': 'نوفمبر',
+                  'Dec': 'ديسمبر'
+                }[format(searchParam.date, 'MMM')])} ${format(searchParam.date, 'dd')}, ${format(searchParam.date, 'yyyy')}`)}
             </span>
           </CardTitle>
         </CardHeader>
@@ -124,10 +157,10 @@ const MultiCityFlightResults: React.FC<MultiCityFlightResultsProps> = ({
                     {section.loading ? (
                       <div className="flex items-center gap-2">
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-tourtastic-blue"></div>
-                        {t('loading', 'Loading...')}
+                        {t('loading', 'جاري التحميل...')}
                       </div>
                     ) : (
-                      t('loadMoreFlights', 'Load More Flights')
+                      t('loadMoreFlights', 'تحميل المزيد من الرحلات')
                     )}
                   </Button>
                 </div>
@@ -137,7 +170,7 @@ const MultiCityFlightResults: React.FC<MultiCityFlightResultsProps> = ({
                 <div className="mt-4 text-center text-sm text-gray-500">
                   <div className="flex items-center justify-center gap-2">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-tourtastic-blue"></div>
-                    {t('searchingMoreFlights', 'Searching for more flights...')}
+                    {t('searchingMoreFlights', 'جاري البحث عن المزيد من الرحلات...')}
                   </div>
                 </div>
               )}

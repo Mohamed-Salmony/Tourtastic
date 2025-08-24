@@ -86,10 +86,10 @@ export const getTimeOfDayIcon = (dateString: string) => {
 export const getTimeOfDayWithColor = (dateString: string) => {
   const timeOfDay = getTimeOfDay(dateString);
   switch (timeOfDay) {
-    case 'morning': return { text: 'Morning', color: 'text-orange-500' };
-    case 'afternoon': return { text: 'Afternoon', color: 'text-yellow-500' };
-    case 'evening': return { text: 'Evening', color: 'text-purple-500' };
-    case 'night': return { text: 'Night', color: 'text-blue-500' };
-    default: return { text: 'Day', color: 'text-gray-500' };
+    case 'morning': return { text: 'صباحاً', color: 'text-orange-500' };
+    case 'afternoon': return { text: 'ظهراً', color: 'text-yellow-500' };
+    case 'evening': return { text: 'مساءً', color: 'text-purple-500' };
+    case 'night': return { text: 'ليلاً', color: 'text-blue-500' };
+    default: return { text: 'يوماً', color: 'text-gray-500' };
   }
 };

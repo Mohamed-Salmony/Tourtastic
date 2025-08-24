@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { CalendarIcon, Plane } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -27,12 +28,12 @@ import { useMultiCitySearch } from '@/hooks/useMultiCitySearch';
 // Form schema
 const searchFormSchema = z.object({
   flightSegments: z.array(z.object({
-    from: z.string().min(2, { message: 'Please enter departure city' }),
-    to: z.string().min(2, { message: 'Please enter destination city' }),
-    date: z.date({ required_error: 'Please select departure date' }),
+    from: z.string().min(2, { message: 'الرجاء إدخال مدينة المغادرة' }),
+    to: z.string().min(2, { message: 'الرجاء إدخال مدينة الوصول' }),
+    date: z.date({ required_error: 'الرجاء اختيار تاريخ السفر' }),
   })),
   passengers: z.object({
-    adults: z.number().min(1, { message: 'At least one adult is required' }),
+    adults: z.number().min(1, { message: 'يجب اختيار مسافر بالغ واحد على الأقل' }),
     children: z.number().min(0),
     infants: z.number().min(0),
   }),
@@ -45,7 +46,7 @@ type SearchFormValues = z.infer<typeof searchFormSchema>;
 type TimeOfDay = 'morning' | 'afternoon' | 'evening' | 'night';
 
 interface FilterState {
-  sortBy: 'price_asc' | 'price_desc' | 'duration_asc' | 'duration_desc';
+  sortBy: 'price_asc' | 'price_desc' | 'duration_asc' | 'departure_asc' | 'arrival_asc';
   selectedAirlines: string[];
   timeOfDay: {
     departure: TimeOfDay[];
@@ -68,55 +69,100 @@ const FilterSidebar: React.FC<FilterSidebarProps> = ({
   setFilters,
   availableAirlines,
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const currentLang = i18n.language || 'ar';
 
   return (
     <Card className="sticky top-4 p-4">
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-6" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
         {/* Sort By Filter */}
         <div>
-          <h3 className="font-semibold mb-3">{t('sortBy', 'Sort By')}</h3>
+          <h3 className="font-semibold mb-3 text-right">
+            {t('sortBy', currentLang === 'ar' ? 'ترتيب حسب' : 'Sort By')}
+          </h3>
           <RadioGroup
+            dir={currentLang === 'ar' ? 'rtl' : 'ltr'}
             value={filters.sortBy}
-            onValueChange={(value: FilterState['sortBy']) => 
+            onValueChange={(value: FilterState['sortBy']) =>
               setFilters(prev => ({ ...prev, sortBy: value }))
             }
-            className="space-y-2"
+            className="space-y-2 text-right"
           >
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="price_asc" id="price_asc" />
-              <Label htmlFor="price_asc">{t('priceLowToHigh', 'Price: Low to High')}</Label>
+            <div className="flex items-center justify-end gap-2">
+              <Label htmlFor="price_asc" className="text-right flex-grow">
+                {t('sortPriceAsc', currentLang === 'ar' ? 'السعر: من الأقل إلى الأعلى' : 'Price: Low to High')}
+              </Label>
+              <RadioGroupItem value="price_asc" id="price_asc" className="rtl:mr-auto" />
             </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="price_desc" id="price_desc" />
-              <Label htmlFor="price_desc">{t('priceHighToLow', 'Price: High to Low')}</Label>
+            <div className="flex items-center justify-end gap-2">
+              <Label htmlFor="price_desc" className="text-right flex-grow">
+                {t('sortPriceDesc', currentLang === 'ar' ? 'السعر: من الأعلى إلى الأقل' : 'Price: High to Low')}
+              </Label>
+              <RadioGroupItem value="price_desc" id="price_desc" className="rtl:mr-auto" />
             </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="duration_asc" id="duration_asc" />
-              <Label htmlFor="duration_asc">{t('durationShortest', 'Duration: Shortest')}</Label>
+            <div className="flex items-center justify-end gap-2">
+              <Label htmlFor="duration_asc" className="text-right flex-grow">
+                {t('sortDurationAsc', currentLang === 'ar' ? 'المدة: الأقصر أولاً' : 'Duration: Shortest First')}
+              </Label>
+              <RadioGroupItem value="duration_asc" id="duration_asc" className="rtl:mr-auto" />
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <Label htmlFor="departure_asc" className="text-right flex-grow">
+                {t('sortDepartureAsc', currentLang === 'ar' ? 'وقت المغادرة: الأبكر أولاً' : 'Departure: Earliest First')}
+              </Label>
+              <RadioGroupItem value="departure_asc" id="departure_asc" className="rtl:mr-auto" />
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <Label htmlFor="arrival_asc" className="text-right flex-grow">
+                {t('sortArrivalAsc', currentLang === 'ar' ? 'وقت الوصول: الأبكر أولاً' : 'Arrival: Earliest First')}
+              </Label>
+              <RadioGroupItem value="arrival_asc" id="arrival_asc" className="rtl:mr-auto" />
             </div>
           </RadioGroup>
         </div>
 
         {/* Airlines Filter */}
         <div>
-          <h3 className="font-semibold mb-3">{t('airlines', 'Airlines')}</h3>
-          <div className="space-y-2 max-h-48 overflow-y-auto">
-            {availableAirlines.map(airline => (
-              <div key={airline} className="flex items-center space-x-2">
+          <h3 className="font-semibold mb-3 text-right">شركات الطيران</h3>
+          <div className="space-y-2 max-h-48 overflow-y-auto" dir="rtl">
+            {availableAirlines.map((airline) => (
+              <div key={airline} className="flex items-center justify-end gap-2">
+                <Label
+                  htmlFor={`airline-${airline}`}
+                  className="text-right flex-grow"
+                >
+                  {t(`airlines.${airline}`, {
+                    'Flynas': 'طيران ناس',
+                    'flyadeal': 'طيران أديل',
+                    'Air Arabia': 'العربية للطيران',
+                    'EgyptAir': 'مصر للطيران',
+                    'Emirates': 'طيران الإمارات',
+                    'Ethiopian Airlines': 'الخطوط الإثيوبية',
+                    'Etihad Airways': 'الاتحاد للطيران',
+                    'FlyDubai': 'فلاي دبي',
+                    'Gulf Air': 'طيران الخليج',
+                    'Jazeera Airways': 'طيران الجزيرة',
+                    'Kuwait Airways': 'الخطوط الكويتية',
+                    'Oman Air': 'الطيران العماني',
+                    'Qatar Airways': 'الخطوط القطرية',
+                    'Royal Jordanian': 'الملكية الأردنية',
+                    'Saudi Arabian Airlines': 'الخطوط السعودية',
+                    'Turkish Airlines': 'الخطوط التركية'
+                  }[airline] || airline)}
+                </Label>
                 <Checkbox
-                  id={airline}
+                  id={`airline-${airline}`}
                   checked={filters.selectedAirlines.includes(airline)}
+                  className="rtl:mr-auto"
                   onCheckedChange={(checked) => {
                     setFilters(prev => ({
                       ...prev,
-                      selectedAirlines: checked 
+                      selectedAirlines: checked
                         ? [...prev.selectedAirlines, airline]
                         : prev.selectedAirlines.filter(a => a !== airline)
-                    }));
+                    }))
                   }}
                 />
-                <Label htmlFor={airline}>{airline}</Label>
               </div>
             ))}
           </div>
@@ -124,10 +170,26 @@ const FilterSidebar: React.FC<FilterSidebarProps> = ({
 
         {/* Departure Time Filter */}
         <div>
-          <h3 className="font-semibold mb-3">{t('departureTime', 'Departure Time')}</h3>
-          <div className="space-y-2">
+          <h3 className="font-semibold mb-3 text-right">{t('departureTime', 'وقت المغادرة')}</h3>
+          <div className="space-y-2" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
             {(['morning', 'afternoon', 'evening', 'night'] as const).map((time) => (
-              <div key={time} className="flex items-center space-x-2">
+              <div key={time} className="flex items-center justify-end gap-2">
+                <Label htmlFor={`departure_${time}`} className="flex items-center gap-2">
+                  <span>
+                    {currentLang === 'ar' ? {
+                      'morning': 'صباحاً',
+                      'afternoon': 'ظهراً',
+                      'evening': 'مساءً',
+                      'night': 'ليلاً'
+                    }[time] : time}
+                  </span>
+                  <span className="text-gray-500 text-sm">
+                    {time === 'morning' && '(5AM - 11:59AM)'}
+                    {time === 'afternoon' && '(12PM - 4:59PM)'}
+                    {time === 'evening' && '(5PM - 8:59PM)'}
+                    {time === 'night' && '(9PM - 4:59AM)'}
+                  </span>
+                </Label>
                 <Checkbox
                   id={`departure_${time}`}
                   checked={filters.timeOfDay.departure.includes(time)}
@@ -143,15 +205,6 @@ const FilterSidebar: React.FC<FilterSidebarProps> = ({
                     }));
                   }}
                 />
-                <Label htmlFor={`departure_${time}`} className="capitalize">
-                  {t(time, time)} 
-                  <span className="text-gray-500 text-sm ml-1">
-                    {time === 'morning' && '(5AM - 11:59AM)'}
-                    {time === 'afternoon' && '(12PM - 4:59PM)'}
-                    {time === 'evening' && '(5PM - 8:59PM)'}
-                    {time === 'night' && '(9PM - 4:59AM)'}
-                  </span>
-                </Label>
               </div>
             ))}
           </div>
@@ -159,7 +212,7 @@ const FilterSidebar: React.FC<FilterSidebarProps> = ({
 
         {/* Price Range Filter */}
         <div>
-          <h3 className="font-semibold mb-3">{t('priceRange', 'Price Range')}</h3>
+          <h3 className="font-semibold mb-3">{t('priceRange', 'نطاق السعر')}</h3>
           <div className="space-y-4">
             <Slider
               value={[filters.priceRange.min, filters.priceRange.max]}
@@ -174,8 +227,8 @@ const FilterSidebar: React.FC<FilterSidebarProps> = ({
               }}
             />
             <div className="flex justify-between text-sm">
-              <span>{filters.priceRange.min}</span>
-              <span>{filters.priceRange.max}</span>
+              <span>{filters.priceRange.min} {t('currency', 'جنيه')}</span>
+              <span>{filters.priceRange.max} {t('currency', 'جنيه')}</span>
             </div>
           </div>
         </div>
@@ -185,7 +238,7 @@ const FilterSidebar: React.FC<FilterSidebarProps> = ({
 };
 
 const Flights = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const [hasSearched, setHasSearched] = useState(false);
@@ -245,7 +298,7 @@ const Flights = () => {
           }
         });
       });
-      
+
       // Update available airlines for filtering
       const sortedAirlines = Array.from(uniqueAirlines).sort();
       setAvailableAirlines(sortedAirlines);
@@ -357,12 +410,21 @@ const Flights = () => {
       return newValues;
     });
     setValue(`flightSegments.${index}.from`, value);
-    
+
     if (value.length >= 2) {
       setShowFromSuggestions(index);
       try {
-        const res = await api.get(`/airports/search?q=${encodeURIComponent(value)}`);
-        setFromSuggestions(res.data.data);
+        const response = await api.get(`/airports/search?q=${encodeURIComponent(value)}&lang=${i18n.language}`);
+        if (response.data.success && response.data.data) {
+          const airports = response.data.data;
+          // Filter out any airports without proper translation data
+          const validAirports = airports.filter(airport =>
+            i18n.language === 'ar' ?
+              airport.name_arbic && airport.municipality_arbic && airport.country_arbic :
+              airport.name && airport.municipality && airport.country
+          );
+          setFromSuggestions(validAirports);
+        }
       } catch {
         setFromSuggestions([]);
       }
@@ -380,12 +442,21 @@ const Flights = () => {
       return newValues;
     });
     setValue(`flightSegments.${index}.to`, value);
-    
+
     if (value.length >= 2) {
       setShowToSuggestions(index);
       try {
-        const res = await api.get(`/airports/search?q=${encodeURIComponent(value)}`);
-        setToSuggestions(res.data.data);
+        const response = await api.get(`/airports/search?q=${encodeURIComponent(value)}&lang=${i18n.language}`);
+        if (response.data.success && response.data.data) {
+          const airports = response.data.data;
+          // Filter out any airports without proper translation data
+          const validAirports = airports.filter(airport =>
+            i18n.language === 'ar' ?
+              airport.name_arbic && airport.municipality_arbic && airport.country_arbic :
+              airport.name && airport.municipality && airport.country
+          );
+          setToSuggestions(validAirports);
+        }
       } catch {
         setToSuggestions([]);
       }
@@ -399,7 +470,11 @@ const Flights = () => {
     setValue(`flightSegments.${index}.from`, airport.iata_code, { shouldValidate: true, shouldDirty: true });
     setFromAirportNames(values => {
       const newValues = [...values];
-      newValues[index] = `${airport.iata_code} - ${airport.name} (${airport.city || airport.municipality}, ${airport.country || airport.iso_country})`;
+      if (i18n.language === 'ar' && airport.name_arbic) {
+        newValues[index] = `${airport.iata_code} - ${airport.name_arbic} (${airport.municipality_arbic || airport.municipality || airport.city}، ${airport.country_arbic || airport.country})`;
+      } else {
+        newValues[index] = `${airport.iata_code} - ${airport.name} (${airport.municipality || airport.city}, ${airport.country || airport.iso_country})`;
+      }
       return newValues;
     });
     setShowFromSuggestions(null);
@@ -409,7 +484,11 @@ const Flights = () => {
     setValue(`flightSegments.${index}.to`, airport.iata_code, { shouldValidate: true, shouldDirty: true });
     setToAirportNames(values => {
       const newValues = [...values];
-      newValues[index] = `${airport.iata_code} - ${airport.name} (${airport.city || airport.municipality}, ${airport.country || airport.iso_country})`;
+      if (i18n.language === 'ar' && airport.name_arbic) {
+        newValues[index] = `${airport.iata_code} - ${airport.name_arbic} (${airport.municipality_arbic || airport.municipality || airport.city}، ${airport.country_arbic || airport.country})`;
+      } else {
+        newValues[index] = `${airport.iata_code} - ${airport.name} (${airport.municipality || airport.city}, ${airport.country || airport.iso_country})`;
+      }
       return newValues;
     });
     setShowToSuggestions(null);
@@ -423,8 +502,12 @@ const Flights = () => {
         const newItem = {
           from: flight.legs[0].from.city,
           to: flight.legs[0].to.city,
+          fromIata: flight.legs[0].from.iata || flight.legs[0].from.iata_code || flight.legs[0].from.airport || null,
+          toIata: flight.legs[0].to.iata || flight.legs[0].to.iata_code || flight.legs[0].to.airport || null,
           flightId: flight.legs[0].segments[0].flightnumber,
           airline: flight.legs[0].segments[0].airline_name,
+          airlineCode: flight.legs[0].segments[0].airline_code || flight.legs[0].segments[0].airline_iata || null,
+          airlineLogo: flight.airline_logo_url || null,
           departureTime: flight.legs[0].from.date,
           arrivalTime: flight.legs[0].to.date,
           price: flight.price,
@@ -435,10 +518,20 @@ const Flights = () => {
             infants: flight.search_query.inf || 0
           },
           class: flight.search_query.options.cabin || 'economy'
+          ,
+          // store the full flight object so we can persist all details shown on the flight page
+          selectedFlight: {
+            ...flight,
+            // normalize price into expected object shape used by backend
+            price: {
+              total: flight.price,
+              currency: flight.currency
+            }
+          }
         };
         cartItems.push(newItem);
         localStorage.setItem('cartItems', JSON.stringify(cartItems));
-        
+
         toast({
           title: t('success', 'Success'),
           description: t('flightAddedToCart', 'Flight has been added to your cart'),
@@ -448,26 +541,25 @@ const Flights = () => {
       }
 
       // For logged in users, save to backend
-      const response = await api.post('/api/cart/items', {
+  const response = await api.post('/bookings', {
         flightDetails: {
           from: flight.legs[0].from.city,
           to: flight.legs[0].to.city,
+          fromIata: flight.legs[0].from.iata || flight.legs[0].from.iata_code || null,
+          toIata: flight.legs[0].to.iata || flight.legs[0].to.iata_code || null,
           departureDate: flight.legs[0].from.date,
           passengers: {
             adults: flight.search_query.adt || 1,
             children: flight.search_query.chd || 0,
             infants: flight.search_query.inf || 0
           },
+          // send the entire flight object so the server can persist all displayed details
           selectedFlight: {
-            flightId: flight.legs[0].segments[0].flightnumber,
-            airline: flight.legs[0].segments[0].airline_name,
-            departureTime: flight.legs[0].from.date,
-            arrivalTime: flight.legs[0].to.date,
+            ...flight,
             price: {
               total: flight.price,
               currency: flight.currency
-            },
-            class: flight.search_query.options.cabin || 'economy'
+            }
           }
         }
       });
@@ -484,16 +576,16 @@ const Flights = () => {
     } catch (error: unknown) {
       console.error('Cart error:', error);
       let errorMessage = t('addToCartError', 'Failed to add flight to cart. Please try again.');
-      
+
       if (error && typeof error === 'object' && 'response' in error &&
-          error.response && typeof error.response === 'object' && 
-          'data' in error.response && 
-          error.response.data && typeof error.response.data === 'object' &&
-          'message' in error.response.data && 
-          typeof error.response.data.message === 'string') {
+        error.response && typeof error.response === 'object' &&
+        'data' in error.response &&
+        error.response.data && typeof error.response.data === 'object' &&
+        'message' in error.response.data &&
+        typeof error.response.data.message === 'string') {
         errorMessage = error.response.data.message;
       }
-      
+
       toast({
         title: t('error', 'Error'),
         description: errorMessage,
@@ -507,9 +599,9 @@ const Flights = () => {
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-gray-50 to-gray-100 py-12">
         <div className="container-custom">
-          <h1 className="text-4xl font-bold mb-4">{t('flights', 'Flights')}</h1>
+          <h1 className="text-4xl font-bold mb-4">{t('flights', 'رحلات الطيران')}</h1>
           <p className="text-gray-600 max-w-2xl">
-            {t('findAndBook', 'Find and book flights to your favorite destinations. Compare prices and find the best deals.')}
+            {t('findAndBook', 'ابحث واحجز رحلات الطيران إلى وجهاتك المفضلة. قارن الأسعار واعثر على أفضل العروض.')}
           </p>
         </div>
       </div>
@@ -550,11 +642,23 @@ const Flights = () => {
                             {fromSuggestions.map((a, i) => (
                               <li
                                 key={`${a.iata_code || 'unknown'}-${i}`}
-                                className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                                className={`px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm ${i18n.language === 'ar' ? 'text-right' : ''}`}
                                 onMouseDown={() => handleFromSuggestionClick(a, index)}
+                                dir={i18n.language === 'ar' ? 'rtl' : 'ltr'}
                               >
-                                <div className="font-medium">{a.iata_code} - {a.name}</div>
-                                <div className="text-gray-500 text-xs">{a.city || a.municipality}, {a.country || a.iso_country}</div>
+                                <div className={`font-medium ${i18n.language === 'ar' ? 'text-right' : ''}`}>
+                                  {i18n.language === 'ar' ? (
+                                    <>{a.name_arbic || a.name} - {a.iata_code}</>
+                                  ) : (
+                                    <>{a.iata_code} - {a.name}</>
+                                  )}
+                                </div>
+                                <div className={`text-gray-500 text-xs ${i18n.language === 'ar' ? 'text-right' : ''}`}>
+                                  {i18n.language === 'ar' 
+                                    ? `${a.municipality_arbic || a.municipality || a.city}، ${a.country_arbic || a.country}`
+                                    : `${a.municipality || a.city}, ${a.country || a.iso_country}`
+                                  }
+                                </div>
                               </li>
                             ))}
                           </ul>
@@ -595,8 +699,19 @@ const Flights = () => {
                                 className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
                                 onMouseDown={() => handleToSuggestionClick(a, index)}
                               >
-                                <div className="font-medium">{a.iata_code} - {a.name}</div>
-                                <div className="text-gray-500 text-xs">{a.city || a.municipality}, {a.country || a.iso_country}</div>
+                                <div className={`font-medium ${i18n.language === 'ar' ? 'text-right' : ''}`}>
+                                  {i18n.language === 'ar' ? (
+                                    <>{a.name_arbic || a.name} - {a.iata_code}</>
+                                  ) : (
+                                    <>{a.iata_code} - {a.name}</>
+                                  )}
+                                </div>
+                                <div className={`text-gray-500 text-xs ${i18n.language === 'ar' ? 'text-right' : ''}`}>
+                                  {i18n.language === 'ar' 
+                                    ? `${a.municipality_arbic || a.municipality || a.city}، ${a.country_arbic || a.country}`
+                                    : `${a.municipality || a.city}, ${a.country || a.iso_country}`
+                                  }
+                                </div>
                               </li>
                             ))}
                           </ul>
@@ -620,7 +735,7 @@ const Flights = () => {
                             )}
                           >
                             <CalendarIcon className="mr-2 h-4 w-4" />
-                            {segment.date ? (segment.date instanceof Date && !isNaN(segment.date.getTime()) ? format(segment.date, 'PPP') : <span>{t('pickDate', 'Pick a date')}</span>) : <span>{t('pickDate', 'Pick a date')}</span>}
+                            {segment.date ? (segment.date instanceof Date && !isNaN(segment.date.getTime()) ? format(segment.date, 'dd MMMM yyyy', { locale: ar }) : <span>{t('pickDate', 'Pick a date')}</span>) : <span>{t('pickDate', 'Pick a date')}</span>}
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
@@ -805,36 +920,46 @@ const Flights = () => {
               <Card className="sticky top-4 p-4">
                 <CardContent className="space-y-6">
                   {/* Sort By Filter */}
-                  <div>
-                    <h3 className="font-semibold mb-3">{t('sortBy', 'Sort By')}</h3>
+                  <div dir={i18n.language === 'ar' ? 'rtl' : 'ltr'}>
+                    <h3 className={`font-semibold mb-3 ${i18n.language === 'ar' ? 'text-right' : 'text-left'}`}>
+                      {i18n.language === 'ar' ? 'ترتيب حسب' : 'Sort By'}
+                    </h3>
                     <RadioGroup
                       value={filters.sortBy}
-                      onValueChange={(value: FilterState['sortBy']) => 
+                      onValueChange={(value: FilterState['sortBy']) =>
                         setFilters(prev => ({ ...prev, sortBy: value }))
                       }
                       className="space-y-2"
                     >
-                      <div className="flex items-center space-x-2">
+                      <div className={`flex items-center ${i18n.language === 'ar' ? 'flex-row-reverse space-x-reverse' : ''} space-x-2`}>
                         <RadioGroupItem value="price_asc" id="price_asc" />
-                        <Label htmlFor="price_asc">{t('priceLowToHigh', 'Price: Low to High')}</Label>
+                        <Label htmlFor="price_asc" className={i18n.language === 'ar' ? 'text-right' : 'text-left'}>
+                          {i18n.language === 'ar' ? 'السعر: من الأقل إلى الأعلى' : 'Price: Low to High'}
+                        </Label>
                       </div>
-                      <div className="flex items-center space-x-2">
+                      <div className={`flex items-center ${i18n.language === 'ar' ? 'flex-row-reverse space-x-reverse' : ''} space-x-2`}>
                         <RadioGroupItem value="price_desc" id="price_desc" />
-                        <Label htmlFor="price_desc">{t('priceHighToLow', 'Price: High to Low')}</Label>
+                        <Label htmlFor="price_desc" className={i18n.language === 'ar' ? 'text-right' : 'text-left'}>
+                          {i18n.language === 'ar' ? 'السعر: من الأعلى إلى الأقل' : 'Price: High to Low'}
+                        </Label>
                       </div>
-                      <div className="flex items-center space-x-2">
+                      <div className={`flex items-center ${i18n.language === 'ar' ? 'flex-row-reverse space-x-reverse' : ''} space-x-2`}>
                         <RadioGroupItem value="duration_asc" id="duration_asc" />
-                        <Label htmlFor="duration_asc">{t('durationShortest', 'Duration: Shortest')}</Label>
+                        <Label htmlFor="duration_asc" className={i18n.language === 'ar' ? 'text-right' : 'text-left'}>
+                          {i18n.language === 'ar' ? 'المدة: الأقصر أولاً' : 'Duration: Shortest'}
+                        </Label>
                       </div>
                     </RadioGroup>
                   </div>
 
                   {/* Airlines Filter */}
-                  <div>
-                    <h3 className="font-semibold mb-3">{t('airlines', 'Airlines')}</h3>
+                  <div dir={i18n.language === 'ar' ? 'rtl' : 'ltr'}>
+                    <h3 className={`font-semibold mb-3 ${i18n.language === 'ar' ? 'text-right' : 'text-left'}`}>
+                      {i18n.language === 'ar' ? 'شركات الطيران' : 'Airlines'}
+                    </h3>
                     <div className="space-y-2 max-h-48 overflow-y-auto">
                       {availableAirlines.map(airline => (
-                        <div key={airline} className="flex items-center space-x-2">
+                        <div key={airline} className={`flex items-center ${i18n.language === 'ar' ? 'flex-row-reverse space-x-reverse' : ''} space-x-2`}>
                           <Checkbox
                             id={airline}
                             checked={filters.selectedAirlines.includes(airline)}
@@ -847,18 +972,22 @@ const Flights = () => {
                               }));
                             }}
                           />
-                          <Label htmlFor={airline}>{airline}</Label>
+                          <Label htmlFor={airline} className={i18n.language === 'ar' ? 'text-right' : 'text-left'}>
+                            {airline}
+                          </Label>
                         </div>
                       ))}
                     </div>
                   </div>
 
                   {/* Departure Time Filter */}
-                  <div>
-                    <h3 className="font-semibold mb-3">{t('departureTime', 'Departure Time')}</h3>
+                  <div dir={i18n.language === 'ar' ? 'rtl' : 'ltr'}>
+                    <h3 className={`font-semibold mb-3 ${i18n.language === 'ar' ? 'text-right' : 'text-left'}`}>
+                      {i18n.language === 'ar' ? 'موعد المغادرة' : 'Departure Time'}
+                    </h3>
                     <div className="space-y-2">
                       {(['morning', 'afternoon', 'evening', 'night'] as const).map((time) => (
-                        <div key={time} className="flex items-center space-x-2">
+                        <div key={time} className={`flex items-center ${i18n.language === 'ar' ? 'flex-row-reverse space-x-reverse' : ''} space-x-2`}>
                           <Checkbox
                             id={`departure_${time}`}
                             checked={filters.timeOfDay.departure.includes(time)}
@@ -874,14 +1003,34 @@ const Flights = () => {
                               }));
                             }}
                           />
-                          <Label htmlFor={`departure_${time}`} className="capitalize">
-                            {t(time, time)} 
-                            <span className="text-gray-500 text-sm ml-1">
-                              {time === 'morning' && '(5AM - 11:59AM)'}
-                              {time === 'afternoon' && '(12PM - 4:59PM)'}
-                              {time === 'evening' && '(5PM - 8:59PM)'}
-                              {time === 'night' && '(9PM - 4:59AM)'}
-                            </span>
+                          <Label htmlFor={`departure_${time}`} className={i18n.language === 'ar' ? 'text-right' : 'text-left'}>
+                            {i18n.language === 'ar' ? (
+                              <>
+                                {time === 'morning' && 'صباحاً'}
+                                {time === 'afternoon' && 'ظهراً'}
+                                {time === 'evening' && 'مساءً'}
+                                {time === 'night' && 'ليلاً'}
+                                <span className="text-gray-500 text-sm mr-1">
+                                  {time === 'morning' && '(5:00 ص - 11:59 ص)'}
+                                  {time === 'afternoon' && '(12:00 م - 4:59 م)'}
+                                  {time === 'evening' && '(5:00 م - 8:59 م)'}
+                                  {time === 'night' && '(9:00 م - 4:59 ص)'}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                {time === 'morning' && 'Morning'}
+                                {time === 'afternoon' && 'Afternoon'}
+                                {time === 'evening' && 'Evening'}
+                                {time === 'night' && 'Night'}
+                                <span className="text-gray-500 text-sm ml-1">
+                                  {time === 'morning' && '(5AM - 11:59AM)'}
+                                  {time === 'afternoon' && '(12PM - 4:59PM)'}
+                                  {time === 'evening' && '(5PM - 8:59PM)'}
+                                  {time === 'night' && '(9PM - 4:59AM)'}
+                                </span>
+                              </>
+                            )}
                           </Label>
                         </div>
                       ))}
@@ -923,22 +1072,22 @@ const Flights = () => {
                     .filter(flight => {
                       // Apply airline filter
                       if (filters.selectedAirlines.length > 0 &&
-                          !filters.selectedAirlines.includes(flight.legs[0].segments[0].airline_name)) {
+                        !filters.selectedAirlines.includes(flight.legs[0].segments[0].airline_name)) {
                         return false;
                       }                      // Apply price range filter
-                      if (flight.price < filters.priceRange.min || 
-                          flight.price > filters.priceRange.max) {
+                      if (flight.price < filters.priceRange.min ||
+                        flight.price > filters.priceRange.max) {
                         return false;
                       }
 
                       // Apply time of day filter for departure
                       if (filters.timeOfDay.departure.length > 0) {
                         const hour = new Date(flight.legs[0].from.date).getHours();
-                        const timeOfDay = 
+                        const timeOfDay =
                           hour >= 5 && hour < 12 ? 'morning' :
-                          hour >= 12 && hour < 17 ? 'afternoon' :
-                          hour >= 17 && hour < 21 ? 'evening' : 'night';
-                        
+                            hour >= 12 && hour < 17 ? 'afternoon' :
+                              hour >= 17 && hour < 21 ? 'evening' : 'night';
+
                         if (!filters.timeOfDay.departure.includes(timeOfDay)) {
                           return false;
                         }
@@ -953,10 +1102,10 @@ const Flights = () => {
                         case 'price_desc':
                           return b.price - a.price;
                         case 'duration_asc': {
-                          const durationA = new Date(a.legs[0].to.date).getTime() - 
-                                          new Date(a.legs[0].from.date).getTime();
-                          const durationB = new Date(b.legs[0].to.date).getTime() - 
-                                          new Date(b.legs[0].from.date).getTime();
+                          const durationA = new Date(a.legs[0].to.date).getTime() -
+                            new Date(a.legs[0].from.date).getTime();
+                          const durationB = new Date(b.legs[0].to.date).getTime() -
+                            new Date(b.legs[0].from.date).getTime();
                           return durationA - durationB;
                         }
                         default:

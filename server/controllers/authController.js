@@ -3,6 +3,47 @@ const Notification = require("../models/Notification");
 const asyncHandler = require("../middleware/asyncHandler");
 const jwt = require("jsonwebtoken");
 
+// @desc    Check if email or username exists
+// @route   POST /api/auth/check-exists
+// @access  Public
+exports.checkExists = asyncHandler(async (req, res) => {
+  const { email, username } = req.body;
+  
+  if (!email && !username) {
+    return res.status(400).json({
+      success: false,
+      message: "Please provide either email or username to check"
+    });
+  }
+
+  let result = { exists: false };
+
+  // Check both email and username if provided
+  if (email) {
+    const emailExists = await User.findOne({ email });
+    if (emailExists) {
+      result = {
+        exists: true,
+        field: 'email',
+        message: 'Email already registered'
+      };
+    }
+  }
+
+  if (username && !result.exists) {
+    const usernameExists = await User.findOne({ username });
+    if (usernameExists) {
+      result = {
+        exists: true,
+        field: 'username',
+        message: 'Username already taken'
+      };
+    }
+  }
+
+  return res.status(result.exists ? 400 : 200).json(result);
+});
+
 // Generate JWT
 const generateToken = (id) => {
   if (!process.env.JWT_SECRET) {
@@ -11,12 +52,12 @@ const generateToken = (id) => {
   
   // Generate access token (short-lived)
   const accessToken = jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: '2h', // 2 hour
+    expiresIn: '2h', 
   });
 
   // Generate refresh token (long-lived)
   const refreshToken = jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: '30d', // 30 days
+    expiresIn: '7d', 
   });
 
   return { accessToken, refreshToken };
@@ -26,20 +67,31 @@ const generateToken = (id) => {
 // @route   POST /api/auth/register
 // @access  Public
 exports.register = asyncHandler(async (req, res, next) => {
-  const { name, email, password, role } = req.body;
+  const { name, username, email, password, phoneNumber, dateOfBirth, role } = req.body;
 
-  // Check if user already exists
-  const userExists = await User.findOne({ email });
+  // Check if user already exists (by email or username)
+  const userExists = await User.findOne({ 
+    $or: [
+      { email },
+      { username }
+    ]
+  });
 
   if (userExists) {
-    return res.status(400).json({ success: false, message: "User already exists" });
+    return res.status(400).json({ 
+      success: false, 
+      message: userExists.email === email ? "Email already registered" : "Username already taken" 
+    });
   }
 
   // Create user
   const user = await User.create({
     name,
+    username,
     email,
     password,
+    phone: phoneNumber,
+    birthdate: dateOfBirth,
     role: role || "user",
   });
 
@@ -47,8 +99,14 @@ exports.register = asyncHandler(async (req, res, next) => {
     // Create welcome notification
     await Notification.create({
       userId: user._id,
-      title: "Welcome to Tourtastic!",
-      message: `Welcome ${name}! We're excited to have you join our travel community. Start exploring amazing destinations and create unforgettable memories.`,
+      title: {
+        en: "Welcome to Tourtastic!",
+        ar: "مرحبًا بكم في تورتاستيك!"
+      },
+      message: {
+        en: `Welcome ${name}! We're excited to have you join our travel community. Start exploring amazing destinations and create unforgettable memories.`,
+        ar: `مرحبًا بك ${name}! نحن متحمسون لانضمامك إلى مجتمع السفر الخاص بنا. ابدأ في استكشاف وجهات مذهلة وصنع ذكريات لا تُنسى.`
+      },
       type: "welcome"
     });
 
@@ -72,19 +130,20 @@ exports.register = asyncHandler(async (req, res, next) => {
 // @route   POST /api/auth/login
 // @access  Public
 exports.login = asyncHandler(async (req, res, next) => {
-  const { email, password } = req.body;
+  const { email, username, password } = req.body;
 
-  // Validate email & password
-  if (!email || !password) {
+  // Validate credential & password
+  if ((!email && !username) || !password) {
     return res.status(400).json({ 
       success: false, 
-      message: "Please provide an email and password" 
+      message: "Please provide an email/username and password" 
     });
   }
 
   try {
-    // Check for user
-    const user = await User.findOne({ email }).select("+password");
+    // Check for user by email or username
+    const query = email ? { email } : { username };
+    const user = await User.findOne(query).select("+password");
 
     if (!user) {
       return res.status(401).json({ 

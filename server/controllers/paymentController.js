@@ -52,16 +52,28 @@ exports.handlePaymentCallback = asyncHandler(async (req, res) => {
       // Create payment success notification
       await Notification.create({
         userId: booking.userId,
-        title: "Payment Successful",
-        message: `Your payment of ${amount} SYP for booking ${orderRef} has been processed successfully.`,
+        title: {
+          en: "Payment Successful",
+          ar: "تمت عملية الدفع بنجاح"
+        },
+        message: {
+          en: `Your payment of ${amount} SYP for booking ${orderRef} has been processed successfully.`,
+          ar: `تم معالجة دفعتك البالغة ${amount} ليرة سورية للحجز ${orderRef} بنجاح.`
+        },
         type: "payment"
       });
     } else {
       // Create payment failure notification
       await Notification.create({
         userId: booking.userId,
-        title: "Payment Failed",
-        message: `Your payment for booking ${orderRef} has failed. Please try again or contact support.`,
+        title: {
+          en: "Payment Failed",
+          ar: "فشلت عملية الدفع"
+        },
+        message: {
+          en: `Your payment for booking ${orderRef} has failed. Please try again or contact support.`,
+          ar: `فشلت عملية الدفع للحجز ${orderRef}. يرجى المحاولة مرة أخرى أو الاتصال بالدعم.`
+        },
         type: "payment"
       });
     }
