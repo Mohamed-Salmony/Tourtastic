@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const argon2 = require('argon2');
+const bcrypt = require('bcryptjs');
 
 const UserSchema = new mongoose.Schema({
   name: {
@@ -60,22 +60,15 @@ const UserSchema = new mongoose.Schema({
   },
 }, { versionKey: false }); // Disable version key
 
-// Encrypt password using Argon2 before saving
+// Encrypt password using bcrypt before saving
 UserSchema.pre("save", async function (next) {
   // Only run this function if password was actually modified
   if (!this.isModified("password")) {
     return next();
   }
-
-  // Use Argon2id with moderate memory/time settings
-  // memoryCost is in KiB (here 16384 KiB = 16 MiB)
   try {
-    this.password = await argon2.hash(this.password, {
-      type: argon2.argon2id,
-      memoryCost: 2 ** 14,
-      timeCost: 3,
-      parallelism: 1,
-    });
+    const saltRounds = 12;
+    this.password = await bcrypt.hash(this.password, saltRounds);
     next();
   } catch (err) {
     next(err);
@@ -85,7 +78,7 @@ UserSchema.pre("save", async function (next) {
 // Method to compare entered password with hashed password in database
 UserSchema.methods.matchPassword = async function (enteredPassword) {
   try {
-    return await argon2.verify(this.password, enteredPassword);
+    return await bcrypt.compare(enteredPassword, this.password);
   } catch (err) {
     // In case of an error, do not authenticate
     return false;

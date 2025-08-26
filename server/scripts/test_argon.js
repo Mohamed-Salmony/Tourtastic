@@ -1,11 +1,12 @@
-const argon2 = require('argon2');
+const bcrypt = require('bcryptjs');
 
 (async () => {
   try {
     const pwd = 'P@ssw0rd123!';
-    const hash = await argon2.hash(pwd, { type: argon2.argon2id });
+    const saltRounds = 12;
+    const hash = await bcrypt.hash(pwd, saltRounds);
     console.log('HASH_OK', hash);
-    const ok = await argon2.verify(hash, pwd);
+    const ok = await bcrypt.compare(pwd, hash);
     console.log('VERIFY_OK', ok);
   } catch (err) {
     console.error('ERROR', err);
