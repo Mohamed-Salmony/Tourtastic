@@ -52,6 +52,19 @@ const FlightDetails: React.FC<FlightDetailsProps> = ({ flight, onAddToCart }) =>
   const [airportsMap, setAirportsMap] = useState<Record<string, import('@/services/airportService').Airport>>({});
   const { i18n } = useTranslation();
 
+  const getLocalizedAirline = (airlineName?: string, airlineCode?: string) => {
+    if (!airlineName && !airlineCode) return '';
+    if (airlineName) {
+      const key = `airlines.${airlineName}`;
+      if (i18n.exists && i18n.exists(key)) return t(key);
+    }
+    if (airlineCode) {
+      const keyCode = `airlines.${airlineCode}`;
+      if (i18n.exists && i18n.exists(keyCode)) return t(keyCode);
+    }
+    return airlineName || airlineCode || '';
+  };
+
   useEffect(() => {
     let mounted = true;
     const lang = i18n.language === 'ar' ? 'ar' : 'en';
@@ -60,6 +73,38 @@ const FlightDetails: React.FC<FlightDetailsProps> = ({ flight, onAddToCart }) =>
     }).catch(() => {});
     return () => { mounted = false; };
   }, [i18n.language]);
+
+  // Safely extract cabin code from various possible shapes without using `any`
+  const getCabinCode = (sq: unknown): string | undefined => {
+    if (!sq || typeof sq !== 'object') return undefined;
+    const obj = sq as Record<string, unknown>;
+    const options = obj.options;
+    if (options && typeof options === 'object') {
+      const opt = options as Record<string, unknown>;
+      const cabin = opt.cabin;
+      if (typeof cabin === 'string') return cabin;
+    }
+    return undefined;
+  };
+
+  // compute display strings so JSX stays simple and avoids `any`
+  const baggageText = formatBaggage(
+    flight.baggage_allowance || flight.legs[0]?.bags?.ADT?.checked?.desc || '',
+    t
+  ) || t('noBaggageIncluded', 'لا تشمل أمتعة');
+
+  const cabinText = (() => {
+    let code = getCabinCode(flight.search_query) || '';
+    const f = flight as unknown as Record<string, unknown>;
+    if (!code && typeof f.cabin === 'string') code = f.cabin as string;
+    const map: Record<string, string> = {
+      e: t('economy', 'Economy'),
+      p: t('premiumEconomy', 'Premium Economy'),
+      b: t('business', 'Business'),
+      f: t('first', 'First')
+    };
+    return map[String(code)] || (code || t('n_a', 'N/A'));
+  })();
 
   return (
     <div className="mt-6 pt-6 border-t">
@@ -70,13 +115,16 @@ const FlightDetails: React.FC<FlightDetailsProps> = ({ flight, onAddToCart }) =>
             {t('flightDetails', 'تفاصيل الرحلة')}
           </h3>
           <div className="flex flex-col gap-1">
-            <span className="text-sm">
-              {formatBaggage(flight.baggage_allowance || flight.legs[0]?.bags?.ADT?.checked?.desc || '', t) || t('noBaggageIncluded', 'لا تشمل أمتعة')}
-            </span>
-            <span className="text-gray-500">{t('baggageAllowance', 'الأمتعة المسموح بها')}</span>
-            <span>
-              {formatBaggage(flight.baggage_allowance || flight.legs[0]?.bags?.ADT?.checked?.desc || '', t) || t('noBaggageIncluded', 'لا تشمل أمتعة')}
-            </span>
+            <div className="text-sm">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500">{t('baggageAllowance', 'الأمتعة المسموح بها')}</span>
+                <span className="font-medium">{baggageText}</span>
+              </div>
+              <div className="flex justify-between items-center mt-2">
+                <span className="text-gray-500">{t('cabinClass', 'Cabin Class')}</span>
+                <span className="font-medium">{cabinText}</span>
+              </div>
+            </div>
           </div>
             <div className="flex justify-between">
               <span className="text-gray-500">{t('refundable', 'قابل للاسترداد')}</span>
@@ -97,14 +145,7 @@ const FlightDetails: React.FC<FlightDetailsProps> = ({ flight, onAddToCart }) =>
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{segment.flightnumber}</span>
                       <span className="text-sm text-gray-600">
-                        {t(`airlines.${segment.airline_name}`, {
-                          'Flynas': 'طيران ناس',
-                          'flyadeal': 'طيران أديل',
-                          'Air Arabia Egypt': 'العربية للطيران مصر',
-                          'Air Cairo': 'مصر للطيران القاهرة',
-                          'EgyptAir': 'مصر للطيران',
-                          'Saudi Arabian Airlines': 'الخطوط السعودية'
-                        }[segment.airline_name] || segment.airline_name)}
+                        {getLocalizedAirline(segment.airline_name, segment.airline_iata || segment.iata)}
                       </span>
                     </div>
                       <div className="text-sm text-gray-600">{(() => {

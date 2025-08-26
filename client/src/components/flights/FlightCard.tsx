@@ -56,6 +56,33 @@ const FlightCard: React.FC<FlightCardProps> = ({
     };
   }, [flight.price_breakdowns, flight.price, flight.tax, flight.search_query]);
 
+  // Helper: return localized airline name. Try by airline_name (English full name), then by IATA code,
+  // then fall back to the original provided name.
+  const getLocalizedAirline = (airlineName?: string, airlineCode?: string) => {
+    if (!airlineName && !airlineCode) return '';
+    // Try exact airline name key
+    if (airlineName) {
+      const key = `airlines.${airlineName}`;
+      if (i18n.exists && i18n.exists(key)) return t(key);
+    }
+
+    // Try common normalized forms (trimmed)
+    if (airlineName) {
+      const norm = airlineName.trim();
+      const keyNorm = `airlines.${norm}`;
+      if (i18n.exists && i18n.exists(keyNorm)) return t(keyNorm);
+    }
+
+    // Try by IATA code
+    if (airlineCode) {
+      const keyCode = `airlines.${airlineCode}`;
+      if (i18n.exists && i18n.exists(keyCode)) return t(keyCode);
+    }
+
+    // As a last attempt, try using the raw airlineName via t to let i18n handle fallbacks/defaults
+    return airlineName || airlineCode || '';
+  };
+
   return (
     <Card className={`p-6 hover:shadow-lg transition-all duration-200 cursor-pointer border-l-4 ${
       selectedFlight?.trip_id === flight.trip_id 
@@ -103,7 +130,7 @@ const FlightCard: React.FC<FlightCardProps> = ({
                 />
                 <div className="min-w-0">
                   <div className="font-medium text-gray-900 truncate">
-                    {t(`airlines.${leg.segments[0].airline_name}`, leg.segments[0].airline_name)}
+                    {getLocalizedAirline(leg.segments[0].airline_name, leg.segments[0].iata)}
                   </div>
                   <div className="text-sm text-gray-500">
                     {leg.segments[0].iata} {leg.segments[0].flightnumber}

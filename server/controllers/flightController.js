@@ -475,6 +475,11 @@ function getAirlineName(iataCode) {
     'IX': 'Air India Express',
     'J2': 'Azerbaijan Airlines',
     'OV': 'SalamAir',
+    'EW': 'Eurowings',
+    'KL': 'KLM Royal Dutch Airlines',
+    'LO': 'LOT Polish Airlines',
+    'TO': 'Transavia France',
+    'TU': 'Tunisair'
   };
   return airlineMap[iataCode] || iataCode;
 }
