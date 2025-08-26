@@ -14,13 +14,13 @@ exports.changePassword = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Verify current password using model helper (Argon2)
+  // Verify current password using model helper (bcrypt)
     const isMatch = await user.matchPassword(currentPassword);
     if (!isMatch) {
       return res.status(400).json({ message: 'Current password is incorrect' });
     }
 
-    // Update password (the User pre-save hook will hash it using Argon2)
+  // Update password (the User pre-save hook will hash it using bcrypt)
     user.password = newPassword;
     await user.save();
 
