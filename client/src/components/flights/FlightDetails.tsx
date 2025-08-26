@@ -1,10 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
 import { Info, ShoppingCart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Flight } from '../../services/flightService';
-import { getTimeOfDay, getTimeOfDayIcon, getTimeOfDayWithColor } from './utils/flightHelpers';
+import { getTimeOfDay, getTimeOfDayIcon, getTimeOfDayWithColor, formatBaggage } from './utils/flightHelpers';
+import { getAirportsMap } from '@/services/airportService';
 
 interface FlightDetailsProps {
   flight: Flight;
@@ -48,6 +49,18 @@ const FlightDetails: React.FC<FlightDetailsProps> = ({ flight, onAddToCart }) =>
     );
   }, [adtCount, chdCount, infCount, breakdown]);
 
+  const [airportsMap, setAirportsMap] = useState<Record<string, import('@/services/airportService').Airport>>({});
+  const { i18n } = useTranslation();
+
+  useEffect(() => {
+    let mounted = true;
+    const lang = i18n.language === 'ar' ? 'ar' : 'en';
+    getAirportsMap(lang).then(map => {
+      if (mounted) setAirportsMap(map || {});
+    }).catch(() => {});
+    return () => { mounted = false; };
+  }, [i18n.language]);
+
   return (
     <div className="mt-6 pt-6 border-t">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -56,31 +69,15 @@ const FlightDetails: React.FC<FlightDetailsProps> = ({ flight, onAddToCart }) =>
             <Info className="h-5 w-5 text-tourtastic-blue" />
             {t('flightDetails', 'تفاصيل الرحلة')}
           </h3>
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-gray-500">{t('cabinClass', 'درجة المقصورة')}</span>
-              <span>{t(`cabinTypes.${flight.legs[0]?.cabin_name}`, {
-                'Economy': 'اقتصادية',
-                'Business': 'رجال الأعمال',
-                'First': 'الأولى',
-                'Premium': 'الممتازة'
-              }[flight.legs[0]?.cabin_name] || 'غير متوفر')}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">{t('baggageAllowance', 'الأمتعة المسموح بها')}</span>
-              <span>
-                {flight.baggage_allowance ? (
-                  // Parse baggage format like "1 piece (23kg)" or "2 pieces (20kg each)"
-                  flight.baggage_allowance.replace(/(\d+)\s*piece(?:s)?\s*\((\d+)kg(?:\s*each)?\)/i, (_, pieces, weight) => 
-                    `${pieces} ${Number(pieces) === 1 ? t('baggageDetails.piece', 'قطعة') : t('baggageDetails.pieces', 'قطع')} (${weight} ${t('baggageDetails.kg', 'كجم')})`
-                  )
-                ) : flight.legs[0]?.bags?.ADT?.checked?.desc ? (
-                  flight.legs[0].bags.ADT.checked.desc.replace(/(\d+)\s*piece(?:s)?\s*\((\d+)kg(?:\s*each)?\)/i, (_, pieces, weight) => 
-                    `${pieces} ${Number(pieces) === 1 ? t('baggageDetails.piece', 'قطعة') : t('baggageDetails.pieces', 'قطع')} (${weight} ${t('baggageDetails.kg', 'كجم')})`
-                  )
-                ) : t('noBaggageIncluded', 'لا تشمل أمتعة')}
-              </span>
-            </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-sm">
+              {formatBaggage(flight.baggage_allowance || flight.legs[0]?.bags?.ADT?.checked?.desc || '', t) || t('noBaggageIncluded', 'لا تشمل أمتعة')}
+            </span>
+            <span className="text-gray-500">{t('baggageAllowance', 'الأمتعة المسموح بها')}</span>
+            <span>
+              {formatBaggage(flight.baggage_allowance || flight.legs[0]?.bags?.ADT?.checked?.desc || '', t) || t('noBaggageIncluded', 'لا تشمل أمتعة')}
+            </span>
+          </div>
             <div className="flex justify-between">
               <span className="text-gray-500">{t('refundable', 'قابل للاسترداد')}</span>
               <span className={`font-medium ${flight.can_refund ? 'text-green-600' : 'text-red-600'}`}>
@@ -90,7 +87,6 @@ const FlightDetails: React.FC<FlightDetailsProps> = ({ flight, onAddToCart }) =>
             {flight.refundable_info && (
               <div className="text-xs text-gray-600">{flight.refundable_info}</div>
             )}
-          </div>
           {/* Flight segments information */}
           {flight.legs[0].segments.length > 1 && (
             <div className="mt-4 space-y-2">
@@ -111,16 +107,15 @@ const FlightDetails: React.FC<FlightDetailsProps> = ({ flight, onAddToCart }) =>
                         }[segment.airline_name] || segment.airline_name)}
                       </span>
                     </div>
-                    <div className="text-sm text-gray-600">
-                      {segment.duration_formatted || `${Math.floor(segment.duration / 60)} ${t('hour', {
-                        count: Math.floor(segment.duration / 60),
-                        one: 'ساعة',
-                        other: 'ساعات'
-                      })} ${segment.duration % 60} ${t('minute', {
-                        count: segment.duration % 60,
-                        one: 'دقيقة',
-                        other: 'دقائق'
-                      })}`}
+                      <div className="text-sm text-gray-600">{(() => {
+                          const totalMinutes = Math.max(0, segment.duration || 0);
+                          const hours = Math.floor(totalMinutes / 60);
+                          const minutes = totalMinutes % 60;
+                          if (hours > 0) {
+                            return `${hours} ${t('hour', { count: hours })} ${minutes} ${t('minute', { count: minutes })}`;
+                          }
+                          return `${minutes} ${t('minute', { count: minutes })}`;
+                        })()}
                     </div>
                   </div>
                   <div className="flex justify-between mt-2 text-sm">
@@ -135,7 +130,7 @@ const FlightDetails: React.FC<FlightDetailsProps> = ({ flight, onAddToCart }) =>
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
-                        <span className="text-gray-600">{segment.from.airport}</span>
+                        <span className="text-gray-600">{airportsMap[segment.from.airport]?.name || segment.from.airport}</span>
                         {segment.from.terminal && (
                           <span className="text-xs text-gray-500">T{segment.from.terminal}</span>
                         )}
@@ -152,7 +147,7 @@ const FlightDetails: React.FC<FlightDetailsProps> = ({ flight, onAddToCart }) =>
                         <span className="font-medium">{format(new Date(segment.to.date), 'HH:mm')}</span>
                       </div>
                       <div className="flex items-center gap-1 justify-end">
-                        <span className="text-gray-600">{segment.to.airport}</span>
+                        <span className="text-gray-600">{airportsMap[segment.to.airport]?.name || segment.to.airport}</span>
                         {segment.to.terminal && (
                           <span className="text-xs text-gray-500">T{segment.to.terminal}</span>
                         )}
@@ -216,7 +211,7 @@ const FlightDetails: React.FC<FlightDetailsProps> = ({ flight, onAddToCart }) =>
               </div>
             )}
             <div className="flex justify-between">
-              <span className="text-gray-500">{t('baseFare', 'السعر الأساسي')}</span>
+              <span className="text-gray-500">{t('base', 'السعر الأساسي')}</span>
               <span>{flight.currency} {(flight.price || 0).toFixed(2)}</span>
             </div>
             <div className="flex justify-between">

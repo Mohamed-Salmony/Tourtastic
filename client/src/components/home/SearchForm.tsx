@@ -10,25 +10,35 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card } from '@/components/ui/card';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import api from '@/config/api';
 import { Airport } from '@/services/airportService';
-import useLocale from '@/hooks/useLocale';
+
+type SearchType = 'oneWay' | 'roundTrip' | 'multiCity';
+
+const baseFlightSegment = z.object({
+  from: z.string().min(2, { message: 'Please enter departure city' }),
+  to: z.string().min(2, { message: 'Please enter destination city' }),
+  date: z.date({ required_error: 'Please select departure date' }),
+  fromDisplayValue: z.string().optional(),
+  toDisplayValue: z.string().optional(),
+  fromDisplay: z.string().optional(),
+  toDisplay: z.string().optional(),
+  isOutbound: z.boolean().optional(),
+  isReturn: z.boolean().optional(),
+});
 
 const searchFormSchema = z.object({
-  flightSegments: z.array(z.object({
-    from: z.string().min(2, { message: 'Please enter departure city' }),
-    to: z.string().min(2, { message: 'Please enter destination city' }),
-    date: z.date({ required_error: 'Please select departure date' }),
-  })).min(1, { message: 'At least one flight segment is required' })
+  searchType: z.enum(['oneWay', 'roundTrip', 'multiCity']),
+  flightSegments: z.array(baseFlightSegment)
+    .min(1, { message: 'At least one flight segment is required' })
     .max(3, { message: 'Maximum 3 flight segments allowed' })
     .superRefine((segments, ctx) => {
       // Validate date sequence for multi-city
       for (let i = 1; i < segments.length; i++) {
-        if (segments[i-1].date >= segments[i].date) {
+        if (segments[i - 1].date >= segments[i].date) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: `Flight ${i + 1} date must be after flight ${i} date`,
@@ -37,6 +47,7 @@ const searchFormSchema = z.object({
         }
       }
     }),
+  returnDate: z.date().optional(),
   passengers: z.object({
     adults: z.number().min(1, { message: 'At least one adult is required' }),
     children: z.number().min(0),
@@ -51,6 +62,7 @@ type SearchFormValues = z.infer<typeof searchFormSchema>;
 const SearchForm: React.FC = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const [searchType, setSearchType] = useState<SearchType>('oneWay');
   const [fromSuggestions, setFromSuggestions] = useState<Airport[]>([]);
   const [toSuggestions, setToSuggestions] = useState<Airport[]>([]);
   const [showFromSuggestions, setShowFromSuggestions] = useState<number | null>(null);
@@ -58,23 +70,54 @@ const SearchForm: React.FC = () => {
   const [fromDisplayValues, setFromDisplayValues] = useState<string[]>(['']);
   const [toDisplayValues, setToDisplayValues] = useState<string[]>(['']);
   const [datePickerOpen, setDatePickerOpen] = useState<boolean[]>([false]);
+  const [returnDatePickerOpen, setReturnDatePickerOpen] = useState(false);
   const fromInputRef = useRef<HTMLInputElement>(null);
   const toInputRef = useRef<HTMLInputElement>(null);
 
-  const { register, handleSubmit, formState: { errors }, setValue, watch, trigger, setError, clearErrors } = useForm<SearchFormValues>({
+  const { register, handleSubmit, formState: { errors }, setValue, watch, trigger, setError, clearErrors, reset } = useForm<SearchFormValues>({
     resolver: zodResolver(searchFormSchema),
     defaultValues: {
+      searchType: 'oneWay',
       flightSegments: [{ from: '', to: '', date: undefined }],
       passengers: { adults: 1, children: 0, infants: 0 },
       cabin: 'e',
       direct: false,
+      returnDate: undefined,
     },
   });
+
+  // Handle search type changes
+  const handleSearchTypeChange = (type: SearchType) => {
+    setSearchType(type);
+    setValue('searchType', type);
+
+    if (type === 'oneWay' || type === 'roundTrip') {
+      // Reset to single segment for one-way and round-trip
+      setValue('flightSegments', [{ from: '', to: '', date: undefined }]);
+      setFromDisplayValues(['']);
+      setToDisplayValues(['']);
+      setDatePickerOpen([false]);
+    } else if (type === 'multiCity' && watch('flightSegments').length < 2) {
+      // Ensure at least 2 segments for multi-city
+      setValue('flightSegments', [
+        { from: '', to: '', date: undefined },
+        { from: '', to: '', date: undefined }
+      ]);
+      setFromDisplayValues(['', '']);
+      setToDisplayValues(['', '']);
+      setDatePickerOpen([false, false]);
+    }
+
+    if (type !== 'roundTrip') {
+      setValue('returnDate', undefined);
+    }
+  };
 
   const flightSegments = watch('flightSegments');
   const passengers = watch('passengers');
   const cabin = watch('cabin');
   const direct = watch('direct');
+  const returnDate = watch('returnDate');
 
   // Update datePickerOpen state when flightSegments change
   useEffect(() => {
@@ -104,7 +147,7 @@ const SearchForm: React.FC = () => {
       return newValues;
     });
     setValue(`flightSegments.${index}.from`, value);
-    
+
     if (value.length >= 2) {
       setShowFromSuggestions(index);
       try {
@@ -112,8 +155,8 @@ const SearchForm: React.FC = () => {
         if (response.data.success && response.data.data) {
           const airports = response.data.data;
           // Filter out any airports without proper translation data
-          const validAirports = airports.filter(airport => 
-            i18n.language === 'ar' ? 
+          const validAirports = airports.filter(airport =>
+            i18n.language === 'ar' ?
               airport.name_arbic && airport.municipality_arbic && airport.country_arbic :
               airport.name && airport.municipality && airport.country
           );
@@ -136,7 +179,7 @@ const SearchForm: React.FC = () => {
       return newValues;
     });
     setValue(`flightSegments.${index}.to`, value);
-    
+
     if (value.length >= 2) {
       setShowToSuggestions(index);
       try {
@@ -144,8 +187,8 @@ const SearchForm: React.FC = () => {
         if (response.data.success && response.data.data) {
           const airports = response.data.data;
           // Filter out any airports without proper translation data
-          const validAirports = airports.filter(airport => 
-            i18n.language === 'ar' ? 
+          const validAirports = airports.filter(airport =>
+            i18n.language === 'ar' ?
               airport.name_arbic && airport.municipality_arbic && airport.country_arbic :
               airport.name && airport.municipality && airport.country
           );
@@ -197,10 +240,10 @@ const SearchForm: React.FC = () => {
   };
 
   const removeFlightSegment = (index: number) => {
-    if (flightSegments.length > 1) {
+    if (searchType === 'multiCity' && flightSegments.length > 2) {
       const newSegments = flightSegments.filter((_, i) => i !== index);
       setValue('flightSegments', newSegments);
-      
+
       // Clean up display values
       setFromDisplayValues(prev => prev.filter((_, i) => i !== index));
       setToDisplayValues(prev => prev.filter((_, i) => i !== index));
@@ -224,14 +267,57 @@ const SearchForm: React.FC = () => {
   const onSubmit = (data: SearchFormValues) => {
     // Clear any previous errors
     clearErrors();
-    
+
+    let segments = data.flightSegments.map((segment, index) => ({
+      ...segment,
+      fromDisplayValue: fromDisplayValues[index] || segment.from,
+      toDisplayValue: toDisplayValues[index] || segment.to,
+      // include alias fields expected by other modules/hooks
+      fromDisplay: fromDisplayValues[index] || segment.from,
+      toDisplay: toDisplayValues[index] || segment.to,
+    }));
+
+    // For round trip, validate return date then add return flight segment
+    if (data.searchType === 'roundTrip') {
+      const outboundDate = data.flightSegments?.[0]?.date;
+      if (!data.returnDate) {
+        setError('returnDate', { type: 'manual', message: t('returnDateRequired', 'Return date is required for round trip flights') });
+        return;
+      }
+      if (outboundDate && data.returnDate <= outboundDate) {
+        setError('returnDate', { type: 'manual', message: t('returnDateAfterDeparture', 'Return date must be after departure date') });
+        return;
+      }
+
+      if (data.returnDate && segments.length === 1) {
+        segments = [
+          {
+            ...segments[0],
+            fromDisplayValue: fromDisplayValues[0] || segments[0].from,
+            toDisplayValue: toDisplayValues[0] || segments[0].to,
+            fromDisplay: fromDisplayValues[0] || segments[0].from,
+            toDisplay: toDisplayValues[0] || segments[0].to,
+            // mark outbound if you need to distinguish later
+            isOutbound: true,
+          },
+          {
+            from: segments[0].to,
+            to: segments[0].from,
+            date: data.returnDate,
+            fromDisplayValue: toDisplayValues[0] || segments[0].to,
+            toDisplayValue: fromDisplayValues[0] || segments[0].from,
+            fromDisplay: toDisplayValues[0] || segments[0].to,
+            toDisplay: fromDisplayValues[0] || segments[0].from,
+            isReturn: true,
+          }
+        ];
+      }
+    }
+
     navigate('/flights', {
       state: {
-        flightSegments: data.flightSegments.map((segment, index) => ({
-          ...segment,
-          fromDisplayValue: fromDisplayValues[index] || segment.from,
-          toDisplayValue: toDisplayValues[index] || segment.to,
-        })),
+        searchType: data.searchType,
+        flightSegments: segments,
         passengers: data.passengers,
         cabin: data.cabin,
         direct: data.direct,
@@ -241,13 +327,46 @@ const SearchForm: React.FC = () => {
 
   return (
     <div className="bg-white rounded-lg shadow-xl p-6 lg:p-8 -mt-16 relative z-20 mx-auto max-w-6xl">
+      {/* Flight Type Tabs */}
+      <div className="flex space-x-1 rounded-lg bg-gray-100 p-1 mb-6">
+        <button
+          type="button"
+          className={`flex-1 rounded-md px-3 py-2 text-sm font-medium ${searchType === 'oneWay'
+              ? 'bg-white text-tourtastic-blue shadow'
+              : 'text-gray-500 hover:text-gray-700'
+            }`}
+          onClick={() => handleSearchTypeChange('oneWay')}
+        >
+          {t('oneWay', 'One Way')}
+        </button>
+        <button
+          type="button"
+          className={`flex-1 rounded-md px-3 py-2 text-sm font-medium ${searchType === 'roundTrip'
+              ? 'bg-white text-tourtastic-blue shadow'
+              : 'text-gray-500 hover:text-gray-700'
+            }`}
+          onClick={() => handleSearchTypeChange('roundTrip')}
+        >
+          {t('roundTrip', 'Round Trip')}
+        </button>
+        <button
+          type="button"
+          className={`flex-1 rounded-md px-3 py-2 text-sm font-medium ${searchType === 'multiCity'
+              ? 'bg-white text-tourtastic-blue shadow'
+              : 'text-gray-500 hover:text-gray-700'
+            }`}
+          onClick={() => handleSearchTypeChange('multiCity')}
+        >
+          {t('multiCity', 'Multi-City')}
+        </button>
+      </div>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {/* Flight Segments */}
         <div className="space-y-4">
           {flightSegments.map((segment, index) => (
             <div key={index} className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 border rounded-lg relative">
               {/* Remove button for additional segments */}
-              {flightSegments.length > 1 && (
+              {(searchType === 'multiCity' ? flightSegments.length > 2 : flightSegments.length > 1) && (
                 <Button
                   type="button"
                   variant="ghost"
@@ -258,7 +377,7 @@ const SearchForm: React.FC = () => {
                   <X className="h-4 w-4" />
                 </Button>
               )}
-              
+
               <div className="space-y-2">
                 <Label htmlFor={`from-${index}`}>{t('from', 'From')}</Label>
                 <div className="relative">
@@ -276,6 +395,27 @@ const SearchForm: React.FC = () => {
                     }}
                     onBlur={() => setTimeout(() => setShowFromSuggestions(null), 150)}
                   />
+                  {fromDisplayValues[index] && fromDisplayValues[index].includes(' - ') && (
+                    <button
+                      type="button"
+                      aria-label={i18n.language === 'ar' ? 'مسح' : 'Clear'}
+                      onClick={() => {
+                        setValue(`flightSegments.${index}.from`, '');
+                        setFromDisplayValues(values => {
+                          const newValues = [...values];
+                          newValues[index] = '';
+                          return newValues;
+                        });
+                        setFromSuggestions([]);
+                        setShowFromSuggestions(null);
+                      }}
+                      className={i18n.language === 'ar'
+                        ? 'absolute inset-y-0 left-0 flex items-center pl-3 text-red-600'
+                        : 'absolute inset-y-0 right-0 flex items-center pr-3 text-red-600'}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
                   {showFromSuggestions === index && fromSuggestions.length > 0 && (
                     <ul className="absolute z-50 bg-white border w-full max-h-48 overflow-y-auto shadow-lg rounded mt-1">
                       {fromSuggestions.map((a, i) => (
@@ -285,8 +425,8 @@ const SearchForm: React.FC = () => {
                           onMouseDown={() => handleFromSuggestionClick(a, index)}
                         >
                           <div className="font-medium">
-                            {i18n.language === 'ar' 
-                              ? `${a.iata_code} - ${a.name_arbic}` 
+                            {i18n.language === 'ar'
+                              ? `${a.iata_code} - ${a.name_arbic}`
                               : `${a.iata_code} - ${a.name}`}
                           </div>
                           <div className="text-gray-500 text-xs">
@@ -321,6 +461,27 @@ const SearchForm: React.FC = () => {
                     }}
                     onBlur={() => setTimeout(() => setShowToSuggestions(null), 150)}
                   />
+                  {toDisplayValues[index] && toDisplayValues[index].includes(' - ') && (
+                    <button
+                      type="button"
+                      aria-label={i18n.language === 'ar' ? 'مسح' : 'Clear'}
+                      onClick={() => {
+                        setValue(`flightSegments.${index}.to`, '');
+                        setToDisplayValues(values => {
+                          const newValues = [...values];
+                          newValues[index] = '';
+                          return newValues;
+                        });
+                        setToSuggestions([]);
+                        setShowToSuggestions(null);
+                      }}
+                      className={i18n.language === 'ar'
+                        ? 'absolute inset-y-0 left-0 flex items-center pl-3 text-red-600'
+                        : 'absolute inset-y-0 right-0 flex items-center pr-3 text-red-600'}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
                   {showToSuggestions === index && toSuggestions.length > 0 && (
                     <ul className="absolute z-50 bg-white border w-full max-h-48 overflow-y-auto shadow-lg rounded mt-1">
                       {toSuggestions.map((a, i) => (
@@ -330,8 +491,8 @@ const SearchForm: React.FC = () => {
                           onMouseDown={() => handleToSuggestionClick(a, index)}
                         >
                           <div className="font-medium">
-                            {i18n.language === 'ar' 
-                              ? `${a.iata_code} - ${a.name_arbic}` 
+                            {i18n.language === 'ar'
+                              ? `${a.iata_code} - ${a.name_arbic}`
                               : `${a.iata_code} - ${a.name}`}
                           </div>
                           <div className="text-gray-500 text-xs">
@@ -354,7 +515,11 @@ const SearchForm: React.FC = () => {
                   {t('date', 'Date')}
                   {index > 0 && (
                     <span className="text-xs text-gray-500 ml-1">
-                      (after {flightSegments[index - 1]?.date ? format(flightSegments[index - 1].date, "MMM dd") : 'previous flight'})
+                      {flightSegments[index - 1]?.date
+                        ? (i18n.language === 'ar'
+                            ? `بعد ${format(flightSegments[index - 1].date, "MMM dd")}`
+                            : `(after ${format(flightSegments[index - 1].date, "MMM dd")})`)
+                        : (i18n.language === 'ar' ? '  بعد الرحلة السابقة' : ' (after previous flight)')}
                     </span>
                   )}
                 </Label>
@@ -408,9 +573,9 @@ const SearchForm: React.FC = () => {
               </div>
             </div>
           ))}
-          
-          {/* Add Search Button */}
-          {flightSegments.length < 3 && (
+
+          {/* Add Search Button - Only show for Multi-City */}
+          {searchType === 'multiCity' && flightSegments.length < 3 && (
             <Button
               type="button"
               variant="outline"
@@ -421,6 +586,49 @@ const SearchForm: React.FC = () => {
             </Button>
           )}
         </div>
+
+        {/* Return date for Round Trip */}
+        {searchType === 'roundTrip' && (
+          <div className="p-4 border rounded-lg">
+            <Label>{t('returnDate', 'Return Date')}</Label>
+            <div className="mt-2">
+              <Popover open={returnDatePickerOpen} onOpenChange={open => setReturnDatePickerOpen(open)}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !returnDate && "text-muted-foreground"
+                    )}
+                    onClick={() => setReturnDatePickerOpen(true)}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {returnDate ? (returnDate instanceof Date && !isNaN(returnDate.getTime()) ? format(returnDate, "PPP") : <span>{t('pickDate', 'Pick a date')}</span>) : <span>{t('pickDate', 'Pick a date')}</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0 h-auto" align="start" side="bottom" sideOffset={4}>
+                  <Calendar
+                    mode="single"
+                    selected={returnDate}
+                    onSelect={(date) => {
+                      setValue('returnDate', date);
+                      setReturnDatePickerOpen(false);
+                    }}
+                    disabled={(date) => {
+                      const outboundDate = flightSegments?.[0]?.date;
+                      return outboundDate ? date <= outboundDate : date < new Date();
+                    }}
+                    initialFocus
+                    className={cn("p-3 pointer-events-auto min-h-[280px]")}
+                    fixedWeeks
+                  />
+                </PopoverContent>
+              </Popover>
+              {errors.returnDate && <p className="text-sm text-destructive mt-2">{errors.returnDate.message}</p>}
+            </div>
+          </div>
+        )}
 
         {/* Passenger Selection */}
         <div className="p-4 border rounded-lg">
@@ -441,6 +649,7 @@ const SearchForm: React.FC = () => {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <span>{t('adults', 'Adults')}</span>
+                  <div className="text-xs text-gray-500">{t('adultDesc', 'Up to 18 years')}</div>
                   <div className="flex items-center gap-2">
                     <Button
                       type="button"
@@ -463,6 +672,7 @@ const SearchForm: React.FC = () => {
                 </div>
                 <div className="flex items-center justify-between">
                   <span>{t('children', 'Children')}</span>
+                  <div className="text-xs text-gray-500">{t('childDesc', 'Ages 2 to 17')}</div>
                   <div className="flex items-center gap-2">
                     <Button
                       type="button"
@@ -485,6 +695,7 @@ const SearchForm: React.FC = () => {
                 </div>
                 <div className="flex items-center justify-between">
                   <span>{t('infants', 'Infants')}</span>
+                  <div className="text-xs text-gray-500">{t('infantDesc', 'Up to 2 years')}</div>
                   <div className="flex items-center gap-2">
                     <Button
                       type="button"

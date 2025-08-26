@@ -5,7 +5,11 @@ import { Plane, Info, ShoppingCart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Flight } from '../../services/flightService';
-import { getAirlineLogo } from './utils/flightHelpers';
+import { getAirlineLogo, formatBaggage } from './utils/flightHelpers';
+
+import { getAirportsMap } from '../../services/airportService';
+import type { Airport as ApiAirport } from '../../services/airportService';
+import type { FlightSegment } from '../../services/flightService';
 
 // Helper function to get time of day
 const getTimeOfDay = (dateString: string) => {
@@ -63,7 +67,21 @@ const FlightResults: React.FC<FlightResultsProps> = ({
   loading = false,
   showDetails
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  // Load localized airports map once per language and pass down to cards
+  const [airportsMap, setAirportsMap] = React.useState<Record<string, ApiAirport> | null>(null);
+  React.useEffect(() => {
+    let mounted = true;
+    const lang = i18n.language === 'ar' ? 'ar' : 'en';
+    getAirportsMap(lang)
+      .then((m) => {
+        if (mounted) setAirportsMap((m as Record<string, ApiAirport>) || null);
+      })
+      .catch(() => {
+        if (mounted) setAirportsMap(null);
+      });
+    return () => { mounted = false; };
+  }, [i18n.language]);
   const handleFlightSelection = (flight: Flight) => {
     onFlightSelection(flight);
   };
@@ -94,6 +112,7 @@ const FlightResults: React.FC<FlightResultsProps> = ({
             selectedFlight={selectedFlight}
             showDetails={showDetails}
             onAddToCart={onAddToCart}
+            airportsMap={airportsMap}
           />
         ))}
       </div>
@@ -120,6 +139,7 @@ interface FlightCardProps {
   selectedFlight?: Flight;
   showDetails?: string | null;
   onAddToCart?: (flight: Flight) => void;
+  airportsMap?: Record<string, ApiAirport> | null;
 }
 
 const FlightCard: React.FC<FlightCardProps> = ({
@@ -128,8 +148,28 @@ const FlightCard: React.FC<FlightCardProps> = ({
   selectedFlight,
   showDetails,
   onAddToCart
+  , airportsMap
 }) => {
   const { t } = useTranslation();
+
+  const getAirlineDisplay = (segment: FlightSegment) => {
+    const airlineName = segment.airline_name || segment.iata;
+    const key = `airlines.${airlineName}`;
+    return t(key, airlineName);
+  };
+
+  const getAirportDisplay = (point: unknown): { name: string; city: string } => {
+    // point may be { airport, city } or an object with iata code
+    const p = (point || {}) as Record<string, unknown>;
+    const getStr = (k: string) => (typeof p[k] === 'string' ? (p[k] as string) : undefined);
+    const code = getStr('iata') || getStr('airport') || '';
+    const codeStr = String(code).toUpperCase();
+    if (airportsMap && codeStr && airportsMap[codeStr]) {
+      const a = airportsMap[codeStr];
+      return { name: a.name || codeStr, city: a.city || (a.municipality as string) || '' };
+    }
+    return { name: getStr('airport') || getStr('name') || codeStr || '', city: getStr('city') || getStr('municipality') || '' };
+  };
 
   // Calculate total price using useMemo
   const totalPrice = useMemo(() => {
@@ -186,7 +226,7 @@ const FlightCard: React.FC<FlightCardProps> = ({
                 />
                 <div>
                   <div className="font-medium text-gray-900">
-                    {leg.segments[0].airline_name || leg.segments[0].iata}
+                    {getAirlineDisplay(leg.segments[0])}
                   </div>
                   <div className="text-sm text-gray-500">
                     {leg.segments[0].iata} {leg.segments[0].flightnumber}
@@ -210,10 +250,10 @@ const FlightCard: React.FC<FlightCardProps> = ({
                     </div>
                   </div>
                   <div className="text-sm font-medium text-gray-700">
-                    {leg.segments[0].from.airport}
+                    {getAirportDisplay(leg.segments[0].from).name}
                   </div>
                   <div className="text-xs text-gray-500">
-                    {leg.segments[0].from.city}
+                    {getAirportDisplay(leg.segments[0].from).city}
                   </div>
                 </div>
 
@@ -248,10 +288,10 @@ const FlightCard: React.FC<FlightCardProps> = ({
                     </span>
                   </div>
                   <div className="text-sm font-medium text-gray-700">
-                    {leg.segments[leg.segments.length - 1].to.airport}
+                    {getAirportDisplay(leg.segments[leg.segments.length - 1].to).name}
                   </div>
                   <div className="text-xs text-gray-500">
-                    {leg.segments[leg.segments.length - 1].to.city}
+                    {getAirportDisplay(leg.segments[leg.segments.length - 1].to).city}
                   </div>
                 </div>
               </div>
@@ -290,7 +330,7 @@ const FlightCard: React.FC<FlightCardProps> = ({
             <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m0-10L4 7m8 4v10l-8 4m0-10L4 7m8 4v10l-8 4" />
             </svg>
-            <span>{t('baggage', 'Baggage')}: {flight.baggage_allowance || flight.legs[0]?.bags?.ADT?.checked?.desc || 'N/A'}</span>
+            <span>{t('baggage', 'Baggage')}: {formatBaggage(flight.baggage_allowance || flight.legs[0]?.bags?.ADT?.checked?.desc || '', t)}</span>
           </div>
 
           {/* Select Button */}
@@ -303,8 +343,8 @@ const FlightCard: React.FC<FlightCardProps> = ({
                 <span>✓</span>
                 {t('selected', 'تم الاختيار')}
               </div>
-            ) : (
-              t('select', 'اختر')
+              ) : (
+              t('select', 'اختيار الرحلة')
             )}
           </Button>
         </div>
@@ -326,10 +366,7 @@ const FlightCard: React.FC<FlightCardProps> = ({
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">{t('baggageAllowance', 'Baggage Allowance')}</span>
-                  <span>{flight.baggage_allowance ? t('baggageDesc', '{{count}} pieces ({{weight}}kg each)', {
-                    count: parseInt(flight.baggage_allowance.split(' ')[0]),
-                    weight: flight.baggage_allowance.match(/\((\d+)kg/)?.[1] || '23'
-                  }) : 'N/A'}</span>
+                  <span>{flight.baggage_allowance ? formatBaggage(flight.baggage_allowance, t) : 'N/A'}</span>
                 </div>
                 {/* Refundable Information */}
                 <div className="space-y-2">

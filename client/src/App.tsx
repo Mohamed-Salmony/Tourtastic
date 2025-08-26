@@ -9,7 +9,9 @@ const queryClient = new QueryClient();
 
 function App() {
   return (
-    <Router>
+    // add v7 future flags to opt-in to upcoming react-router behavior
+    // we extend the Router props via a .d.ts file so no cast is needed
+    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <Toaster />

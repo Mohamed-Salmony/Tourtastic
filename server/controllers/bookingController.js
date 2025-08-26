@@ -171,7 +171,8 @@ exports.createBooking = asyncHandler(async (req, res, next) => {
       fromIata: resolvedFromIata,
       toIata: resolvedToIata,
       departureDate: details.departureDate,
-      passengers: details.passengers,
+  passengers: details.passengers,
+  passengerDetails: details.passengerDetails || [],
       selectedFlight: {
         flightId: flightIdVal || '',
         airline: airlineVal || '',
@@ -234,6 +235,46 @@ exports.deleteBooking = asyncHandler(async (req, res, next) => {
   await booking.deleteOne();
 
   res.status(200).json({ success: true, data: {} });
+});
+
+// @desc    Update a user's booking (partial updates allowed, e.g., passengerDetails)
+// @route   PATCH /api/bookings/:id
+// @access  Private (user must own the booking)
+exports.updateBooking = asyncHandler(async (req, res, next) => {
+  const booking = await FlightBooking.findById(req.params.id);
+  if (!booking) {
+    return res.status(404).json({ success: false, message: 'Booking not found' });
+  }
+
+  if (booking.userId.toString() !== req.user.id.toString()) {
+    return res.status(403).json({ success: false, message: 'Not authorized to update this booking' });
+  }
+
+  // Only allow specific fields to be updated for safety
+  const allowed = ['flightDetails.passengerDetails', 'customerName', 'customerEmail', 'customerPhone'];
+
+  // Merge allowed fields from req.body
+  if (req.body.flightDetails && Array.isArray(req.body.flightDetails.passengerDetails)) {
+    booking.flightDetails.passengerDetails = req.body.flightDetails.passengerDetails.map(p => ({
+      firstName: p.firstName || '',
+      lastName: p.lastName || '',
+      dob: p.dob ? new Date(p.dob) : null,
+      passportNumber: p.passportNumber || '',
+      passportIssueDate: p.passportIssueDate ? new Date(p.passportIssueDate) : null,
+      passportExpiryDate: p.passportExpiryDate ? new Date(p.passportExpiryDate) : null,
+      phone: p.phone || '',
+      email: p.email || '',
+      type: p.type || 'adult'
+    }));
+  }
+
+  if (req.body.customerName) booking.customerName = req.body.customerName;
+  if (req.body.customerEmail) booking.customerEmail = req.body.customerEmail;
+  if (req.body.customerPhone) booking.customerPhone = req.body.customerPhone;
+
+  await booking.save();
+
+  res.status(200).json({ success: true, data: booking });
 });
 
 // Note: Admin booking management (get all, get by ID, update, delete) will be in adminController

@@ -203,3 +203,27 @@ export const findCapitalAirport = async (latitude: number, longitude: number): P
     return await findNearestAirport(latitude, longitude);
   }
 };
+
+// Cache for airports per language
+const _airportsCache: Record<string, Record<string, Airport>> = {};
+
+// Fetch airports and return a map keyed by IATA code, localized by lang ('en'|'ar')
+export const getAirportsMap = async (lang = 'en'): Promise<Record<string, Airport>> => {
+  const key = lang || 'en';
+  if (_airportsCache[key]) return _airportsCache[key];
+
+  try {
+    const resp = await api.get(`/airports?lang=${key}`);
+    const list: Airport[] = Array.isArray(resp.data?.data) ? resp.data.data : [];
+    const map: Record<string, Airport> = {};
+    list.forEach((a: Airport) => {
+      const code = (a.iata_code as string) || (a.code as string) || (a.iata as string);
+      if (code) map[code] = a;
+    });
+    _airportsCache[key] = map;
+    return map;
+  } catch (err) {
+    console.error('Failed to load airports map', err);
+    return {};
+  }
+};

@@ -48,6 +48,18 @@ const FlightBookingSchema = new mongoose.Schema({
         default: 0
       }
     },
+    // Per-passenger personal details (one entry per ticket/passenger)
+    passengerDetails: [{
+      firstName: String,
+      lastName: String,
+      dob: Date,
+      passportNumber: String,
+      passportIssueDate: Date,
+      passportExpiryDate: Date,
+      phone: String,
+      email: String,
+      type: { type: String, enum: ['adult','child','infant'], default: 'adult' }
+    }],
     selectedFlight: {
       flightId: {
         type: String,

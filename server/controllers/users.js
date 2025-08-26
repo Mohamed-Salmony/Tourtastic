@@ -1,6 +1,5 @@
 const User = require('../models/User');
 const asyncHandler = require('../middleware/async');
-const bcrypt = require('bcryptjs');
 
 // @desc    Get user profile
 // @route   GET /api/users/:id
