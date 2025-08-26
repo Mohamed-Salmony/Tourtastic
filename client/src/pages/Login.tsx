@@ -64,9 +64,20 @@ const Login: React.FC = () => {
         if (localCartItems.length > 0) {
           try {
             // Create bookings for each local cart item
-            for (const item of localCartItems) {
-              await api.post('/bookings', { flightDetails: item });
-            }
+                for (const item of localCartItems) {
+                  // The client-side cart items historically used `departureTime` while the
+                  // server expects `departureDate`. Normalize common variants so the
+                  // createBooking endpoint receives a `departureDate` and passes schema validation.
+                  const departureDate = item.departureDate || item.departureTime || item.departure_time ||
+                    item.selectedFlight?.departureTime || item.selectedFlight?.legs?.[0]?.from?.date || null;
+
+                  const flightDetails = {
+                    ...item,
+                    departureDate,
+                  };
+
+                  await api.post('/bookings', { flightDetails });
+                }
             // Clear local cart after successful sync
             localStorage.removeItem('cartItems');
           } catch (error) {

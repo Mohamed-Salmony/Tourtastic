@@ -1,9 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import '@/styles/datepicker.css';
 import { Trash2, Plane, Calendar, Users, CreditCard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
 import api from '@/config/api';
 import { useNavigate } from 'react-router-dom';
@@ -94,6 +99,11 @@ const Cart = () => {
   const [bookings, setBookings] = useState<FlightBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingPayment, setProcessingPayment] = useState<string | null>(null);
+  const [passengerDialogOpen, setPassengerDialogOpen] = useState(false);
+  const [activeBookingForPassengers, setActiveBookingForPassengers] = useState<FlightBooking | null>(null);
+  const [passengerForms, setPassengerForms] = useState<PassengerForm[]>([]);
+  // Map of index -> array of missing field keys for inline validation in the dialog
+  const [passengerFormErrors, setPassengerFormErrors] = useState<Record<number, string[]>>({});
 
   // Local types to improve type-safety when reading optional fields from bookings
   interface SelectedFlight {
@@ -117,6 +127,19 @@ const Cart = () => {
     departureDate?: string;
     passengers?: { adults: number; children: number; infants: number };
     selectedFlight?: SelectedFlight;
+  }
+
+  // Strongly typed passenger form used in the passenger dialog
+  interface PassengerForm {
+    type: 'adult' | 'child' | 'infant';
+    firstName: string;
+    lastName: string;
+    dob?: string | null;
+    passportNumber?: string;
+    passportIssueDate?: string | null;
+    passportExpiryDate?: string | null;
+    phone?: string;
+    email?: string;
   }
 
   const fetchBookings = useCallback(async () => {
@@ -267,6 +290,17 @@ const Cart = () => {
   };
 
   const handleProceedToPayment = async (booking: FlightBooking) => {
+    // Ensure passenger details are complete before attempting payment
+    if (!isBookingReadyForPayment(booking)) {
+      openPassengerDialog(booking);
+      toast({
+        title: t('passengerDetailsRequiredTitle', 'Passenger details required'),
+        description: t('passengerDetailsRequired', 'Please enter passenger details for all travelers before proceeding to payment.'),
+        variant: 'destructive',
+      });
+      return;
+    }
+
     authenticatedAction(async () => {
       try {
         setProcessingPayment(booking._id);
@@ -285,6 +319,151 @@ const Cart = () => {
     });
   };
 
+  const openPassengerDialog = (booking: FlightBooking) => {
+    // Build a passenger forms array based on counts
+    const counts = booking.flightDetails?.passengers || { adults: 0, children: 0, infants: 0 };
+  const arr: PassengerForm[] = [];
+  for (let i = 0; i < counts.adults; i++) arr.push({ type: 'adult', firstName: '', lastName: '', dob: null, passportNumber: '', passportIssueDate: null, passportExpiryDate: null, phone: '', email: '' });
+  for (let i = 0; i < counts.children; i++) arr.push({ type: 'child', firstName: '', lastName: '', dob: null, passportNumber: '', passportIssueDate: null, passportExpiryDate: null, phone: '', email: '' });
+  for (let i = 0; i < counts.infants; i++) arr.push({ type: 'infant', firstName: '', lastName: '', dob: null, passportNumber: '', passportIssueDate: null, passportExpiryDate: null, phone: '', email: '' });
+
+    // If booking already has passengerDetails, prefill
+  const existing = ((booking.flightDetails as unknown) as { passengerDetails?: PassengerForm[] }).passengerDetails || [];
+    if (existing.length === arr.length) {
+      for (let i = 0; i < arr.length; i++) {
+        arr[i] = { ...arr[i], ...existing[i] };
+      }
+    }
+
+    setPassengerForms(arr);
+    setActiveBookingForPassengers(booking);
+    setPassengerDialogOpen(true);
+  };
+
+  const handlePassengerFieldChange = (index: number, field: keyof PassengerForm, value: string | null) => {
+    setPassengerForms(prev => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value } as PassengerForm;
+      return copy;
+    });
+    // Clear that field's error when user types
+    setPassengerFormErrors(prev => {
+      const copy = { ...prev };
+      if (copy[index]) {
+        copy[index] = copy[index].filter(f => f !== field);
+        if (copy[index].length === 0) delete copy[index];
+      }
+      return copy;
+    });
+  };
+
+  const validatePassengerForms = (forms: PassengerForm[]) => {
+    // helpers
+    const parseDate = (v?: string | null) => {
+      if (!v) return null;
+      const d = new Date(v);
+      return isNaN(d.getTime()) ? null : d;
+    };
+    const isValidEmail = (s?: string) => !!s && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+    const isValidPhone = (s?: string) => !!s && /^\+?[0-9\s-]{6,20}$/.test(s);
+
+    const errors: Record<number, string[]> = {};
+    const now = new Date();
+
+    for (let i = 0; i < forms.length; i++) {
+      const f = forms[i] || ({} as PassengerForm);
+      const missing: string[] = [];
+
+      // basic required checks
+      if (!f.firstName || String(f.firstName).trim() === '') missing.push('firstName');
+      if (!f.lastName || String(f.lastName).trim() === '') missing.push('lastName');
+
+      // DOB: must be a valid date and not in the future
+      const dobDate = parseDate(f.dob ?? undefined);
+      if (!dobDate) missing.push('dob');
+      else if (dobDate > now) missing.push('dob');
+
+      // Passport number
+      if (!f.passportNumber || String(f.passportNumber).trim() === '') missing.push('passportNumber');
+
+      // Passport dates: issue <= today, expiry > today and expiry > issue
+      const issueDate = parseDate(f.passportIssueDate ?? undefined);
+      const expiryDate = parseDate(f.passportExpiryDate ?? undefined);
+      if (!issueDate) missing.push('passportIssueDate');
+      else if (issueDate > now) missing.push('passportIssueDate');
+      if (!expiryDate) missing.push('passportExpiryDate');
+      else if (expiryDate <= now) missing.push('passportExpiryDate');
+      if (issueDate && expiryDate && expiryDate <= issueDate) {
+        // mark both so UI can show appropriate message
+        if (!missing.includes('passportIssueDate')) missing.push('passportIssueDate');
+        if (!missing.includes('passportExpiryDate')) missing.push('passportExpiryDate');
+      }
+
+      // Phone and email
+      if (!f.phone || String(f.phone).trim() === '' || !isValidPhone(f.phone)) missing.push('phone');
+      if (!f.email || String(f.email).trim() === '' || !isValidEmail(f.email)) missing.push('email');
+
+      if (missing.length) errors[i] = missing;
+    }
+
+    return { valid: Object.keys(errors).length === 0, errors };
+  };
+
+  const savePassengerDetails = async () => {
+    if (!activeBookingForPassengers) return;
+
+    // Validate before saving
+    const validation = validatePassengerForms(passengerForms);
+    if (!validation.valid) {
+      setPassengerFormErrors(validation.errors);
+      toast({ title: t('error', 'Error'), description: t('completePassengerDetailsBeforeSave', 'Please complete all required passenger fields before saving.'), variant: 'destructive' });
+      return;
+    }
+
+    try {
+      // If local booking (local_ prefix), update localStorage
+      if (activeBookingForPassengers._id.startsWith('local_')) {
+        const idx = parseInt(activeBookingForPassengers._id.split('_')[1]);
+        const localItems = JSON.parse(localStorage.getItem('cartItems') || '[]');
+        if (localItems[idx]) {
+          localItems[idx].passengerDetails = passengerForms;
+          localStorage.setItem('cartItems', JSON.stringify(localItems));
+          // Also update bookings state to reflect saved details
+          setBookings(prev => prev.map(b => b._id === activeBookingForPassengers._id ? ({ ...b, flightDetails: { ...((b.flightDetails as unknown) as FlightDetailsLocal), passengerDetails: passengerForms } } as FlightBooking) : b));
+        }
+        toast({ title: t('success', 'Success'), description: t('passengerDetailsSaved', 'Passenger details saved locally') });
+      } else {
+        // Server-side booking: call PATCH endpoint to update passengerDetails
+        const payload = { flightDetails: { passengerDetails: passengerForms } };
+        const resp = await api.patch(`/bookings/${activeBookingForPassengers._id}`, payload);
+        if (resp.data && resp.data.success) {
+          setBookings(prev => prev.map(b => b._id === activeBookingForPassengers._id ? resp.data.data : b));
+          toast({ title: t('success', 'Success'), description: t('passengerDetailsSaved', 'Passenger details saved') });
+        } else {
+          throw new Error('Failed to save passenger details');
+        }
+      }
+      setPassengerDialogOpen(false);
+      setActiveBookingForPassengers(null);
+    } catch (err) {
+      console.error('Failed to save passenger details:', err);
+      toast({ title: t('error', 'Error'), description: t('savePassengerDetailsError', 'Failed to save passenger details. Please try again.'), variant: 'destructive' });
+    }
+  };
+
+  // Check whether a booking has complete passenger details for payment
+  const isBookingReadyForPayment = (booking: FlightBooking) => {
+    const counts = booking.flightDetails?.passengers || { adults: 0, children: 0, infants: 0 };
+    const expected = (counts.adults || 0) + (counts.children || 0) + (counts.infants || 0);
+
+    // Try to read passengerDetails from booking.flightDetails first
+    const pd = ((booking.flightDetails as unknown) as { passengerDetails?: PassengerForm[] }).passengerDetails || [];
+    if (!pd || pd.length !== expected) return false;
+
+    const { valid } = validatePassengerForms(pd);
+    return valid;
+  };
+
   if (loading) {
     return (
       <div className="container-custom py-8">
@@ -296,7 +475,134 @@ const Cart = () => {
   }
 
   return (
-    <div className="container-custom py-8">
+    <div>
+      <Dialog open={passengerDialogOpen} onOpenChange={setPassengerDialogOpen}>
+        <DialogContent className="max-w-3xl w-[95vw]">
+          <DialogHeader>
+            <DialogTitle>{t('passengerDetailsTitle', 'Passenger Details / تفاصيل المسافر')}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto py-2">
+            {passengerForms.map((p, idx) => (
+              <div key={idx} className="border rounded-lg p-4 bg-white">
+                <div className="flex justify-between items-center mb-2">
+                  <div className="font-semibold">{`${t('passenger', 'Passenger')} ${idx + 1} - ${t(p.type, p.type)}`}</div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm">{t('firstName', 'First Name')}</label>
+                    <Input value={p.firstName} onChange={(e) => handlePassengerFieldChange(idx, 'firstName', e.target.value)} />
+                    {passengerFormErrors[idx] && passengerFormErrors[idx].includes('firstName') && (
+                      <div className="text-sm text-red-600 mt-1">{t('firstNameRequired', 'First name is required')}</div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm">{t('lastName', 'Last Name')}</label>
+                    <Input value={p.lastName} onChange={(e) => handlePassengerFieldChange(idx, 'lastName', e.target.value)} />
+                    {passengerFormErrors[idx] && passengerFormErrors[idx].includes('lastName') && (
+                      <div className="text-sm text-red-600 mt-1">{t('lastNameRequired', 'Last name is required')}</div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm">{t('dob', 'Date of Birth')}</label>
+                    <div className="relative">
+                      <DatePicker
+                        selected={p.dob ? new Date(p.dob) : null}
+                        onChange={(date: Date | null) => handlePassengerFieldChange(idx, 'dob', date ? date.toISOString() : null)}
+                        dateFormat="yyyy-MM-dd"
+                        maxDate={new Date()}
+                        showMonthDropdown
+                        showYearDropdown
+                        dropdownMode="select"
+                        scrollableYearDropdown
+                        yearDropdownItemNumber={100}
+                        placeholderText={t('dobPlaceholder', 'yyyy-mm-dd')}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-tourtastic-blue"
+                      />
+                      <Calendar className="datepicker-calendar-icon h-5 w-5 text-gray-400" />
+                    </div>
+                    {passengerFormErrors[idx] && passengerFormErrors[idx].includes('dob') && (
+                      <div className="text-sm text-red-600 mt-1">{t('dobInvalid', 'Please enter a valid date of birth')}</div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm">{t('passportNumber', 'Passport Number')}</label>
+                    <Input value={p.passportNumber} onChange={(e) => handlePassengerFieldChange(idx, 'passportNumber', e.target.value)} />
+                    {passengerFormErrors[idx] && passengerFormErrors[idx].includes('passportNumber') && (
+                      <div className="text-sm text-red-600 mt-1">{t('passportNumberRequired', 'Passport number is required')}</div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm">{t('passportIssueDate', 'Passport Issue Date')}</label>
+                    <div className="relative">
+                      <DatePicker
+                        selected={p.passportIssueDate ? new Date(p.passportIssueDate) : null}
+                        onChange={(date: Date | null) => handlePassengerFieldChange(idx, 'passportIssueDate', date ? date.toISOString() : null)}
+                        dateFormat="yyyy-MM-dd"
+                        maxDate={new Date()}
+                        showMonthDropdown
+                        showYearDropdown
+                        dropdownMode="select"
+                        scrollableYearDropdown
+                        yearDropdownItemNumber={100}
+                        placeholderText={t('passportIssuePlaceholder', 'yyyy-mm-dd')}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-tourtastic-blue"
+                      />
+                      <Calendar className="datepicker-calendar-icon h-5 w-5 text-gray-400" />
+                    </div>
+                    {passengerFormErrors[idx] && passengerFormErrors[idx].includes('passportIssueDate') && (
+                      <div className="text-sm text-red-600 mt-1">{t('passportIssueDateInvalid', 'Invalid passport issue date')}</div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm">{t('passportExpiryDate', 'Passport Expiry Date')}</label>
+                    <div className="relative">
+                      <DatePicker
+                        selected={p.passportExpiryDate ? new Date(p.passportExpiryDate) : null}
+                        onChange={(date: Date | null) => handlePassengerFieldChange(idx, 'passportExpiryDate', date ? date.toISOString() : null)}
+                        dateFormat="yyyy-MM-dd"
+                        minDate={new Date()}
+                        showMonthDropdown
+                        showYearDropdown
+                        dropdownMode="select"
+                        scrollableYearDropdown
+                        yearDropdownItemNumber={20}
+                        placeholderText={t('passportExpiryPlaceholder', 'yyyy-mm-dd')}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-tourtastic-blue"
+                      />
+                      <Calendar className="datepicker-calendar-icon h-5 w-5 text-gray-400" />
+                    </div>
+                    {passengerFormErrors[idx] && passengerFormErrors[idx].includes('passportExpiryDate') && (
+                      <div className="text-sm text-red-600 mt-1">{t('passportExpiryDateInvalid', 'Invalid passport expiry date')}</div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm">{t('phone', 'Phone')}</label>
+                    <Input value={p.phone} onChange={(e) => handlePassengerFieldChange(idx, 'phone', e.target.value)} />
+                    {passengerFormErrors[idx] && passengerFormErrors[idx].includes('phone') && (
+                      <div className="text-sm text-red-600 mt-1">{t('phoneInvalid', 'Please enter a valid phone number')}</div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm">{t('email', 'Email')}</label>
+                    <Input value={p.email} onChange={(e) => handlePassengerFieldChange(idx, 'email', e.target.value)} />
+                    {passengerFormErrors[idx] && passengerFormErrors[idx].includes('email') && (
+                      <div className="text-sm text-red-600 mt-1">{t('emailInvalid', 'Please enter a valid email address')}</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => { setPassengerDialogOpen(false); setActiveBookingForPassengers(null); }}>{t('cancel', 'Cancel')}</Button>
+              <Button onClick={savePassengerDetails}>{t('save', 'Save')}</Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <div className="container-custom py-8">
       <h1 className={`text-3xl font-bold mb-8 ${i18n.language === 'ar' ? 'text-center md:text-right' : 'text-center md:text-left'}`}>
         {t('yourBookings', 'حجوزاتك')}
       </h1>
@@ -506,30 +812,44 @@ const Cart = () => {
                           </div>
                           <div className="font-semibold text-lg text-gray-700">
                             {(() => {
-                              const classCode = cabinClass.toLowerCase();
-                              switch(classCode) {
+                              const raw = String(cabinClass || '').trim();
+                              const normalized = raw.replace(/\s+/g, '_').toLowerCase();
+
+                              // Map common short codes to canonical cabinTypes keys
+                              let key = normalized;
+                              switch (normalized) {
                                 case 'y':
                                 case 'e':
                                 case 'economy':
-                                  return t('economy', 'الدرجة السياحية');
+                                  key = 'economy';
+                                  break;
                                 case 'w':
                                 case 'pe':
                                 case 'premium_economy':
-                                  return t('premiumEconomy', 'الدرجة السياحية المميزة');
+                                  key = 'premium_economy';
+                                  break;
                                 case 'c':
                                 case 'b':
                                 case 'business':
-                                  return t('business', 'درجة رجال الأعمال');
+                                  key = 'business';
+                                  break;
                                 case 'f':
                                 case 'first':
-                                  return t('first', 'الدرجة الأولى');
+                                  key = 'first';
+                                  break;
                                 default:
-                                  // If it's a single letter or short code, try to map it to a full name
-                                  if (classCode.length <= 2) {
-                                    return t('economy', 'الدرجة السياحية'); // Default to Economy if unknown short code
-                                  }
-                                  return t(classCode, i18n.language === 'ar' ? 'الدرجة السياحية' : classCode.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
+                                  if (normalized.length <= 2) key = 'economy';
+                                  break;
                               }
+
+                              const fallbacks: Record<string, string> = {
+                                economy: i18n.language === 'ar' ? 'الدرجة السياحية' : 'Economy Class',
+                                premium_economy: i18n.language === 'ar' ? 'الدرجة السياحية المميزة' : 'Premium Economy',
+                                business: i18n.language === 'ar' ? 'درجة رجال الأعمال' : 'Business Class',
+                                first: i18n.language === 'ar' ? 'الدرجة الأولى' : 'First Class'
+                              };
+
+                              return t(`cabinTypes.${key}`, fallbacks[key] || (i18n.language === 'ar' ? 'الدرجة السياحية' : raw.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())));
                             })()}
                           </div>
                         </div>
@@ -566,7 +886,7 @@ const Cart = () => {
                         <Button
                           onClick={() => handleProceedToPayment(booking)}
                           className={`w-full bg-tourtastic-blue hover:bg-tourtastic-dark-blue text-white flex items-center justify-center gap-2 py-6 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 ${i18n.language === 'ar' ? 'flex-row-reverse' : ''}`}
-                          disabled={paymentStatus === 'completed' || processingPayment === booking._id}
+                          disabled={paymentStatus === 'completed' || processingPayment === booking._id || !isBookingReadyForPayment(booking)}
                         >
                           <CreditCard className="h-5 w-5" />
                           {processingPayment === booking._id ? (
@@ -576,6 +896,14 @@ const Cart = () => {
                           ) : (
                             <span className="text-lg">{t('proceedToPayment', 'المتابعة للدفع')}</span>
                           )}
+                        </Button>
+
+                        <Button
+                          onClick={() => openPassengerDialog(booking)}
+                          variant="ghost"
+                          className={`w-full border border-gray-200 py-4 rounded-lg ${i18n.language === 'ar' ? 'flex-row-reverse' : ''}`}
+                        >
+                          {t('enterPassengerDetails', 'Enter Passenger Details')}
                         </Button>
 
                         <Button
@@ -596,6 +924,7 @@ const Cart = () => {
           })}
         </div>
       )}
+    </div>
     </div>
   );
 };

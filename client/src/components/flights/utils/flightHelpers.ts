@@ -52,7 +52,14 @@ export const getAirlineLogo = (airlineCode: string) => {
     'J9': '/Jazeera-Airways-Logo.png',
     'R5': '/Royal-Jordanian-logo.png', // Same as RJ
     'BA': '/British-Airways-Logo.png',
-    'LH': '/Lufthansa-Logo.png'
+    'LH': '/Lufthansa-Logo.png',
+    'AT': '/Royal-Air-Maroc-Logo.png',
+    '6E': '/IndiGo-Logo.png',
+    '9P': '/Fly_Jinnah_logo.png',
+    'BS': '/US-Bangla-Airlines-Logo.png',
+    'IX': '/Air-India-Express-Logo.png',
+    'J2': '/Azerbaijan-Airlines-Logo.png',
+    'OV': '/Salam_Air_Logo.png'
   };
   
   const logoPath = logoMap[normalizedCode] || '/placeholder.svg';
@@ -92,4 +99,28 @@ export const getTimeOfDayWithColor = (dateString: string) => {
     case 'night': return { text: 'ليلاً', color: 'text-blue-500' };
     default: return { text: 'يوماً', color: 'text-gray-500' };
   }
+};
+
+// Format a baggage description like "2 pieces (23kg each)" into localized text
+import type { TFunction } from 'i18next';
+
+export const formatBaggage = (baggageStr: string | undefined | null, t: TFunction) => {
+  // Treat falsy or explicit "no baggage" indicators as no baggage
+  if (!baggageStr) return t('noBaggageIncluded', 'No baggage included');
+  const lower = String(baggageStr).trim().toLowerCase();
+  if (lower === 'no baggage included' || lower === 'no baggage' || lower === 'none') {
+    return t('noBaggageIncluded', 'No baggage included');
+  }
+
+  // Try to parse common patterns like "1 piece (23kg)" or "2 pieces (23kg each)"
+  const parsed = String(baggageStr).replace(/(\d+)\s*piece(?:s)?\s*\((\d+)kg(?:\s*each)?\)/i, (_match, pieces, weight) => {
+    const count = Number(pieces);
+    const pieceLabel = count === 1 ? t('baggageDetails.piece', 'قطعة') : t('baggageDetails.pieces', 'قطع');
+    const kgLabel = t('baggageDetails.kg', 'كجم');
+    return `${pieces} ${pieceLabel} (${weight} ${kgLabel})`;
+  });
+
+  const cleaned = parsed.trim();
+  if (!cleaned) return t('noBaggageIncluded', 'No baggage included');
+  return cleaned;
 };

@@ -321,33 +321,55 @@ function transformSeeruToFrontendFormat(seeruFlight, segmentIndex = 0) {
     price_breakdowns: priceBreakdowns,
     
     // Flight legs with enhanced information
-    legs: (seeruFlight.legs || []).map(leg => ({
-      ...leg,
-      duration_formatted: formatMinutesToHoursMinutes(leg.duration),
-      stops_count: leg.stops ? leg.stops.length : 0,
-      
-      // Add cabin_name to leg
-      cabin_name: getCabinName(leg.cabin || seeruFlight.search_query?.options?.cabin),
-      
-      // Enhanced stops information
-      stops_info: leg.stops ? leg.stops.map((stop, index) => ({
-        airport: stop,
-        city: leg.stop_over?.[index] || stop,
-        duration: '45m'
-      })) : [],
-      
-      // Enhanced segments with airline names and cabin info
-      segments: (leg.segments || []).map(segment => ({
-        ...segment,
-        airline_name: getAirlineName(segment.iata),
-        duration_formatted: formatMinutesToHoursMinutes(segment.duration),
-        cabin_name: getCabinName(segment.cabin || leg.cabin || seeruFlight.search_query?.options?.cabin)
-      })),
-      
-      // Add main airline information
-      airline_name: leg.segments && leg.segments.length > 0 ? getAirlineName(leg.segments[0].iata) : '',
-      main_airline_code: leg.segments && leg.segments.length > 0 ? leg.segments[0].iata : ''
-    })),
+    legs: (seeruFlight.legs || []).map(leg => {
+      // Compute leg duration minutes if missing or zero using first segment from/to
+      let legDuration = leg.duration || 0;
+      if ((!legDuration || legDuration === 0) && Array.isArray(leg.segments) && leg.segments.length > 0) {
+        const firstSeg = leg.segments[0];
+        const lastSeg = leg.segments[leg.segments.length - 1];
+        const computed = computeDurationMinutes(firstSeg.from?.date, lastSeg.to?.date);
+        if (computed > 0) legDuration = computed;
+      }
+
+      return {
+        ...leg,
+        duration: legDuration,
+        duration_formatted: formatMinutesToHoursMinutes(legDuration),
+        stops_count: leg.stops ? leg.stops.length : 0,
+
+        // Add cabin_name to leg
+        cabin_name: getCabinName(leg.cabin || seeruFlight.search_query?.options?.cabin),
+
+        // Enhanced stops information
+        stops_info: leg.stops ? leg.stops.map((stop, index) => ({
+          airport: stop,
+          city: leg.stop_over?.[index] || stop,
+          duration: '45m'
+        })) : [],
+
+        // Enhanced segments with airline names and cabin info
+        segments: (leg.segments || []).map(segment => {
+          // Compute segment duration if missing
+          let segDuration = segment.duration || 0;
+          if ((!segDuration || segDuration === 0) && segment.from?.date && segment.to?.date) {
+            const computedSeg = computeDurationMinutes(segment.from.date, segment.to.date);
+            if (computedSeg > 0) segDuration = computedSeg;
+          }
+
+          return {
+            ...segment,
+            airline_name: getAirlineName(segment.iata),
+            duration: segDuration,
+            duration_formatted: formatMinutesToHoursMinutes(segDuration),
+            cabin_name: getCabinName(segment.cabin || leg.cabin || seeruFlight.search_query?.options?.cabin)
+          };
+        }),
+
+        // Add main airline information
+        airline_name: leg.segments && leg.segments.length > 0 ? getAirlineName(leg.segments[0].iata) : '',
+        main_airline_code: leg.segments && leg.segments.length > 0 ? leg.segments[0].iata : ''
+      };
+    }),
     
     // Flight identifiers
     trip_id: seeruFlight.trip_id,
@@ -445,7 +467,14 @@ function getAirlineName(iataCode) {
     'HU': 'Hainan Airlines',
     'MU': 'China Eastern Airlines',
     'AF': 'Air France',
-    'SQ': 'Singapore Airlines'
+    'SQ': 'Singapore Airlines',
+    'AT': 'Royal Air Maroc',
+    '6E': 'IndiGo',
+    '9P': 'Fly Jinnah',
+    'BS': 'US-Bangla Airlines',
+    'IX': 'Air India Express',
+    'J2': 'Azerbaijan Airlines',
+    'OV': 'SalamAir',
   };
   return airlineMap[iataCode] || iataCode;
 }
@@ -458,6 +487,20 @@ function formatMinutesToHoursMinutes(totalMinutes) {
   const minutes = totalMinutes % 60;
   
   return `${hours}h ${minutes}m`;
+}
+
+// Helper to compute duration in minutes from two ISO date strings (safe fallback)
+function computeDurationMinutes(fromDateStr, toDateStr) {
+  try {
+    const from = new Date(fromDateStr);
+    const to = new Date(toDateStr);
+    if (!isFinite(from.getTime()) || !isFinite(to.getTime())) return 0;
+    const diffMs = to.getTime() - from.getTime();
+    if (isNaN(diffMs) || diffMs <= 0) return 0;
+    return Math.round(diffMs / 60000);
+  } catch (e) {
+    return 0;
+  }
 }
 
 // Legacy functions for backward compatibility (can be removed after full migration)

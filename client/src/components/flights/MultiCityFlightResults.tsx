@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plane } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -53,18 +53,46 @@ const MultiCityFlightResults: React.FC<MultiCityFlightResultsProps> = ({
 }) => {
   const { t } = useTranslation();
 
+  const { i18n } = useTranslation();
+  const [airportsMap, setAirportsMap] = useState<Record<string, import('@/services/airportService').Airport>>({});
+
+  useEffect(() => {
+    let mounted = true;
+    const lang = i18n.language === 'ar' ? 'ar' : 'en';
+    // lazy-import to avoid cycle if service isn't referenced elsewhere
+    import('@/services/airportService').then(({ getAirportsMap }) => {
+      getAirportsMap(lang).then(map => { if (mounted) setAirportsMap(map || {}); }).catch(() => {});
+    }).catch(() => {});
+    return () => { mounted = false; };
+  }, [i18n.language]);
+
   const renderSearchSection = useCallback((section: SearchSection) => {
     const searchParam = section.searchParams[0];
 
-    // Get city and country from first flight when available
-    const firstFlight = section.flights[0];
-    const fromCity = firstFlight?.legs?.[0]?.from?.city || '';
-    const fromCountry = firstFlight?.legs?.[0]?.from?.country || firstFlight?.legs?.[0]?.from?.country_iso || '';
-    const toCity = firstFlight?.legs?.[0]?.to?.city || '';
-    const toCountry = firstFlight?.legs?.[0]?.to?.country || firstFlight?.legs?.[0]?.to?.country_iso || '';
+  // Get city/country from first flight when available and prefer localized airport data
+  const firstFlight = section.flights[0];
+  const fromCity = firstFlight?.legs?.[0]?.from?.city || '';
+  const fromCountry = firstFlight?.legs?.[0]?.from?.country || firstFlight?.legs?.[0]?.from?.country_iso || '';
+  const toCity = firstFlight?.legs?.[0]?.to?.city || '';
+  const toCountry = firstFlight?.legs?.[0]?.to?.country || firstFlight?.legs?.[0]?.to?.country_iso || '';
 
-    let headerFrom = fromCity && (fromCountry ? t('cityAndCountry', '${city}، ${country}', { city: fromCity, country: fromCountry }) : fromCity);
-    let headerTo = toCity && (toCountry ? t('cityAndCountry', '${city}، ${country}', { city: toCity, country: toCountry }) : toCity);
+  const fromIata = firstFlight?.legs?.[0]?.segments?.[0]?.from?.airport || '';
+  const toIata = firstFlight?.legs?.[0]?.segments?.[0]?.to?.airport || '';
+
+  const localizedFromCity = (fromIata && airportsMap[fromIata]?.municipality) || fromCity;
+  const localizedFromCountry = (fromIata && airportsMap[fromIata]?.country) || fromCountry;
+  const localizedToCity = (toIata && airportsMap[toIata]?.municipality) || toCity;
+  const localizedToCountry = (toIata && airportsMap[toIata]?.country) || toCountry;
+
+  // Use translation key `cityAndCountry` with interpolation and a sensible default fallback.
+  let headerFrom = localizedFromCity && (localizedFromCountry
+    ? t('cityAndCountry', { city: localizedFromCity, country: localizedFromCountry, defaultValue: `${localizedFromCity}, ${localizedFromCountry}` })
+    : localizedFromCity
+  );
+  let headerTo = localizedToCity && (localizedToCountry
+    ? t('cityAndCountry', { city: localizedToCity, country: localizedToCountry, defaultValue: `${localizedToCity}, ${localizedToCountry}` })
+    : localizedToCity
+  );
 
     // If no flights yet, parse display strings
     if (!headerFrom) {
@@ -74,49 +102,21 @@ const MultiCityFlightResults: React.FC<MultiCityFlightResultsProps> = ({
       headerTo = extractCityCountry(searchParam.to) || searchParam.to;
     }
 
-    return (
+      // use current language to determine arrow direction; this also ensures i18n.language is a used dependency
+  const currentLang = i18n.language;
+  // Arabic should point to the left (←), English to the right (→)
+  const arrow = currentLang === 'ar' ? '←' : '→';
+
+      return (
       <Card key={section.searchIndex} className="mb-6">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Plane className="h-5 w-5 text-tourtastic-blue" />
             <span className="text-lg font-semibold text-right">
-              {`${t(`cities.${fromCity}`, {
-                'Cairo': 'القاهرة',
-                'Jeddah': 'جدة',
-                'Medina': 'المدينة المنورة',
-                'Dubai': 'دبي'
-              }[fromCity] || fromCity)}، ${t(`countries.${fromCountry}`, {
-                'Egypt': 'مصر',
-                'Saudi Arabia': 'المملكة العربية السعودية',
-                'United Arab Emirates': 'الإمارات العربية المتحدة',
-                'UAE': 'الإمارات العربية المتحدة'
-              }[fromCountry] || fromCountry)} ← ${t(`cities.${toCity}`, {
-                'Cairo': 'القاهرة',
-                'Jeddah': 'جدة',
-                'Medina': 'المدينة المنورة',
-                'Dubai': 'دبي'
-              }[toCity] || toCity)}، ${t(`countries.${toCountry}`, {
-                'Egypt': 'مصر',
-                'Saudi Arabia': 'المملكة العربية السعودية',
-                'United Arab Emirates': 'الإمارات العربية المتحدة',
-                'UAE': 'الإمارات العربية المتحدة'
-              }[toCountry] || toCountry)}`}
+                {`${headerFrom || ''} ${arrow} ${headerTo || ''}`}
             </span>
             <span className="text-sm text-gray-500 mr-auto">
-              {t('dateFormat', `${t(`months.${format(searchParam.date, 'MMM')}`, {
-                  'Jan': 'يناير',
-                  'Feb': 'فبراير',
-                  'Mar': 'مارس',
-                  'Apr': 'أبريل',
-                  'May': 'مايو',
-                  'Jun': 'يونيو',
-                  'Jul': 'يوليو',
-                  'Aug': 'أغسطس',
-                  'Sep': 'سبتمبر',
-                  'Oct': 'أكتوبر',
-                  'Nov': 'نوفمبر',
-                  'Dec': 'ديسمبر'
-                }[format(searchParam.date, 'MMM')])} ${format(searchParam.date, 'dd')}, ${format(searchParam.date, 'yyyy')}`)}
+              {new Intl.DateTimeFormat(i18n.language === 'ar' ? 'ar-US' : 'en-US', { month: 'short', day: '2-digit', year: 'numeric' }).format(searchParam.date)}
             </span>
           </CardTitle>
         </CardHeader>
@@ -157,10 +157,10 @@ const MultiCityFlightResults: React.FC<MultiCityFlightResultsProps> = ({
                     {section.loading ? (
                       <div className="flex items-center gap-2">
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-tourtastic-blue"></div>
-                        {t('loading', 'جاري التحميل...')}
+                        {t('loading', 'Loading...')}
                       </div>
                     ) : (
-                      t('loadMoreFlights', 'تحميل المزيد من الرحلات')
+                      t('loadMoreFlights', 'Load more flights')
                     )}
                   </Button>
                 </div>
@@ -170,7 +170,7 @@ const MultiCityFlightResults: React.FC<MultiCityFlightResultsProps> = ({
                 <div className="mt-4 text-center text-sm text-gray-500">
                   <div className="flex items-center justify-center gap-2">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-tourtastic-blue"></div>
-                    {t('searchingMoreFlights', 'جاري البحث عن المزيد من الرحلات...')}
+                    {t('searchingMoreFlights', 'Searching for more flights...')}
                   </div>
                 </div>
               )}
@@ -198,7 +198,7 @@ const MultiCityFlightResults: React.FC<MultiCityFlightResultsProps> = ({
         </CardContent>
       </Card>
     );
-  }, [selectedFlights, showDetails, onFlightSelection, onLoadMore, onAddToCart, t]);
+  }, [airportsMap, i18n.language, t, selectedFlights, showDetails, onAddToCart, onFlightSelection, onLoadMore]);
 
   if (searchSections.length === 0) {
     return (
