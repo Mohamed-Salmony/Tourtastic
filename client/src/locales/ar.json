@@ -307,7 +307,6 @@
   "duration": "المدة",
   "flightNumber": "رقم الرحلة",
   "airlineCode": "رمز شركة الطيران",
-  "departureTime": "وقت المغادرة",
   "arrivalTime": "وقت الوصول",
   "bookFlight": "احجز الرحلة",
   "flightNotAvailable": "الرحلة غير متوفرة",
@@ -515,8 +514,16 @@
   "cookieQuestionsContact": "إذا كان لديك أي استفسارات حول سياسة ملفات الارتباط لدينا، يرجى الاتصال بفريق الدعم.",
   "haveAccount": "هل لديك حساب؟",
   "and": "و",
-  "filters": "الفلاتر"
-  ,"airlines": {
+  "filters": "الفلاتر",
+  "sortPriceAsc": "السعر: من الأقل إلى الأعلى",
+  "sortPriceDesc": "السعر: من الأعلى إلى الأقل",
+  "sortDurationAsc": "المدة: الأقصر أولاً",
+  "sortDepartureAsc": "وقت المغادرة: الأبكر أولاً",
+  "sortArrivalAsc": "وقت الوصول: الأبكر أولاً",
+  "airlinesHeading": "شركات الطيران",
+  "departureTime": "وقت المغادرة",
+  "priceRange": "نطاق السعر",
+  "airlines": {
     "EgyptAir": "مصر للطيران",
     "Emirates": "طيران الإمارات",
     "Turkish Airlines": "الخطوط التركية",
@@ -562,6 +569,11 @@
     "Hainan Airlines": "هاينان للطيران",
     "China Eastern Airlines": "الخطوط الجوية الشرقية الصينية",
     "Air France": "الخطوط الجوية الفرنسية",
+  "Eurowings": "يوروينجز",
+  "KLM Royal Dutch Airlines": "الخطوط الملكية الهولندية",
+  "LOT Polish Airlines": "الخطوط الجوية البولندية",
+  "Transavia France": "ترانزافيا فرانس",
+  "Tunisair": "الخطوط التونسية",
     "Singapore Airlines": "الخطوط الجوية السنغافورية",
     "Royal Air Maroc": "الخطوط الملكية المغربية",
     "IndiGo": "إنديجو",
@@ -577,4 +589,5 @@
   "adultDesc": "18 فما فوق",
   "childDesc": "2-17 سنة",
   "infantDesc": "تحت 2 سنة"
+
 }

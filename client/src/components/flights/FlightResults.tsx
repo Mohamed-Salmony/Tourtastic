@@ -219,25 +219,25 @@ const FlightCard: React.FC<FlightCardProps> = ({
                 <img
                   src={getAirlineLogo(leg.segments[0].iata)}
                   alt={leg.segments[0].iata}
-                  className="h-40 w-40 object-contain"
+                  className="h-16 w-16 sm:h-24 sm:w-24 md:h-40 md:w-40 object-contain"
                   onError={(e) => {
                     e.currentTarget.src = '/placeholder.svg';
                   }}
                 />
-                <div>
-                  <div className="font-medium text-gray-900">
+                <div className="min-w-0">
+                  <div className="font-medium text-gray-900 truncate">
                     {getAirlineDisplay(leg.segments[0])}
                   </div>
-                  <div className="text-sm text-gray-500">
+                  <div className="text-sm text-gray-500 truncate">
                     {leg.segments[0].iata} {leg.segments[0].flightnumber}
                   </div>
                 </div>
               </div>
 
               {/* Flight Route */}
-              <div className="flex items-center gap-4">
+              <div className="flex flex-col md:flex-row items-center gap-4">
                 {/* Departure */}
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-2xl font-bold text-gray-900">
                       {format(new Date(leg.segments[0].from.date), 'HH:mm')}
@@ -249,16 +249,16 @@ const FlightCard: React.FC<FlightCardProps> = ({
                       </span>
                     </div>
                   </div>
-                  <div className="text-sm font-medium text-gray-700">
+                  <div className="text-sm font-medium text-gray-700 whitespace-normal break-words">
                     {getAirportDisplay(leg.segments[0].from).name}
                   </div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-gray-500 whitespace-normal break-words">
                     {getAirportDisplay(leg.segments[0].from).city}
                   </div>
                 </div>
 
                 {/* Flight Duration and Stops */}
-                <div className="flex-1 text-center">
+                <div className="flex-1 text-center min-w-0">
                   <div className="text-sm text-gray-600 mb-1">
                     {leg.duration_formatted || `${Math.floor(leg.duration / 60)}h ${leg.duration % 60}m`}
                   </div>
@@ -275,8 +275,8 @@ const FlightCard: React.FC<FlightCardProps> = ({
                 </div>
 
                 {/* Arrival */}
-                <div className="flex-1 text-right">
-                  <div className="flex items-center justify-end gap-2 mb-1">
+                <div className="flex-1 min-w-0 text-left md:text-right">
+                  <div className="flex items-center justify-start md:justify-end gap-2 mb-1">
                     <div className="flex items-center gap-1">
                       {getTimeOfDayIcon(leg.segments[leg.segments.length - 1].to.date)}
                       <span className={`text-xs ${getTimeOfDayWithColor(leg.segments[leg.segments.length - 1].to.date, t).color}`}>
@@ -287,10 +287,10 @@ const FlightCard: React.FC<FlightCardProps> = ({
                       {format(new Date(leg.segments[leg.segments.length - 1].to.date), 'HH:mm')}
                     </span>
                   </div>
-                  <div className="text-sm font-medium text-gray-700">
+                  <div className="text-sm font-medium text-gray-700 whitespace-normal break-words">
                     {getAirportDisplay(leg.segments[leg.segments.length - 1].to).name}
                   </div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-gray-500 whitespace-normal break-words">
                     {getAirportDisplay(leg.segments[leg.segments.length - 1].to).city}
                   </div>
                 </div>

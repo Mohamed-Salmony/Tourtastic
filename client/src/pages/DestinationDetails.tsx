@@ -55,6 +55,15 @@ const getTimeOfDayIcon = (timeOfDay: string) => {
   }
 };
 
+// Small helper to safely read iata/airport codes from unknown API shapes
+const getIataCode = (point: unknown): string | undefined => {
+  if (!point || typeof point !== 'object') return undefined;
+  const p = point as Record<string, unknown>;
+  const iata = typeof p['iata'] === 'string' ? (p['iata'] as string) : undefined;
+  const airport = typeof p['airport'] === 'string' ? (p['airport'] as string) : undefined;
+  return (iata || airport) && String(iata || airport).toUpperCase();
+};
+
 // Import getAirlineLogo from flightHelpers
 import { getAirlineLogo } from '../components/flights/utils/flightHelpers';
 
@@ -92,46 +101,102 @@ const DestinationDetails: React.FC = () => {
 
   // Handler for adding flight to cart
   const handleAddToCart = async (flight: Flight) => {
-    try {
-      // Use nearestAirport as origin and destination airport as destination
-      const response = await api.post('/cart', {
-        flightDetails: {
-          from: nearestAirport?.city || flight.legs[0].from.city,
-          to: destination?.name[currentLang] || flight.legs[0].to.city,
-          departureDate: flight.legs[0].from.date,
-          passengers: {
-            adults: flight.search_query.adt || 1,
-            children: flight.search_query.chd || 0,
-            infants: flight.search_query.inf || 0
-          },
-          selectedFlight: {
-            flightId: flight.legs[0].segments[0].flightnumber,
-            airline: flight.legs[0].segments[0].airline_name,
-            departureTime: flight.legs[0].from.date,
-            arrivalTime: flight.legs[0].to.date,
-            price: {
-              total: flight.price,
-              currency: flight.currency
-            },
-            class: flight.search_query.options.cabin || 'economy'
-          }
-        }
-      });
+    // Validate required origin/destination
+    if (!flight) return;
+    const originCode = nearestAirport?.code || getIataCode(flight.legs[0].from);
+    const destinationAirportCode = destination
+      ? (typeof destination.quickInfo.airport === 'string' ? destination.quickInfo.airport : destination.quickInfo.airport.code)
+      : getIataCode(flight.legs[0].to);
 
-      if (response.data.success) {
-        toast({
-          title: t('success', 'Success'),
-          description: t('flightAddedToCart', 'Flight has been added to your cart'),
-          variant: 'default',
-        });
+    if (!originCode || String(originCode).length !== 3) {
+      toast({ title: t('error', 'Error'), description: t('missingOrigin', 'Could not determine origin airport. Please enter manually.'), variant: 'destructive' });
+      return;
+    }
+
+    if (!destinationAirportCode || String(destinationAirportCode).length !== 3) {
+      toast({ title: t('error', 'Error'), description: t('missingDestination', 'Could not determine destination airport. Please try again later.'), variant: 'destructive' });
+      return;
+    }
+
+    const passengers = {
+      adults: flight.search_query?.adt || 1,
+      children: flight.search_query?.chd || 0,
+      infants: flight.search_query?.inf || 0
+    };
+
+    const singlePassengerTotal = (flight.price || 0) + (flight.tax || 0);
+    const totalPassengers = (passengers.adults || 0) + (passengers.children || 0) + (passengers.infants || 0) || 1;
+    const totalPrice = flight.total_price && flight.total_price > 0
+      ? flight.total_price
+      : (flight.price_breakdowns ? (
+        (flight.price_breakdowns.ADT?.total || singlePassengerTotal) * (flight.search_query?.adt || 1) +
+        (flight.price_breakdowns.CHD?.total || singlePassengerTotal * 0.75) * (flight.search_query?.chd || 0) +
+        (flight.price_breakdowns.INF?.total || singlePassengerTotal * 0.1) * (flight.search_query?.inf || 0)
+      ) : singlePassengerTotal * totalPassengers);
+
+    const payload = {
+      flightDetails: {
+        from: { code: String(originCode).toUpperCase(), city: nearestAirport?.city || '' },
+        to: { code: String(destinationAirportCode).toUpperCase(), name: destination?.name?.[currentLang] || '' },
+        departureDate: flight.legs[0].from.date,
+        passengers,
+        selectedFlight: {
+          tripId: flight.trip_id,
+          flightId: flight.legs[0].segments[0].flightnumber,
+          airline: flight.legs[0].segments[0].airline_name,
+          airlineCode: flight.legs[0].segments[0].iata,
+          departureTime: flight.legs[0].from.date,
+          arrivalTime: flight.legs[0].to.date,
+          price: { total: totalPrice, currency: flight.currency },
+          currency: flight.currency,
+          cabin: flight.search_query?.options?.cabin || flight.legs[0]?.cabin_name || 'economy',
+          segments: flight.legs[0].segments,
+          price_breakdowns: flight.price_breakdowns || null
+        }
       }
-    } catch (error) {
-      console.error('Error adding flight to cart:', error);
-      toast({
-        title: t('error', 'Error'),
-        description: t('failedToAddToCart', 'Failed to add flight to cart'),
-        variant: 'destructive',
-      });
+    };
+
+    try {
+      const response = await api.post('/cart', payload);
+      if (response?.data?.success) {
+        toast({ title: t('success', 'Success'), description: t('flightAddedToCart', 'Flight has been added to your cart'), variant: 'default' });
+        // Navigate to cart to show the added item
+        navigate('/cart');
+        return;
+      }
+
+      // If backend responds but indicates failure, fall back to localStorage and still navigate
+      console.warn('Add to cart response not successful, falling back to localStorage', response?.data);
+    } catch (err) {
+      console.error('API add to cart failed, falling back to localStorage:', err);
+    }
+
+    // Fallback: store in localStorage (for unauthenticated users or API failure)
+    try {
+      const item = {
+        from: payload.flightDetails.from.city || payload.flightDetails.from.code,
+        to: payload.flightDetails.to.name || payload.flightDetails.to.code,
+        fromIata: payload.flightDetails.from.code,
+        toIata: payload.flightDetails.to.code,
+        departureTime: payload.flightDetails.departureDate,
+        passengers: payload.flightDetails.passengers,
+        flightId: payload.flightDetails.selectedFlight.flightId,
+        airline: payload.flightDetails.selectedFlight.airline,
+        arrivalTime: payload.flightDetails.selectedFlight.arrivalTime,
+        price: payload.flightDetails.selectedFlight.price.total,
+        currency: payload.flightDetails.selectedFlight.price.currency,
+        class: payload.flightDetails.selectedFlight.cabin,
+        segments: payload.flightDetails.selectedFlight.segments
+      };
+
+      const existing = JSON.parse(localStorage.getItem('cartItems') || '[]');
+      existing.push(item);
+      localStorage.setItem('cartItems', JSON.stringify(existing));
+      toast({ title: t('success', 'Success'), description: t('flightSavedLocally', 'Flight saved to your cart (local).'), variant: 'default' });
+      navigate('/cart');
+    } catch (err) {
+      console.error('Failed to save cart item locally:', err);
+      toast({ title: t('error', 'Error'), description: t('failedToAddToCart', 'Failed to add flight to cart'), variant: 'destructive' });
     }
   };
 

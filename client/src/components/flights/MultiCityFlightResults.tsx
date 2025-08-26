@@ -69,20 +69,31 @@ const MultiCityFlightResults: React.FC<MultiCityFlightResultsProps> = ({
   const renderSearchSection = useCallback((section: SearchSection) => {
     const searchParam = section.searchParams[0];
 
-  // Get city/country from first flight when available and prefer localized airport data
-  const firstFlight = section.flights[0];
-  const fromCity = firstFlight?.legs?.[0]?.from?.city || '';
-  const fromCountry = firstFlight?.legs?.[0]?.from?.country || firstFlight?.legs?.[0]?.from?.country_iso || '';
-  const toCity = firstFlight?.legs?.[0]?.to?.city || '';
-  const toCountry = firstFlight?.legs?.[0]?.to?.country || firstFlight?.legs?.[0]?.to?.country_iso || '';
+    // Get city/country from the user's search param first (prefer exact intent),
+    // then fall back to the first flight's leg data. This avoids showing a
+    // connection city (e.g. Amman) when the user searched for Damascus.
+    const firstFlight = section.flights[0];
+    const leg = firstFlight?.legs?.[0];
 
-  const fromIata = firstFlight?.legs?.[0]?.segments?.[0]?.from?.airport || '';
-  const toIata = firstFlight?.legs?.[0]?.segments?.[0]?.to?.airport || '';
+    // Helper to extract IATA from strings like "DAM - Damascus International Airport (...)" or plain IATA
+    const parseIata = (s?: string) => {
+      if (!s) return '';
+      const parts = s.split(' - ');
+      const candidate = parts.length > 1 ? parts[0].trim() : s.trim();
+      return /^[A-Z]{3}$/.test(candidate) ? candidate : '';
+    };
 
-  const localizedFromCity = (fromIata && airportsMap[fromIata]?.municipality) || fromCity;
-  const localizedFromCountry = (fromIata && airportsMap[fromIata]?.country) || fromCountry;
-  const localizedToCity = (toIata && airportsMap[toIata]?.municipality) || toCity;
-  const localizedToCountry = (toIata && airportsMap[toIata]?.country) || toCountry;
+    const searchFromIata = parseIata(searchParam.from as unknown as string);
+    const searchToIata = parseIata(searchParam.to as unknown as string);
+
+    const fromIata = searchFromIata || leg?.from?.iata || leg?.from?.iata_code || leg?.from?.iata_code || leg?.segments?.[0]?.from?.airport || '';
+    // For destination prefer the leg.to iata or the last segment arrival (not the first segment arrival)
+    const toIata = searchToIata || leg?.to?.iata || leg?.to?.iata_code || leg?.segments?.slice(-1)[0]?.to?.airport || '';
+
+    const localizedFromCity = (fromIata && airportsMap[fromIata]?.municipality) || leg?.from?.city || '';
+    const localizedFromCountry = (fromIata && airportsMap[fromIata]?.country) || leg?.from?.country || leg?.from?.country_iso || '';
+    const localizedToCity = (toIata && airportsMap[toIata]?.municipality) || leg?.to?.city || '';
+    const localizedToCountry = (toIata && airportsMap[toIata]?.country) || leg?.to?.country || leg?.to?.country_iso || '';
 
   // Use translation key `cityAndCountry` with interpolation and a sensible default fallback.
   let headerFrom = localizedFromCity && (localizedFromCountry

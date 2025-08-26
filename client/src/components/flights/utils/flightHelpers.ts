@@ -61,6 +61,14 @@ export const getAirlineLogo = (airlineCode: string) => {
     'J2': '/Azerbaijan-Airlines-Logo.png',
     'OV': '/Salam_Air_Logo.png'
   };
+
+  // Added mappings for newly introduced IATA codes
+  // Note: Eurowings logo file not found in /public; using Germanwings as a temporary fallback until the real logo is added.
+  logoMap['EW'] = '/Germanwings-Logo.png';
+  logoMap['KL'] = '/Royal-Dutch-Airlines-Logo.png';
+  logoMap['LO'] = '/Polish-Airlines-Logo.png';
+  logoMap['TO'] = '/Transavia-Logo.png';
+  logoMap['TU'] = '/Tunisair-logo.png';
   
   const logoPath = logoMap[normalizedCode] || '/placeholder.svg';
   console.log(`Airline ${normalizedCode}: Found logo path: ${logoPath}`);

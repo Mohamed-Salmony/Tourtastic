@@ -14,6 +14,7 @@ import api from '@/config/api';
 import { useNavigate } from 'react-router-dom';
 import { paymentService } from '@/services/paymentService';
 import { useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
+import { getAirlineLogo } from '@/components/flights/utils/flightHelpers';
 
 interface Transaction {
   id: string;
@@ -741,9 +742,31 @@ const Cart = () => {
 
             const airlineDisplay = i18n.language === 'ar' ? (airlineTranslations[rawAirlineName] || rawAirlineName) : rawAirlineName;
 
-            // Resolve airline logo with fallbacks: provided URL -> airlineCode-based asset -> name-based asset -> placeholder
+            // Resolve airline logo with fallbacks. Build a prioritized list of candidate URLs
             const normalizedNameForFile = rawAirlineName.replace(/\s+/g, '-');
-            const candidateLogoSrc = airlineLogoUrl || (airlineCode ? `/${airlineCode}-Logo.png` : null) || (rawAirlineName ? `/${normalizedNameForFile}-Logo.png` : null) || '/placeholder.svg';
+            const logoCandidates: string[] = [];
+            if (airlineLogoUrl) logoCandidates.push(airlineLogoUrl);
+            if (airlineCode) {
+              const mapped = getAirlineLogo(String(airlineCode));
+              if (mapped) logoCandidates.push(mapped);
+            }
+            if (rawAirlineName) {
+              logoCandidates.push(`/${normalizedNameForFile}-Logo.png`);
+              logoCandidates.push(`/${normalizedNameForFile}-logo.png`);
+              logoCandidates.push(`/${normalizedNameForFile}.png`);
+              logoCandidates.push(`/${normalizedNameForFile.toLowerCase()}-logo.png`);
+              logoCandidates.push(`/${normalizedNameForFile.toLowerCase()}.png`);
+            }
+            // Always include placeholder as last resort
+            logoCandidates.push('/placeholder.svg');
+            // Remove duplicates while keeping order
+            const seen = new Set<string>();
+            const uniqueCandidates = logoCandidates.filter(s => {
+              if (!s) return false;
+              if (seen.has(s)) return false;
+              seen.add(s);
+              return true;
+            });
 
             return (
               <Card key={booking._id} className="p-4 md:p-6 bg-gradient-to-br from-white to-gray-50 border-2 hover:shadow-lg transition-all duration-300">
@@ -754,12 +777,17 @@ const Cart = () => {
                       <div className="flex items-center justify-center md:justify-start gap-4 mb-6 bg-tourtastic-blue bg-opacity-10 p-6 rounded-lg">
                         <div className="relative h-24 w-24 flex-shrink-0">
                           <img
-                            src={candidateLogoSrc}
+                            src={uniqueCandidates[0]}
                             alt={`${airlineDisplay} logo`}
                             className="object-contain w-full h-full"
                             onError={(e) => {
                               const target = e.target as HTMLImageElement;
-                              if (target.src && !target.src.endsWith('/placeholder.svg')) {
+                              try {
+                                const current = target.getAttribute('src') || '';
+                                const idx = uniqueCandidates.indexOf(current);
+                                const next = uniqueCandidates[idx + 1] || '/placeholder.svg';
+                                if (next && next !== current) target.src = next;
+                              } catch (err) {
                                 target.src = '/placeholder.svg';
                               }
                             }}
