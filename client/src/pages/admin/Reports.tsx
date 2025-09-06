@@ -1,72 +1,150 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import api from '@/config/api';
+import currency, { formatSypFromUsd, getSypRate, setSypRate } from '@/utils/currency';
+import { saveAs } from 'file-saver';
 
-// Mock revenue data
-const revenueData = [
-  { month: 'Jan', revenue: 12500 },
-  { month: 'Feb', revenue: 15000 },
-  { month: 'Mar', revenue: 18000 },
-  { month: 'Apr', revenue: 20000 },
-  { month: 'May', revenue: 22500 },
-  { month: 'Jun', revenue: 28000 },
-  { month: 'Jul', revenue: 32000 },
-  { month: 'Aug', revenue: 38000 },
-  { month: 'Sep', revenue: 34000 },
-  { month: 'Oct', revenue: 30000 },
-  { month: 'Nov', revenue: 26000 },
-  { month: 'Dec', revenue: 29000 },
-];
-
-// Mock booking data
-const bookingData = [
-  { name: 'Flights', value: 45 },
-  { name: 'Hotels', value: 30 },
-  { name: 'Tours', value: 15 },
-  { name: 'Car Rentals', value: 10 },
-];
+const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 // Colors for pie chart
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
-const AdminReports = () => {
+type BookingRecord = {
+  _id?: string;
+  bookingId?: string;
+  userId?: { name?: string; email?: string } | string;
+  destination?: string;
+  bookingDate?: string | Date;
+  createdAt?: string | Date;
+  amount?: number;
+  // include nested selectedFlight price shape to satisfy TS when accessing details.flightDetails.selectedFlight.price.total
+  details?: { flightDetails?: { from?: string; to?: string; selectedFlight?: { price?: { total?: number }, [key: string]: any } } } | any;
+  status?: string;
+  customerName?: string;
+};
+
+type SearchLogRecord = {
+  _id?: string;
+  from?: string;
+  to?: string;
+  searchedAt?: string | Date;
+  resultsCount?: number;
+};
+
+type DistributionEntry = { name: string; value: number; percent?: number };
+type TopDestination = { destination: string; bookings: number; growthPercent: number };
+
+const AdminReports: React.FC = () => {
   const { t } = useTranslation();
-  const [timeRange, setTimeRange] = useState('yearly');
-  const [chartData, setChartData] = useState(revenueData);
-  
-  // Function to get data for different time ranges
-  const handleTimeRangeChange = (value: string) => {
-    setTimeRange(value);
-    
-    // In a real app, you would fetch different data based on the time range
-    // For now, we'll just simulate different data
-    if (value === 'monthly') {
-      setChartData(revenueData.slice(-1));
-    } else if (value === 'quarterly') {
-      setChartData(revenueData.slice(-3));
-    } else {
-      setChartData(revenueData);
+  const [revenueByMonth, setRevenueByMonth] = useState<number[]>(Array(12).fill(0));
+  const [totalRevenue, setTotalRevenue] = useState<number>(0);
+  const [sypRate, setSypRateState] = useState<number>(getSypRate());
+  const [totalBookings, setTotalBookings] = useState<number>(0);
+  const [bookingDistribution, setBookingDistribution] = useState<DistributionEntry[]>([]);
+  const [topDestinations, setTopDestinations] = useState<TopDestination[]>([]);
+  const [searchLogs, setSearchLogs] = useState<SearchLogRecord[]>([]);
+  const [orders, setOrders] = useState<BookingRecord[]>([]);
+
+  useEffect(() => { fetchReports(); fetchOrders(); loadSypFromServer(); }, []);
+
+  const loadSypFromServer = async () => {
+    try {
+      const resp = await api.get('/settings/sypRate');
+      if (resp.data && resp.data.success && resp.data.data != null) {
+        const v = Number(resp.data.data);
+        if (!isNaN(v) && v > 0) {
+          setSypRateState(v);
+          setSypRate(v);
+        }
+      }
+    } catch (e) {
+      // ignore and use local value
     }
   };
-  
-  // Calculate total revenue
-  const totalRevenue = revenueData.reduce((sum, item) => sum + item.revenue, 0);
-  
-  // Calculate total bookings
-  const totalBookings = bookingData.reduce((sum, item) => sum + item.value, 0);
-  
+
+  const fetchReports = async (year?: number) => {
+    try {
+  const res = await api.get('/admin/reports', { params: { year } });
+      if (res.data && res.data.success) {
+        const d = res.data.data as {
+          totalRevenue?: number;
+          totalBookings?: number;
+          revenueByMonth?: number[];
+          bookingDistribution?: DistributionEntry[];
+          topDestinations?: TopDestination[];
+          searchLogs?: SearchLogRecord[];
+        };
+        setTotalRevenue(d.totalRevenue || 0);
+        setTotalBookings(d.totalBookings || 0);
+        setRevenueByMonth((d.revenueByMonth || []).map((v:number,i:number) => v));
+        setBookingDistribution(d.bookingDistribution || []);
+        setTopDestinations(d.topDestinations || []);
+        setSearchLogs(d.searchLogs || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch reports', err);
+    }
+  };
+
+  const fetchOrders = async () => {
+    try {
+  const res = await api.get('/admin/bookings');
+      if (res.data && res.data.success) {
+        setOrders(res.data.data as BookingRecord[] || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch orders', err);
+    }
+  };
+
+  // time range selector removed - always showing full year by default
+
+  const chartData = revenueByMonth.map((r:number, idx:number) => ({ month: monthNames[idx], revenue: r || 0 }));
+
+  const handleDownload = async () => {
+    try {
+  const res = await api.get('/admin/reports/download', { responseType: 'blob' });
+      const contentType = res.headers['content-type'];
+      const ext = contentType && contentType.includes('spreadsheet') ? 'xlsx' : 'csv';
+      const filename = `tourtastic_orders.${ext}`;
+      saveAs(new Blob([res.data]), filename);
+    } catch (err) {
+      console.error('Download failed', err);
+    }
+  };
+
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-6">{t('reports')}</h1>
+      <div className="mb-4 flex items-center gap-4">
+        <label className="text-sm font-medium">SYP rate (1 USD = )</label>
+        <input
+          type="number"
+          step="0.01"
+          className="border px-2 py-1 rounded w-32"
+          value={sypRate}
+          onChange={(e) => {
+              const v = Number(e.target.value);
+              const safe = isNaN(v) || v <= 0 ? 1 : v;
+              setSypRateState(safe);
+              if (!isNaN(v) && v > 0) {
+                setSypRate(v);
+                // persist to server (admin only route)
+                api.put('/settings/sypRate', { value: v }).catch((err) => console.warn('Failed to save syp rate', err));
+              }
+            }}
+        />
+        <div className="text-sm text-gray-600">Prices will display in SP</div>
+      </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-6">
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold">${totalRevenue.toLocaleString()}</div>
+            <div className="text-2xl font-bold">{formatSypFromUsd(Number(totalRevenue || 0))}</div>
             <p className="text-sm text-gray-500">{t('totalRevenue')}</p>
           </CardContent>
         </Card>
@@ -80,14 +158,7 @@ const AdminReports = () => {
         
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold">87%</div>
-            <p className="text-sm text-gray-500">{t('customerSatisfaction')}</p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">24%</div>
+            <div className="text-2xl font-bold">{/* Show revenue growth */} { /* placeholder */ }%</div>
             <p className="text-sm text-gray-500">{t('growthRate')}</p>
           </CardContent>
         </Card>
@@ -97,27 +168,12 @@ const AdminReports = () => {
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xl">{t('revenue')}</CardTitle>
-            <Select value={timeRange} onValueChange={handleTimeRangeChange}>
-              <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder={t('selectRange')} />
-              </SelectTrigger>
-              <SelectContent align="end">
-                <SelectItem value="monthly">{t('lastMonth')}</SelectItem>
-                <SelectItem value="quarterly">{t('lastQuarter')}</SelectItem>
-                <SelectItem value="yearly">{t('fullYear')}</SelectItem>
-              </SelectContent>
-            </Select>
           </CardHeader>
           <CardContent className="pt-0">
             <ResponsiveContainer width="100%" height={350}>
               <BarChart
                 data={chartData}
-                margin={{
-                  top: 20,
-                  right: 30,
-                  left: 20,
-                  bottom: 5,
-                }}
+                margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
               >
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
@@ -141,7 +197,7 @@ const AdminReports = () => {
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
-                  data={bookingData}
+                  data={bookingDistribution}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
@@ -150,7 +206,7 @@ const AdminReports = () => {
                   fill="#8884d8"
                   dataKey="value"
                 >
-                  {bookingData.map((entry, index) => (
+                  {bookingDistribution.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
@@ -161,39 +217,96 @@ const AdminReports = () => {
           </CardContent>
         </Card>
         
-        <Card className="lg:col-span-3">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xl">{t('topDestinations')}</CardTitle>
-            <Button variant="outline" size="sm">
-              {t('downloadReport')}
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="border rounded-lg p-4 text-center">
-                <div className="text-lg font-bold">Paris</div>
-                <div className="text-sm text-gray-500">245 {t('bookings')}</div>
-                <div className="mt-2 text-green-600">+15% {t('vs')}</div>
+          <Card className="lg:col-span-3">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-xl">{t('topDestinations')}</CardTitle>
+              </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {topDestinations && topDestinations.length > 0 ? topDestinations.map((td) => (
+                  <div key={td.destination} className="border rounded-lg p-4 text-center">
+                    <div className="text-lg font-bold">{td.destination}</div>
+                    <div className="text-sm text-gray-500">{td.bookings} {t('bookings')}</div>
+                    <div className={`mt-2 ${td.growthPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>{td.growthPercent >=0 ? `+${td.growthPercent}%` : `${td.growthPercent}%`} {t('vs')}</div>
+                  </div>
+                )) : <div className="text-sm text-gray-500">No destination data</div>}
               </div>
-              <div className="border rounded-lg p-4 text-center">
-                <div className="text-lg font-bold">Bali</div>
-                <div className="text-sm text-gray-500">189 {t('bookings')}</div>
-                <div className="mt-2 text-green-600">+22% {t('vs')}</div>
-              </div>
-              <div className="border rounded-lg p-4 text-center">
-                <div className="text-lg font-bold">New York</div>
-                <div className="text-sm text-gray-500">176 {t('bookings')}</div>
-                <div className="mt-2 text-green-600">+8% {t('vs')}</div>
-              </div>
-              <div className="border rounded-lg p-4 text-center">
-                <div className="text-lg font-bold">Tokyo</div>
-                <div className="text-sm text-gray-500">132 {t('bookings')}</div>
-                <div className="mt-2 text-green-600">+18% {t('vs')}</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
       </div>
+
+        <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Search Queries</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-auto max-h-64">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left">
+                      <th>From</th>
+                      <th>To</th>
+                      <th>Date</th>
+                      <th>Results</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {searchLogs.map((s) => (
+                          <tr key={s._id}>
+                            <td>{s.from}</td>
+                            <td>{s.to}</td>
+                            <td>{s.searchedAt ? new Date(s.searchedAt).toLocaleString() : ''}</td>
+                            <td>{s.resultsCount}</td>
+                          </tr>
+                        ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+                <div className="flex items-center justify-between w-full">
+                  <CardTitle className="text-lg">Orders</CardTitle>
+                  <Button variant="outline" size="sm" onClick={handleDownload}>
+                    {t('downloadReport')}
+                  </Button>
+                </div>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-auto max-h-64">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left">
+                      <th>Order ID</th>
+                      <th>User</th>
+                      <th>From</th>
+                      <th>To</th>
+                      <th>Date</th>
+                      <th>Amount</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orders.map((o) => (
+                      <tr key={o._id || o.bookingId}>
+                        <td>{o.bookingId || o._id}</td>
+                        <td>{(typeof o.userId === 'object' ? (o.userId && (o.userId.name || o.userId.email)) : o.userId) || o.customerName}</td>
+                        <td>{(o.details && o.details.flightDetails && o.details.flightDetails.from) || ''}</td>
+                        <td>{(o.details && o.details.flightDetails && o.details.flightDetails.to) || o.destination || ''}</td>
+                        <td>{o.bookingDate ? new Date(o.bookingDate).toLocaleDateString() : (o.createdAt ? new Date(o.createdAt).toLocaleDateString() : '')}</td>
+                        <td>{formatSypFromUsd(o.amount ?? (o.details?.flightDetails?.selectedFlight?.price?.total ?? o.createdAt ? 0 : null))}</td>
+                        <td>{o.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
     </div>
   );
 };

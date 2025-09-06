@@ -272,6 +272,34 @@ const Flights = () => {
 
   const { searchSections, startMultiSearch, loadMore } = useMultiCitySearch();
 
+  // Keep a ref to the latest searchSections so polling helpers can read it
+  const searchSectionsRef = useRef(searchSections);
+  useEffect(() => {
+    searchSectionsRef.current = searchSections;
+  }, [searchSections]);
+
+  // Wait for search results to arrive (polls searchSectionsRef). Resolves true if results found, false on timeout.
+  const waitForResults = (timeoutMs = 20000, pollInterval = 500) => {
+    return new Promise<boolean>((resolve) => {
+      const start = Date.now();
+      const check = () => {
+        if (searchSectionsRef.current && searchSectionsRef.current.length > 0) {
+          resolve(true);
+          return;
+        }
+
+        if (Date.now() - start >= timeoutMs) {
+          resolve(false);
+          return;
+        }
+
+        // schedule next check
+        setTimeout(check, pollInterval);
+      };
+      check();
+    });
+  };
+
   // Update available airlines whenever search results change
   useEffect(() => {
     if (searchSections.length > 0) {
@@ -307,7 +335,18 @@ const Flights = () => {
         infants: data.passengers.infants ?? 0,
       }, data.cabin, data.direct);
 
-      setHasSearched(true);
+      // Wait for the hook to populate results (avoid race where startMultiSearch returns a job id)
+      const gotResults = await waitForResults(20000, 500);
+      if (gotResults) {
+        setHasSearched(true);
+      } else {
+        // No results arrived within timeout - inform user and keep on search page
+        toast({
+          title: t('searchErrorTitle', 'Search Error'),
+          description: t('noFlightsFoundTimeout', 'No flights found after multiple attempts. Please try different search criteria.'),
+          variant: 'destructive',
+        });
+      }
     } catch (error) {
       toast({
         title: t('error', 'Error'),
@@ -371,14 +410,27 @@ const Flights = () => {
 
       (async () => {
         try {
+          setIsSubmitting(true);
           await startMultiSearch(segmentsForHook, passengerCounts || { adults: 1, children: 0, infants: 0 }, undefined, undefined);
-          setHasSearched(true);
+
+          const gotResults = await waitForResults(20000, 500);
+          if (gotResults) {
+            setHasSearched(true);
+          } else {
+            toast({
+              title: t('searchErrorTitle', 'Search Error'),
+              description: t('noFlightsFoundTimeout', 'No flights found after multiple attempts. Please try different search criteria.'),
+              variant: 'destructive',
+            });
+          }
         } catch (error) {
           toast({
             title: t('error', 'Error'),
             description: t('flightSearchError', 'Failed to search for flights. Please try again.'),
             variant: 'destructive',
           });
+        } finally {
+          setIsSubmitting(false);
         }
       })();
     }

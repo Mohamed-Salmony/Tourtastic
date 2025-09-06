@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Flight } from '../../services/flightService';
 import { getAirlineLogo, getTimeOfDay, getTimeOfDayIcon, getTimeOfDayWithColor, formatBaggage } from './utils/flightHelpers';
 import { getAirportsMap } from '@/services/airportService';
+import { formatSypFromUsd } from '@/utils/currency';
 
 interface FlightCardProps {
   flight: Flight;
@@ -23,9 +24,9 @@ const FlightCard: React.FC<FlightCardProps> = ({
   showDetails,
   onAddToCart
 }) => {
-  const { t } = useTranslation();
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [airportsMap, setAirportsMap] = useState<Record<string, import('@/services/airportService').Airport>>({});
+  // mobile inline expansion removed: tapping the compact header will open details via onFlightSelection
 
   useEffect(() => {
     let mounted = true;
@@ -84,12 +85,52 @@ const FlightCard: React.FC<FlightCardProps> = ({
   };
 
   return (
-    <Card className={`p-6 hover:shadow-lg transition-all duration-200 cursor-pointer border-l-4 ${
+    <Card className={`p-4 md:p-6 hover:shadow-lg transition-all duration-200 cursor-pointer border-l-4 ${
       selectedFlight?.trip_id === flight.trip_id 
         ? 'border-l-tourtastic-blue bg-blue-50' 
         : 'border-l-transparent hover:border-l-tourtastic-blue'
     }`}>
-      <div className="flex flex-col lg:flex-row lg:items-center gap-6">
+      {/* Compact header for mobile: tap the ticket to open details (buttons removed on mobile) */}
+      <div
+        className="md:hidden flex items-center justify-between gap-4 cursor-pointer"
+        role="button"
+        tabIndex={0}
+        onClick={() => onFlightSelection(flight)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onFlightSelection(flight); } }}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <img 
+            src={getAirlineLogo(flight.legs[0].segments[0].iata)} 
+            alt={flight.legs[0].segments[0].iata}
+            className="h-10 w-10 object-contain"
+            onError={(e) => { e.currentTarget.src = '/placeholder.svg'; }}
+          />
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-gray-900 truncate">
+              {(() => {
+                const arrow = i18n?.language === 'ar' ? '←' : '→';
+                const fromCity = (airportsMap[flight.legs[0].segments[0].from.airport]?.municipality) || flight.legs[0].segments[0].from.city || '';
+                const toCity = (airportsMap[flight.legs[0].segments.slice(-1)[0].to.airport]?.municipality) || flight.legs[0].segments.slice(-1)[0].to.city || '';
+                return `${fromCity} ${arrow} ${toCity}`;
+              })()}
+            </div>
+            <div className="text-xs text-gray-500 truncate">
+              {flight.legs[0].segments[0].iata} {flight.legs[0].segments[0].flightnumber}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <div className="text-lg font-bold text-gray-900">{formatSypFromUsd(totalPrice)}</div>
+            <div className="text-xs text-gray-500">{t('perPerson', 'per person')}</div>
+          </div>
+          {/* mobile: remove explicit select/details buttons to make the whole ticket tappable */}
+        </div>
+      </div>
+
+  {/* Full content: hidden on mobile, visible on md+ only (mobile opens details via parent) */}
+  <div className="hidden md:block">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-6">
         {/* Flight Info Section */}
         <div className="flex-1 space-y-4">
           {/* Date and Flight Number */}
@@ -232,14 +273,14 @@ const FlightCard: React.FC<FlightCardProps> = ({
         <div className="flex flex-col items-center lg:items-end gap-3 w-full lg:w-auto lg:min-w-[220px] px-2 sm:px-4">
           {/* Black price: adult base */}
           <div className="text-xl sm:text-2xl font-bold text-center lg:text-right break-words">
-            {flight.currency} {adultBase.toFixed(2)}
+            {formatSypFromUsd(adultBase)}
           </div>
           <div className="text-xs text-gray-600 text-center lg:text-right whitespace-normal">
             {t('perAdult', 'للبالغ')} {t('base', 'السعر الأساسي')}
           </div>
           {/* Adult tax line */}
           <div className="text-xs text-gray-600 text-center lg:text-right whitespace-normal">
-            {t('tax', 'الضرائب')}: {flight.currency} {adultTax.toFixed(2)}
+            {t('tax', 'الضرائب')}: {formatSypFromUsd(adultTax)}
           </div>
 
           {/* Passenger counts */}
@@ -251,7 +292,7 @@ const FlightCard: React.FC<FlightCardProps> = ({
           
           {/* Blue total */}
           <div className="text-xs font-semibold text-tourtastic-blue text-center lg:text-right">
-            {t('total', 'المجموع')}: {flight.currency} {totalPrice.toFixed(2)}
+            {t('total', 'المجموع')}: {formatSypFromUsd(totalPrice)}
           </div>
 
           <div className="text-xs text-gray-600 text-center lg:text-right flex items-center justify-center lg:justify-end gap-1 px-2 max-w-full">
@@ -281,6 +322,7 @@ const FlightCard: React.FC<FlightCardProps> = ({
           </Button>
         </div>
       </div>
+     </div> 
     </Card>
   );
 };

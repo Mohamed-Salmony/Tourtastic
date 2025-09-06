@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { type AxiosRequestHeaders } from 'axios';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? '/api',
@@ -12,40 +12,61 @@ const api = axios.create({
 });
 
 // Add session ID to requests for anonymous users
-api.interceptors.request.use((config) => {
+api.interceptors.request.use(async (config) => {
   const token = localStorage.getItem('token');
   const refreshToken = localStorage.getItem('refreshToken');
   const sessionId = localStorage.getItem('sessionId');
-  
-  // Add Authorization header if token exists
-  if (token) {
-    config.headers['Authorization'] = `Bearer ${token}`;
-  }
-  
-  return config;
+
+  // If we have a token, ensure it's fresh. If expired, try to refresh synchronously.
   if (token) {
     try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      const currentTime = Date.now() / 1000;
-      
-      if (payload.exp > currentTime) {
-        config.headers.Authorization = `Bearer ${token}`;
-      } else if (refreshToken) {
-        // Token is expired but we have a refresh token
-        // Let the response interceptor handle the refresh
-        config.headers.Authorization = `Bearer ${token}`;
-      } else {
-        // No refresh token available, remove expired token
-        localStorage.removeItem('token');
+      const parts = token.split('.');
+      if (parts.length === 3) {
+        const payload = JSON.parse(atob(parts[1]));
+        const currentTime = Date.now() / 1000;
+        if (payload.exp && payload.exp > currentTime) {
+          config.headers = (config.headers ?? {}) as AxiosRequestHeaders;
+          (config.headers as AxiosRequestHeaders).Authorization = `Bearer ${token}`;
+          return config;
+        }
       }
-    } catch (error) {
-      // Invalid token format, remove it
+
+      // Token looks expired or invalid; attempt refresh if we have a refresh token
+      if (refreshToken) {
+        try {
+          const refreshResp = await axios.post('/api/auth/refresh-token', { refreshToken });
+          if (refreshResp.data?.success && refreshResp.data.accessToken) {
+            localStorage.setItem('token', refreshResp.data.accessToken);
+            if (refreshResp.data.refreshToken) {
+              localStorage.setItem('refreshToken', refreshResp.data.refreshToken);
+            }
+            config.headers = (config.headers ?? {}) as AxiosRequestHeaders;
+            (config.headers as AxiosRequestHeaders).Authorization = `Bearer ${refreshResp.data.accessToken}`;
+            return config;
+          }
+        } catch (refreshErr) {
+          // refresh failed; fall through to clearing tokens
+          console.warn('Token refresh failed', refreshErr);
+        }
+      }
+
+      // If we reach here, token is not usable
       localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
+      // allow request to proceed without Authorization header (server will return 401)
+      return config;
+    } catch (err) {
+      // If any parsing error, clear tokens and continue
+      localStorage.removeItem('token');
+      return config;
     }
-  } else if (sessionId) {
-    config.headers['X-Session-ID'] = sessionId;
   }
-  
+
+  if (sessionId) {
+  config.headers = (config.headers ?? {}) as AxiosRequestHeaders;
+  (config.headers as AxiosRequestHeaders)['X-Session-ID'] = sessionId;
+  }
+
   return config;
 });
 

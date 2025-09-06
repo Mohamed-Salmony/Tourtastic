@@ -1,0 +1,260 @@
+import React, { useEffect, useState, useCallback } from 'react';
+import AdminLayout from '@/components/layout/AdminLayout';
+import api from '@/config/api';
+import { useAuth } from '@/hooks/useAuth';
+import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
+
+const AdminSupport: React.FC = () => {
+  const { user } = useAuth();
+  const [tab, setTab] = useState<'send' | 'messages'>('send');
+
+  // send form states
+  const [recipientType, setRecipientType] = useState<'single' | 'all'>('single');
+  const [recipient, setRecipient] = useState('');
+  const [titleEn, setTitleEn] = useState('');
+  const [titleAr, setTitleAr] = useState('');
+  const [messageEn, setMessageEn] = useState('');
+  const [messageAr, setMessageAr] = useState('');
+  const [pdf, setPdf] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // messages
+  type Contact = { _id: string; name?: string; email: string; message: string; createdAt?: string };
+  type Newsletter = { _id: string; email: string; createdAt?: string };
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [newsletters, setNewsletters] = useState<Newsletter[]>([]);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const { t } = useTranslation();
+
+  // fetch handlers for messages (keep hooks and functions unconditional)
+  const fetchMessages = useCallback(async () => {
+    setLoadingMessages(true);
+    try {
+      const [cResp, nResp] = await Promise.all([
+        api.get('/contact/admin'),
+        api.get('/admin/newsletter/subscribers')
+      ]);
+
+      const cData = cResp?.data?.data ?? cResp?.data ?? [];
+      const nData = nResp?.data?.data ?? nResp?.data ?? [];
+
+      setContacts(Array.isArray(cData) ? cData : []);
+      setNewsletters(Array.isArray(nData) ? nData : []);
+    } catch (err) {
+      console.error(err);
+      toast.error(t('admin.support.loadMessagesFail'));
+    } finally {
+      setLoadingMessages(false);
+    }
+  }, [t]);
+
+  // Mark contact message status (server supports PUT /api/contact/admin/:id)
+  const handleDeleteContact = async (id: string) => {
+    if (!window.confirm(t('admin.support.archiveConfirm'))) return;
+    try {
+      await api.put(`/contact/admin/${id}`, { status: 'archived' });
+      setContacts((s) => s.filter((c) => c._id !== id));
+      toast.success(t('admin.support.archiveSuccess'));
+    } catch (err) {
+      console.error(err);
+      toast.error(t('admin.support.archiveFail'));
+    }
+  };
+
+  // Newsletter delete isn't supported server-side; provide copy-to-clipboard instead
+  const handleCopyNewsletter = async (email: string) => {
+    try {
+      await navigator.clipboard.writeText(email);
+      toast.success(t('admin.support.copySuccess'));
+    } catch (err) {
+      console.error(err);
+      toast.error(t('admin.support.copyFail'));
+    }
+  };
+
+  useEffect(() => {
+    if (tab === 'messages') fetchMessages();
+  }, [tab, fetchMessages]);
+
+  if (!user || user.role !== 'admin') {
+    return (
+      <AdminLayout>
+        <div className="p-8">{t('admin.support.notAuthorized')}</div>
+      </AdminLayout>
+    );
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const form = new FormData();
+      form.append('recipientType', recipientType);
+      if (recipientType === 'single') form.append('recipient', recipient);
+      form.append('title', JSON.stringify({ en: titleEn, ar: titleAr }));
+      form.append('message', JSON.stringify({ en: messageEn, ar: messageAr }));
+      form.append('type', 'system');
+      if (pdf) form.append('pdf', pdf);
+
+      const resp = await api.post('/notifications/send', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+      if (resp.data && resp.data.success) {
+        toast.success(resp.data.message || 'Notification sent');
+      } else {
+        toast.error('Failed to send notification');
+      }
+      setRecipient('');
+      setTitleEn('');
+      setTitleAr('');
+      setMessageEn('');
+      setMessageAr('');
+      setPdf(null);
+    } catch (err: unknown) {
+      console.error(err);
+      let message = 'Error sending notification';
+      if (err && typeof err === 'object' && 'response' in err) {
+        // Try to read structured message from axios-like error
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const e: any = err;
+        message = e?.response?.data?.message || e?.message || message;
+      } else if (err instanceof Error) {
+        message = err.message;
+      }
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+      <div className="p-8 max-w-4xl mx-auto">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold">{t('admin.support.title')}</h1>
+          <div className="flex gap-2">
+            <button onClick={() => setTab('send')} className={`px-3 py-1 rounded ${tab === 'send' ? 'bg-blue-600 text-white' : 'border'}`}>
+              {t('admin.support.sendNotification')}
+            </button>
+            <button onClick={() => setTab('messages')} className={`px-3 py-1 rounded ${tab === 'messages' ? 'bg-blue-600 text-white' : 'border'}`}>
+              {t('admin.support.messages')}
+            </button>
+          </div>
+        </div>
+
+        {tab === 'send' && (
+          <div className="space-y-4">
+            <h2 className="text-lg font-semibold">{t('admin.support.sendNotification')}</h2>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">{t('admin.support.recipient')}</label>
+                <div className="flex gap-3">
+                  <label className="flex items-center gap-2">
+                    <input type="radio" checked={recipientType === 'single'} onChange={() => setRecipientType('single')} />
+                    <span>{t('admin.support.singleUser')}</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="radio" checked={recipientType === 'all'} onChange={() => setRecipientType('all')} />
+                    <span>{t('admin.support.allUsers')}</span>
+                  </label>
+                </div>
+                {recipientType === 'single' && (
+                  <input value={recipient} onChange={(e) => setRecipient(e.target.value)} placeholder={t('admin.support.emailOrUsernamePlaceholder')} className="mt-2 w-full border rounded p-2" />
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">{t('admin.support.titleEnglish')}</label>
+                <input value={titleEn} onChange={(e) => setTitleEn(e.target.value)} className="w-full border rounded p-2" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">{t('admin.support.titleArabic')}</label>
+                <input value={titleAr} onChange={(e) => setTitleAr(e.target.value)} className="w-full border rounded p-2" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">{t('admin.support.messageEnglish')}</label>
+                <textarea value={messageEn} onChange={(e) => setMessageEn(e.target.value)} className="w-full border rounded p-2" rows={4} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">{t('admin.support.messageArabic')}</label>
+                <textarea value={messageAr} onChange={(e) => setMessageAr(e.target.value)} className="w-full border rounded p-2" rows={4} />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">{t('admin.support.optionalPdf')}</label>
+                <input type="file" accept="application/pdf" onChange={(e) => setPdf(e.target.files ? e.target.files[0] : null)} />
+              </div>
+
+              <div>
+                <button disabled={loading} type="submit" className="bg-blue-600 text-white px-4 py-2 rounded">
+                  {loading ? t('admin.support.sending') : t('admin.support.sendButton')}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {tab === 'messages' && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">{t('admin.support.messages')}</h2>
+              <div className="text-sm text-gray-600">{t('admin.support.contactsCount', { count: contacts.length })} • {t('admin.support.newslettersCount', { count: newsletters.length })}</div>
+            </div>
+
+            {loadingMessages ? (
+              <div>{t('admin.support.loading')}</div>
+            ) : (
+              <div className="space-y-6">
+                <section>
+                  <h3 className="font-medium mb-3">Contact Messages</h3>
+                  {contacts.length === 0 ? (
+                    <div className="text-sm text-gray-500">No contact messages</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {contacts.map((c) => (
+                        <div key={c._id} className="border rounded p-4 bg-white shadow-sm">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <div className="font-semibold">{c.name || c.email}</div>
+                              <div className="text-sm text-gray-600">{c.email}</div>
+                            </div>
+                            <div className="text-sm text-gray-500">{c.createdAt ? new Date(c.createdAt).toLocaleString() : ''}</div>
+                          </div>
+                          <p className="mt-3 whitespace-pre-line">{c.message}</p>
+                          <div className="mt-3 flex gap-2">
+                            <button onClick={() => handleDeleteContact(c._id)} className="text-sm text-red-600">{t('admin.support.delete')}</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                <section>
+                  <h3 className="font-medium mb-3">Newsletter Signups</h3>
+                  {newsletters.length === 0 ? (
+                    <div className="text-sm text-gray-500">No newsletter signups</div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {newsletters.map((n) => (
+                        <div key={n._id} className="border rounded p-3 bg-white shadow-sm flex items-center justify-between">
+                          <div>
+                            <div className="font-medium">{n.email}</div>
+                            <div className="text-sm text-gray-500">{n.createdAt ? new Date(n.createdAt).toLocaleString() : ''}</div>
+                          </div>
+                          <div>
+                            <button onClick={() => handleCopyNewsletter(n.email)} className="text-sm text-blue-600">Copy</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+  );
+};
+
+export default AdminSupport;

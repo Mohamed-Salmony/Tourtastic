@@ -36,11 +36,10 @@ exports.protect = asyncHandler(async (req, res, next) => {
 
     next();
   } catch (err) {
-    console.error("Token verification failed:", err);
-    if (err.name === 'TokenExpiredError') {
-      return res.status(401).json({ success: false, message: "Token expired. Please log in again or refresh your token." });
-    }
-    return res.status(401).json({ success: false, message: "Not authorized to access this route (token failed)" });
+      if (err.name === 'TokenExpiredError') {
+        return res.status(401).json({ success: false, message: "Token expired. Please log in again or refresh your token." });
+      }
+      return res.status(401).json({ success: false, message: "Not authorized to access this route (token failed)" });
   }
 });
 

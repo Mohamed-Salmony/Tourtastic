@@ -103,12 +103,12 @@ const FlightBookingSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ["pending", "confirmed", "processing", "booked", "ticketed", "cancelled"],
+    enum: ["pending", "confirmed", "done"],
     default: "pending"
   },
   paymentStatus: {
     type: String,
-    enum: ["pending", "paid", "refunded"],
+    enum: ["pending", "paid"],
     default: "pending"
   },
   ticketUrl: {
@@ -139,7 +139,7 @@ const FlightBookingSchema = new mongoose.Schema({
   paymentDetails: {
     status: {
       type: String,
-      enum: ["pending", "partial", "completed", "refunded"],
+      enum: ["pending", "completed"],
       default: "pending"
     },
     amount: Number,

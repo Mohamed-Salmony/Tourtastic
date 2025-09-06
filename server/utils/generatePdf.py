@@ -45,15 +45,3 @@ def generate_simple_booking_pdf(booking_details, output_path):
         print(f"Error generating PDF: {e}")
         raise
 
-# Example usage (called from Node.js via child_process if needed)
-# if __name__ == "__main__":
-#     import json
-#     import sys
-#     if len(sys.argv) > 2:
-#         details_json = sys.argv[1]
-#         output_file = sys.argv[2]
-#         details = json.loads(details_json)
-#         generate_simple_booking_pdf(details, output_file)
-#     else:
-#         print("Usage: python generatePdf.py <booking_details_json> <output_path>")
-

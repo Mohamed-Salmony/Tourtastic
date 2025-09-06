@@ -132,7 +132,7 @@ const MultiCityFlightResults: React.FC<MultiCityFlightResultsProps> = ({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {section.loading && section.flights.length === 0 ? (
+          {(section.loading || !section.isComplete) && section.flights.length === 0 ? (
             <div className="flex items-center justify-center py-8">
               <div className="flex items-center gap-2">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-tourtastic-blue"></div>

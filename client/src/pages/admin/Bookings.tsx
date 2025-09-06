@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Table,
   TableBody,
@@ -11,129 +10,237 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from '@/components/ui/select';
+// removed Select imports because we no longer filter by type/status here
 import { 
   EyeIcon, 
   Pencil, 
   X, 
+  Check,
   ChevronLeft, 
   ChevronRight, 
-  Filter 
 } from 'lucide-react';
+import api from '@/config/api';
+import { formatSypFromUsd } from '@/utils/currency';
+import { toast } from 'sonner';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 
-// Mock bookings data
-const mockBookings = [
-  {
-    id: 'BK-1001',
-    customerName: 'John Smith',
-    customerEmail: 'john.smith@example.com',
-    type: 'Flight + Hotel',
-    destination: 'Paris, France',
-    date: '2023-05-15',
-    status: 'confirmed',
-    amount: 1249.99,
-  },
-  {
-    id: 'BK-1002',
-    customerName: 'Sarah Johnson',
-    customerEmail: 'sarah.j@example.com',
-    type: 'Hotel',
-    destination: 'Rome, Italy',
-    date: '2023-06-22',
-    status: 'pending',
-    amount: 799.50,
-  },
-  {
-    id: 'BK-1003',
-    customerName: 'Michael Chen',
-    customerEmail: 'mchen@example.com',
-    type: 'Flight',
-    destination: 'Tokyo, Japan',
-    date: '2023-07-10',
-    status: 'confirmed',
-    amount: 1105.25,
-  },
-  {
-    id: 'BK-1004',
-    customerName: 'Emma Wilson',
-    customerEmail: 'emma.w@example.com',
-    type: 'Tour Package',
-    destination: 'Barcelona, Spain',
-    date: '2023-05-30',
-    status: 'cancelled',
-    amount: 649.99,
-  },
-  {
-    id: 'BK-1005',
-    customerName: 'David Rodriguez',
-    customerEmail: 'drodriguez@example.com',
-    type: 'Flight + Hotel',
-    destination: 'Cancun, Mexico',
-    date: '2023-08-05',
-    status: 'confirmed',
-    amount: 1879.00,
-  },
-  {
-    id: 'BK-1006',
-    customerName: 'Jennifer Lee',
-    customerEmail: 'jlee@example.com',
-    type: 'Cruise',
-    destination: 'Caribbean Islands',
-    date: '2023-09-12',
-    status: 'pending',
-    amount: 2499.99,
-  },
-  {
-    id: 'BK-1007',
-    customerName: 'Robert Kim',
-    customerEmail: 'rkim@example.com',
-    type: 'Flight',
-    destination: 'London, UK',
-    date: '2023-06-18',
-    status: 'confirmed',
-    amount: 789.50,
-  },
-  {
-    id: 'BK-1008',
-    customerName: 'Lisa Brown',
-    customerEmail: 'lbrown@example.com',
-    type: 'Hotel',
-    destination: 'New York, USA',
-    date: '2023-07-25',
-    status: 'cancelled',
-    amount: 599.99,
-  },
-];
+// Booking type matching server `Booking` model (partial)
+interface Passenger {
+  firstName?: string;
+  lastName?: string;
+  dob?: string;
+  passportNumber?: string;
+  passportIssueDate?: string;
+  passportExpiryDate?: string;
+  phone?: string;
+  email?: string;
+  type?: 'adult' | 'child' | 'infant' | string;
+}
+
+interface SelectedFlight {
+  flightId?: string;
+  airline?: string;
+  // timestamps / datetimes (some integrations call these departureTime/arrivalTime,
+  // others use departureDate/arrivalDate)
+  departureTime?: string;
+  arrivalTime?: string;
+  departureDate?: string;
+  arrivalDate?: string;
+  // airport names/codes (optional — not all records include these)
+  departureAirport?: string;
+  arrivalAirport?: string;
+  departureAirportCode?: string;
+  arrivalAirportCode?: string;
+  price?: { total?: number; currency?: string };
+  class?: string;
+  raw?: Record<string, unknown>;
+  // allow provider-specific fields without strict typing
+  [k: string]: unknown;
+}
+
+interface FlightDetails {
+  from?: string;
+  to?: string;
+  departureDate?: string;
+  // optional airport code fields (some bookings include these at the flightDetails level)
+  fromAirportCode?: string;
+  toAirportCode?: string;
+  passengers?: { adults?: number; children?: number; infants?: number };
+  passengerDetails?: Passenger[];
+  selectedFlight?: SelectedFlight;
+  // provider-specific fields (airport codes, alt names)
+  [k: string]: unknown;
+}
+
+interface BookingDetails {
+  flightDetails?: FlightDetails;
+  passengerDetails?: Passenger[];
+  selectedFlight?: SelectedFlight;
+}
+
+interface BookingType {
+  _id?: string;
+  id?: string;
+  bookingId?: string;
+  userId?: { _id?: string; name?: string; email?: string } | string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone?: string;
+  type?: string;
+  destination?: string;
+  bookingDate?: string | Date;
+  date?: string;
+  details?: BookingDetails | { [k: string]: unknown };
+  // Some server DTOs sometimes include these at top-level; allow them as fallbacks
+  passengerDetails?: Passenger[];
+  selectedFlight?: SelectedFlight;
+  flightDetails?: FlightDetails;
+  amount?: number | null;
+  status: 'pending' | 'confirmed' | 'cancelled' | string;
+  ticketInfo?: Record<string, unknown>;
+  ticketDetails?: {
+    ticketNumber?: string;
+    pnr?: string;
+    eTicketPath?: string;
+    additionalDocuments?: Array<Record<string, unknown>>;
+  };
+  paymentDetails?: {
+    amount?: number;
+    currency?: string;
+    method?: string;
+    status?: string;
+  };
+  adminData?: { assignedTo?: string; notes?: string; cost?: { amount?: number; currency?: string } };
+  createdAt?: string | Date;
+  // raw document from server (mapFlightBookingForClient attaches this)
+  _raw?: unknown;
+}
+
+// Selected booking details typed helper (computed from state)
+// will be undefined when no booking is selected
+// this declaration exists to please TS/ESLint for later optional chaining
+
+// Axios-like error for typing
+type AxiosErrorLike = Error & { response?: { data?: { message?: string } } };
+
+const getErrorMessage = (err: unknown) => {
+  const e = err as AxiosErrorLike;
+  return e?.response?.data?.message ?? (err instanceof Error ? err.message : String(err));
+};
+
+// Mock bookings removed — bookings will be loaded from the API at runtime
 
 const AdminBookings: React.FC = () => {
-  const [bookings] = useState(mockBookings);
+  const [bookings, setBookings] = useState<BookingType[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedBooking, setSelectedBooking] = useState<BookingType | null>(null);
+  const [viewOpen, setViewOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [typeFilter, setTypeFilter] = useState('all');
-  
-  // Apply filters to bookings
-  const filteredBookings = bookings.filter((booking) => {
-    // Search filter
-    const searchMatch = 
-      booking.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      booking.customerEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      booking.destination.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      booking.id.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    // Status filter
-    const statusMatch = statusFilter === 'all' || booking.status === statusFilter;
-    
-    // Type filter
-    const typeMatch = typeFilter === 'all' || booking.type === typeFilter;
-    
-    return searchMatch && statusMatch && typeMatch;
+  // Pagination
+  const PAGE_SIZE = 5;
+  const [pendingPage, setPendingPage] = useState(0);
+  const [confirmedPage, setConfirmedPage] = useState(0);
+  const [donePage, setDonePage] = useState(0);
+  // Upload e-ticket dialog state
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadBooking, setUploadBooking] = useState<BookingType | null>(null);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadTicketNumber, setUploadTicketNumber] = useState('');
+  const [uploadPnr, setUploadPnr] = useState('');
+  const [uploadAdminNote, setUploadAdminNote] = useState('');
+  const [uploadLoading, setUploadLoading] = useState(false);
+
+  // Apply search filter to bookings, we'll split by status below
+  const searchedBookings = bookings.filter((booking) => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return true;
+    return (
+  (booking.customerName || '').toLowerCase().includes(q) ||
+  (booking.customerEmail || '').toLowerCase().includes(q) ||
+  (booking.destination || '').toLowerCase().includes(q) ||
+  String(booking.bookingId || booking.id || booking._id || '').toLowerCase().includes(q)
+    );
   });
+
+  // Split bookings by status
+  const pendingBookings = searchedBookings.filter(b => b.status === 'pending');
+  const confirmedBookings = searchedBookings.filter(b => b.status === 'confirmed');
+  // Treat previously "cancelled" reservations as Done for the new UI label.
+  const doneBookings = searchedBookings.filter(b => b.status === 'cancelled' || b.status === 'done');
+
+  // Reset pages when search term changes (or when the searched list changes)
+  useEffect(() => {
+    setPendingPage(0);
+    setConfirmedPage(0);
+    setDonePage(0);
+  }, [searchTerm]);
+
+  // Fetch bookings from admin API
+  useEffect(() => {
+    let mounted = true;
+    const fetchBookings = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        // Try admin-only endpoint first (requires auth). If it fails with 401/403 or network error,
+        // attempt a development public fallback endpoint so the page can still display data locally.
+        let resp;
+        try {
+          resp = await api.get('/admin/flight-bookings');
+        } catch (e) {
+          // If admin call failed due to auth or network, attempt public endpoint (dev-only)
+          console.warn('Admin bookings fetch failed, attempting public fallback', e);
+          try {
+            resp = await api.get('/admin/flight-bookings/public');
+          } catch (e2) {
+            // rethrow original error for outer catch to handle
+            throw e2 || e;
+          }
+        }
+
+        if (mounted) {
+          if (resp?.data?.success) {
+            setBookings(resp.data.data || []);
+          } else if (Array.isArray(resp?.data)) {
+            setBookings(resp.data || []);
+          } else {
+            // Some server responses may wrap payload differently; try to extract data
+            setBookings(resp?.data?.data || resp?.data || []);
+          }
+        }
+      } catch (err: unknown) {
+        console.error('Failed to load admin bookings', err);
+        const message = getErrorMessage(err);
+        setError(message);
+        // keep mock data as a fallback for local dev
+  setBookings([]);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    fetchBookings();
+    return () => { mounted = false; };
+  }, []);
+
+  // Paginated slices
+  const pendingTotal = pendingBookings.length;
+  const pendingPageCount = Math.max(1, Math.ceil(pendingTotal / PAGE_SIZE));
+  const pendingPaged = pendingBookings.slice(pendingPage * PAGE_SIZE, (pendingPage + 1) * PAGE_SIZE);
+
+  const confirmedTotal = confirmedBookings.length;
+  const confirmedPageCount = Math.max(1, Math.ceil(confirmedTotal / PAGE_SIZE));
+  const confirmedPaged = confirmedBookings.slice(confirmedPage * PAGE_SIZE, (confirmedPage + 1) * PAGE_SIZE);
+
+  const doneTotal = doneBookings.length;
+  const donePageCount = Math.max(1, Math.ceil(doneTotal / PAGE_SIZE));
+  const donePaged = doneBookings.slice(donePage * PAGE_SIZE, (donePage + 1) * PAGE_SIZE);
   
   // Get status badge component
   const getStatusBadge = (status: string) => {
@@ -147,22 +254,365 @@ const AdminBookings: React.FC = () => {
         badgeClass = 'bg-yellow-100 text-yellow-800';
         break;
       case 'cancelled':
-        badgeClass = 'bg-red-100 text-red-800';
+      case 'done':
+        // show Done label for cancelled/done statuses (now blue)
+        badgeClass = 'bg-blue-100 text-blue-800';
         break;
       default:
         badgeClass = 'bg-gray-100 text-gray-800';
     }
-    
+
+    const displayText = (status === 'cancelled' || status === 'done')
+      ? 'Done'
+      : status.charAt(0).toUpperCase() + status.slice(1);
+
     return (
       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badgeClass}`}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
+        {displayText}
       </span>
     );
+  };
+
+  const getBookingId = (b: BookingType) => String(b.bookingId || b.id || b._id || '');
+  const formatDate = (b: BookingType) => {
+    const d = b.date || b.bookingDate || b.createdAt;
+    if (!d) return '-';
+    try {
+      const dt = new Date(d as string);
+      if (isNaN(dt.getTime())) return String(d);
+      return dt.toLocaleDateString();
+    } catch {
+      return String(d);
+    }
+  };
+
+  // Compute display amount (price) for a booking: prefer explicit amount, then paymentDetails, adminData.cost, then selectedFlight price
+  const getAmount = (b: BookingType) => {
+    if (!b) return null;
+    if (typeof b.amount === 'number') return b.amount;
+    if (b.paymentDetails && typeof b.paymentDetails.amount === 'number') return b.paymentDetails.amount;
+    if (b.adminData?.cost && typeof b.adminData.cost.amount === 'number') return b.adminData.cost.amount;
+    const det = b.details as BookingDetails | undefined;
+    if (det?.selectedFlight?.price && typeof det.selectedFlight.price.total === 'number') return det.selectedFlight.price.total;
+    if (det?.flightDetails?.selectedFlight?.price && typeof det.flightDetails.selectedFlight.price.total === 'number') return det.flightDetails.selectedFlight.price.total;
+    return null;
+  };
+
+  // Prefer the ticket (selected flight) price for display when available
+  const getTicketPrice = (b: BookingType) => {
+    if (!b) return null;
+    const det = b.details as BookingDetails | undefined;
+    if (det?.selectedFlight?.price && typeof det.selectedFlight.price.total === 'number') return det.selectedFlight.price.total;
+    if (det?.flightDetails?.selectedFlight?.price && typeof det.flightDetails.selectedFlight.price.total === 'number') return det.flightDetails.selectedFlight.price.total;
+    if (b.selectedFlight && b.selectedFlight.price && typeof b.selectedFlight.price.total === 'number') return b.selectedFlight.price.total;
+    return null;
+  };
+
+  // Format passenger counts or passenger details into a human-friendly string
+  const formatPassengers = (counts?: { adults?: number; children?: number; infants?: number }, details?: Passenger[]) => {
+    if (counts && (typeof counts.adults === 'number' || typeof counts.children === 'number' || typeof counts.infants === 'number')) {
+      const adults = typeof counts.adults === 'number' ? counts.adults : 0;
+      const children = typeof counts.children === 'number' ? counts.children : 0;
+      const infants = typeof counts.infants === 'number' ? counts.infants : 0;
+      return `Adults: ${adults}, Children: ${children}, Infants: ${infants}`;
+    }
+    if (Array.isArray(details) && details.length > 0) {
+      return `${details.length} passenger${details.length === 1 ? '' : 's'}`;
+    }
+    return '-';
+  };
+
+  // Extract baggage info from selectedFlight.raw or legs
+  const getBaggageInfo = (sel?: SelectedFlight) => {
+    if (!sel) return null;
+    const raw = sel.raw as Record<string, unknown> | undefined;
+    // Top-level fallback
+    if (raw && typeof raw['baggage_allowance'] !== 'undefined') return String(raw['baggage_allowance']);
+    // legs[].bags structure
+    const legs = raw && Array.isArray(raw['legs']) ? (raw['legs'] as unknown[]) : null;
+    if (legs && legs.length > 0) {
+      const leg0 = legs[0] as Record<string, unknown> | undefined;
+      const bags = (leg0 && typeof leg0['bags'] !== 'undefined') ? (leg0['bags'] as Record<string, unknown>) : (raw && typeof raw['bags'] !== 'undefined' ? (raw['bags'] as Record<string, unknown>) : null);
+      if (bags) {
+        const unit = typeof bags['unit'] === 'string' ? bags['unit'] as string : '';
+        const value = (typeof bags['value'] === 'number' || typeof bags['value'] === 'string') ? String(bags['value']) : '';
+        // If there are per-type entries (ADT/CHD/INF), build a readable string
+        const parts: string[] = [];
+        (['ADT','CHD','INF'] as const).forEach(code => {
+          if (typeof bags[code] !== 'undefined') {
+            const info = bags[code] as Record<string, unknown> | undefined;
+            if (!info) return;
+            const cabinRaw = info['cabin'];
+            let cabin = '';
+            if (cabinRaw && typeof cabinRaw === 'object' && typeof (cabinRaw as Record<string, unknown>)['desc'] === 'string') cabin = String((cabinRaw as Record<string, unknown>)['desc']);
+            else if (typeof cabinRaw === 'string') cabin = cabinRaw;
+
+            const checkedRaw = info['checked'];
+            let checked = '';
+            if (checkedRaw && typeof checkedRaw === 'object' && typeof (checkedRaw as Record<string, unknown>)['desc'] === 'string') checked = String((checkedRaw as Record<string, unknown>)['desc']);
+            else if (typeof checkedRaw === 'string') checked = checkedRaw;
+            const label = code === 'ADT' ? 'Adult' : code === 'CHD' ? 'Child' : 'Infant';
+            const items: string[] = [];
+            if (cabin) items.push(`cabin: ${cabin}`);
+            if (checked) items.push(`checked: ${checked}`);
+            if (items.length) parts.push(`${label} (${items.join(', ')})`);
+          }
+        });
+        const overall = value ? `${value}${unit ? ' ' + unit : ''}` : '';
+        return parts.length ? (overall ? `${overall} — ${parts.join(' • ')}` : parts.join(' • ')) : (overall || null);
+      }
+    }
+    return null;
+  };
+
+  // Extract per-passenger-type price breakdown from selectedFlight.raw.price_breakdowns
+  const getPriceBreakdown = (sel?: SelectedFlight) => {
+    if (!sel) return null;
+    const raw = sel.raw as Record<string, unknown> | undefined;
+    const pb = raw && (raw['price_breakdowns'] || raw['priceBreakdowns']) ? (raw['price_breakdowns'] || raw['priceBreakdowns']) as Record<string, unknown> : null;
+    if (!pb || typeof pb !== 'object') return null;
+    const mapCodeToLabel: Record<string, string> = { ADT: 'Adult', CHD: 'Child', INF: 'Infant' };
+    const rows: Array<{ label: string; total?: number; price?: number; tax?: number }> = [];
+    Object.keys(pb).forEach(k => {
+      const item = pb[k] as Record<string, unknown> | undefined;
+      if (item && typeof item === 'object') {
+        const total = typeof item['total'] === 'number' ? item['total'] as number : (typeof item['total'] === 'string' && !isNaN(Number(item['total'])) ? Number(item['total']) : undefined);
+        const price = typeof item['price'] === 'number' ? item['price'] as number : (typeof item['price'] === 'string' && !isNaN(Number(item['price'])) ? Number(item['price']) : undefined);
+        const tax = typeof item['tax'] === 'number' ? item['tax'] as number : (typeof item['tax'] === 'string' && !isNaN(Number(item['tax'])) ? Number(item['tax']) : undefined);
+        rows.push({ label: mapCodeToLabel[k] || k, total, price, tax });
+      }
+    });
+    return rows.length ? rows : null;
+  };
+
+  // Extract probable airport codes (from/to) from selectedFlight, flightDetails or raw legs/segments
+  const getAirportCodes = (sel?: SelectedFlight, flightDet?: FlightDetails) => {
+    const result: { from?: string; to?: string } = {};
+    // first prefer explicit normalized fields
+    if (flightDet?.fromAirportCode) result.from = String(flightDet.fromAirportCode);
+    if (flightDet?.toAirportCode) result.to = String(flightDet.toAirportCode);
+    if (sel?.departureAirportCode) result.from = result.from || String(sel.departureAirportCode);
+    if (sel?.arrivalAirportCode) result.to = result.to || String(sel.arrivalAirportCode);
+
+    // fallback: look into raw legs / segments
+    const raw = sel && sel.raw ? sel.raw as Record<string, unknown> : undefined;
+    try {
+      if ((!result.from || !result.to) && raw) {
+        // legs[].from/legs[].to
+        const legs = Array.isArray(raw['legs']) ? (raw['legs'] as unknown[]) : null;
+        if (legs && legs.length > 0) {
+          const firstLeg = legs[0] as Record<string, unknown> | undefined;
+          if (!result.from) {
+            const lf = firstLeg && firstLeg['from'] as Record<string, unknown> | undefined;
+            if (lf && typeof lf['airport'] === 'string') result.from = String(lf['airport']);
+            // also check segments[0].from
+            const segs = Array.isArray(firstLeg?.['segments']) ? (firstLeg!['segments'] as unknown[]) : null;
+            if (!result.from && segs && segs.length > 0) {
+              const s0 = segs[0] as Record<string, unknown> | undefined;
+              const sfrom = s0 && s0['from'] as Record<string, unknown> | undefined;
+              if (sfrom && typeof sfrom['airport'] === 'string') result.from = String(sfrom['airport']);
+            }
+          }
+          if (!result.to) {
+            const lt = firstLeg && firstLeg['to'] as Record<string, unknown> | undefined;
+            if (lt && typeof lt['airport'] === 'string') result.to = String(lt['airport']);
+            // check last segment.to
+            const segs = Array.isArray(firstLeg?.['segments']) ? (firstLeg!['segments'] as unknown[]) : null;
+            if (!result.to && segs && segs.length > 0) {
+              const last = segs[segs.length - 1] as Record<string, unknown> | undefined;
+              const sto = last && last['to'] as Record<string, unknown> | undefined;
+              if (sto && typeof sto['airport'] === 'string') result.to = String(sto['airport']);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // ignore parsing errors
+    }
+    return result;
+  };
+
+  // Format an arbitrary date/time value for display
+  const formatDateTime = (v?: string | Date | undefined) => {
+    if (!v) return '-';
+    try {
+      const dt = new Date(String(v));
+      if (isNaN(dt.getTime())) return String(v);
+      return dt.toLocaleString();
+    } catch {
+      return String(v);
+    }
+  };
+
+  // Short date only formatter (e.g., 9/20/2025)
+  const formatDateNice = (v?: string | Date | undefined) => {
+    if (!v) return '-';
+    try {
+      const dt = new Date(String(v));
+      if (isNaN(dt.getTime())) return String(v);
+      return dt.toLocaleDateString();
+    } catch {
+      return String(v);
+    }
+  };
+
+  // copy helper
+  const copyToClipboard = async (text?: string) => {
+    if (!text) return;
+    try {
+      if (navigator && typeof navigator.clipboard !== 'undefined') {
+        await navigator.clipboard.writeText(text);
+        toast.success('Copied');
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        toast.success('Copied');
+      }
+    } catch (e) {
+      toast.error('Could not copy');
+    }
+  };
+
+  // typed access to nested details for the selected booking
+  // Some bookings store details under `details`, others put fields at the top-level
+  // (passengerDetails / selectedFlight). Derive a normalized BookingDetails object.
+  const getSelectedDetails = (booking?: BookingType): BookingDetails | undefined => {
+    if (!booking) return undefined;
+    const det = booking.details as BookingDetails | undefined;
+    if (det && (det.flightDetails || det.passengerDetails || det.selectedFlight)) return det;
+    const asRecord = booking as unknown as Record<string, unknown>;
+    const fallback: BookingDetails = {
+      flightDetails: (det && det.flightDetails) || (asRecord['flightDetails'] as BookingDetails['flightDetails']) || undefined,
+      passengerDetails: (asRecord['passengerDetails'] as Passenger[] | undefined) || (det && det.passengerDetails) || undefined,
+      selectedFlight: (asRecord['selectedFlight'] as SelectedFlight | undefined) || (det && det.selectedFlight) || undefined,
+    };
+    if (fallback.flightDetails || fallback.passengerDetails || fallback.selectedFlight) return fallback;
+    return undefined;
+  };
+
+  const selectedDetails = getSelectedDetails(selectedBooking);
+
+  // Actions
+  const handleView = (booking: BookingType) => {
+    // Fetch fresh details from server to ensure nested fields are present
+    (async () => {
+      try {
+        setLoading(true);
+        const id = getBookingId(booking);
+        const resp = await api.get(`/admin/flight-bookings/${id}`);
+        if (resp?.data?.success) {
+          setSelectedBooking(resp.data.data || booking);
+        } else if (resp?.data) {
+          setSelectedBooking(resp.data || booking);
+        } else {
+          setSelectedBooking(booking);
+        }
+        setViewOpen(true);
+      } catch (err: unknown) {
+        toast.error(getErrorMessage(err));
+        setSelectedBooking(booking);
+        setViewOpen(true);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  };
+
+  // Open upload dialog for confirmed booking
+  const openUpload = (booking: BookingType) => {
+    setUploadBooking(booking);
+    setUploadTicketNumber(booking.ticketDetails?.ticketNumber || '');
+    setUploadPnr(booking.ticketDetails?.pnr || '');
+    setUploadAdminNote((booking.adminData && booking.adminData.notes) || '');
+    setUploadFile(null);
+    setUploadOpen(true);
+  };
+
+  const closeUpload = () => {
+    setUploadOpen(false);
+    setUploadBooking(null);
+    setUploadFile(null);
+    setUploadTicketNumber('');
+    setUploadPnr('');
+    setUploadAdminNote('');
+    setUploadLoading(false);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files && e.target.files[0];
+    if (f) setUploadFile(f);
+  };
+
+  const submitUpload = async () => {
+    if (!uploadBooking) return;
+    const id = getBookingId(uploadBooking);
+    const form = new FormData();
+  // multer in server expects field name 'ticketFile'
+  if (uploadFile) form.append('ticketFile', uploadFile, uploadFile.name);
+    if (uploadTicketNumber) form.append('ticketNumber', uploadTicketNumber);
+    if (uploadPnr) form.append('pnr', uploadPnr);
+    if (uploadAdminNote) form.append('adminNote', uploadAdminNote);
+    try {
+      setUploadLoading(true);
+      // Do not set Content-Type header; let the browser/axios set multipart boundary
+      const resp = await api.post(`/admin/flight-bookings/${id}/upload-ticket`, form);
+      if (resp?.data?.success) {
+        toast.success('Ticket uploaded and booking marked Done');
+        const updated = resp.data.data;
+        setBookings(prev => prev.map(b => ((b._id === updated._id || b.bookingId === updated.bookingId || b.id === updated.id) ? updated : b)));
+        closeUpload();
+      } else {
+        toast.error('Upload failed');
+      }
+    } catch (err: unknown) {
+      console.error('Upload error', err);
+      toast.error(getErrorMessage(err));
+    } finally {
+      setUploadLoading(false);
+    }
+  };
+
+  const handleCloseView = () => {
+    setSelectedBooking(null);
+    setViewOpen(false);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this booking? This action cannot be undone.')) return;
+    try {
+  await api.delete(`/admin/flight-bookings/${id}`);
+      toast.success('Booking deleted');
+      setBookings(prev => prev.filter(b => ((b._id || b.bookingId || b.id || '') !== id)));
+    } catch (err: unknown) {
+      console.error('Delete booking error', err);
+      toast.error(getErrorMessage(err));
+    }
+  };
+
+  const handleUpdateStatus = async (id: string, status: 'pending' | 'confirmed' | 'cancelled') => {
+    if (!['pending','confirmed','cancelled'].includes(status)) {
+      toast.error('Invalid status');
+      return;
+    }
+    try {
+  const resp = await api.put(`/admin/flight-bookings/${id}`, { status });
+      if (resp?.data?.success) {
+        toast.success('Status updated');
+        setBookings(prev => prev.map(b => ((b._id === id || b.bookingId === id || b.id === id) ? resp.data.data : b)));
+      }
+    } catch (err: unknown) {
+      console.error('Update status error', err);
+      toast.error(getErrorMessage(err));
+    }
   };
   
   return (
     <div className="p-8 space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-center items-center">
         <h1 className="text-3xl font-bold">Bookings Management</h1>
       </div>
       
@@ -178,61 +628,22 @@ const AdminBookings: React.FC = () => {
                 className="w-full"
               />
             </div>
-            
-            <div className="flex items-center gap-2 flex-wrap">
-              <Filter className="h-5 w-5 text-gray-500" />
-              <span className="text-sm text-gray-500 mr-2">Filters:</span>
-              
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[130px]">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="confirmed">Confirmed</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                </SelectContent>
-              </Select>
-              
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-[130px]">
-                  <SelectValue placeholder="Type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="Flight">Flight</SelectItem>
-                  <SelectItem value="Hotel">Hotel</SelectItem>
-                  <SelectItem value="Flight + Hotel">Flight + Hotel</SelectItem>
-                  <SelectItem value="Tour Package">Tour Package</SelectItem>
-                  <SelectItem value="Cruise">Cruise</SelectItem>
-                </SelectContent>
-              </Select>
-              
-              <Button 
-                variant="outline"
-                onClick={() => {
-                  setSearchTerm('');
-                  setStatusFilter('all');
-                  setTypeFilter('all');
-                }}
-              >
-                Reset
-              </Button>
-            </div>
+
+            {/* Filters removed - keeping only search input as requested */}
           </div>
         </CardContent>
       </Card>
-      
-      {/* Bookings Table */}
+      {/* Pending Bookings */}
       <Card>
         <CardContent className="p-0">
+          <div className="p-4 border-b">
+            <h2 className="text-lg font-semibold">Pending Reservations</h2>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Booking ID</TableHead>
                 <TableHead>Customer</TableHead>
-                <TableHead>Type</TableHead>
                 <TableHead>Destination</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Status</TableHead>
@@ -241,60 +652,51 @@ const AdminBookings: React.FC = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredBookings.length > 0 ? (
-                filteredBookings.map((booking) => (
-                  <TableRow key={booking.id}>
-                    <TableCell className="font-medium">{booking.id}</TableCell>
+              {pendingPaged.length > 0 ? (
+                pendingPaged.map((booking, idx) => (
+                  <TableRow key={getBookingId(booking) || booking._id || `${booking.customerEmail || 'booking'}-${idx}`}>
+                    <TableCell className="font-medium">{getBookingId(booking)}</TableCell>
                     <TableCell>
                       <div>
-                        <div className="font-medium">{booking.customerName}</div>
-                        <div className="text-xs text-gray-500">{booking.customerEmail}</div>
+                        <div className="font-medium">{booking.customerName || '-'}</div>
+                        <div className="text-xs text-gray-500">{booking.customerEmail || ''}</div>
                       </div>
                     </TableCell>
-                    <TableCell>{booking.type}</TableCell>
                     <TableCell>{booking.destination}</TableCell>
-                    <TableCell>{new Date(booking.date).toLocaleDateString()}</TableCell>
+                    <TableCell>{formatDate(booking)}</TableCell>
                     <TableCell>{getStatusBadge(booking.status)}</TableCell>
-                    <TableCell>${booking.amount.toFixed(2)}</TableCell>
+                    <TableCell>{(getTicketPrice(booking) != null) ? formatSypFromUsd(getTicketPrice(booking) as number) : (getAmount(booking) != null ? formatSypFromUsd(getAmount(booking) as number) : '-')}</TableCell>
                     <TableCell>
                       <div className="flex space-x-2">
-                        <Button variant="ghost" size="icon">
+                        <Button variant="ghost" size="icon" onClick={() => handleView(booking)}>
                           <EyeIcon className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon">
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon">
-                          <X className="h-4 w-4" />
-                        </Button>
+                        <Button variant="ghost" onClick={() => handleDelete(getBookingId(booking))} size="sm">Delete</Button>
                       </div>
                     </TableCell>
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
-                    <div className="text-gray-500">No bookings found</div>
-                    <div className="text-gray-400 text-sm mt-1">Try adjusting your search or filters</div>
+                  <TableCell colSpan={7} className="text-center py-8">
+                    <div className="text-gray-500">No pending reservations</div>
                   </TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
-          
-          {/* Pagination */}
+
           <div className="flex items-center justify-between p-4 border-t">
             <div className="text-sm text-gray-500">
-              Showing <span className="font-medium">1</span> to <span className="font-medium">{filteredBookings.length}</span> of{' '}
-              <span className="font-medium">{filteredBookings.length}</span> bookings
+              Showing <span className="font-medium">{pendingPage * PAGE_SIZE + (pendingPaged.length ? 1 : 0)}</span> to <span className="font-medium">{pendingPage * PAGE_SIZE + pendingPaged.length}</span> of{' '}
+              <span className="font-medium">{pendingTotal}</span> pending reservations
             </div>
-            
             <div className="flex space-x-2">
-              <Button variant="outline" size="sm" disabled>
+              <Button variant="outline" size="sm" onClick={() => setPendingPage(p => Math.max(0, p - 1))} disabled={pendingPage <= 0}>
                 <ChevronLeft className="h-4 w-4 mr-1" />
                 Previous
               </Button>
-              <Button variant="outline" size="sm" disabled>
+              <Button variant="outline" size="sm" onClick={() => setPendingPage(p => Math.min(p + 1, pendingPageCount - 1))} disabled={pendingPage >= pendingPageCount - 1}>
                 Next
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
@@ -302,6 +704,372 @@ const AdminBookings: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Confirmed Bookings */}
+      <Card>
+        <CardContent className="p-0">
+          <div className="p-4 border-b">
+            <h2 className="text-lg font-semibold">Confirmed Reservations</h2>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Booking ID</TableHead>
+                <TableHead>Customer</TableHead>
+                <TableHead>Destination</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Amount</TableHead>
+                <TableHead className="w-[100px]">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {confirmedPaged.length > 0 ? (
+                confirmedPaged.map((booking, idx) => (
+                  <TableRow key={getBookingId(booking) || booking._id || `${booking.customerEmail || 'booking'}-${idx}`}>
+                    <TableCell className="font-medium">{getBookingId(booking)}</TableCell>
+                    <TableCell>
+                      <div>
+                        <div className="font-medium">{booking.customerName || '-'}</div>
+                        <div className="text-xs text-gray-500">{booking.customerEmail || ''}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell>{booking.destination}</TableCell>
+                    <TableCell>{formatDate(booking)}</TableCell>
+                    <TableCell>{getStatusBadge(booking.status)}</TableCell>
+                    <TableCell>{(getTicketPrice(booking) != null) ? formatSypFromUsd(getTicketPrice(booking) as number) : (getAmount(booking) != null ? formatSypFromUsd(getAmount(booking) as number) : '-')}</TableCell>
+                    <TableCell>
+                      <div className="flex space-x-2">
+                        <Button variant="ghost" size="icon" onClick={() => handleView(booking)}>
+                          <EyeIcon className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => openUpload(booking)} title="Upload ticket & complete">
+                          <Check className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8">
+                    <div className="text-gray-500">No confirmed reservations</div>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+
+          <div className="flex items-center justify-between p-4 border-t">
+            <div className="text-sm text-gray-500">
+              Showing <span className="font-medium">{confirmedPage * PAGE_SIZE + (confirmedPaged.length ? 1 : 0)}</span> to <span className="font-medium">{confirmedPage * PAGE_SIZE + confirmedPaged.length}</span> of{' '}
+              <span className="font-medium">{confirmedTotal}</span> confirmed reservations
+            </div>
+            <div className="flex space-x-2">
+              <Button variant="outline" size="sm" onClick={() => setConfirmedPage(p => Math.max(0, p - 1))} disabled={confirmedPage <= 0}>
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Previous
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setConfirmedPage(p => Math.min(p + 1, confirmedPageCount - 1))} disabled={confirmedPage >= confirmedPageCount - 1}>
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Cancelled Bookings */}
+      <Card>
+        <CardContent className="p-0">
+          <div className="p-4 border-b">
+            <h2 className="text-lg font-semibold">Cancelled Reservations</h2>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Booking ID</TableHead>
+                <TableHead>Customer</TableHead>
+                <TableHead>Destination</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Amount</TableHead>
+                <TableHead className="w-[100px]">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {donePaged.length > 0 ? (
+                donePaged.map((booking, idx) => (
+                <TableRow key={getBookingId(booking) || booking._id || `${booking.customerEmail || 'booking'}-${idx}`}>
+                    <TableCell className="font-medium">{getBookingId(booking)}</TableCell>
+                    <TableCell>
+                      <div>
+                        <div className="font-medium">{booking.customerName || '-'}</div>
+                        <div className="text-xs text-gray-500">{booking.customerEmail || ''}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell>{booking.destination}</TableCell>
+                    <TableCell>{formatDate(booking)}</TableCell>
+                    <TableCell>{getStatusBadge(booking.status)}</TableCell>
+                    <TableCell>{(getTicketPrice(booking) != null) ? formatSypFromUsd(getTicketPrice(booking) as number) : (getAmount(booking) != null ? formatSypFromUsd(getAmount(booking) as number) : '-')}</TableCell>
+                    <TableCell>
+                      <div className="flex space-x-2">
+                        <Button variant="ghost" size="icon" onClick={() => handleView(booking)}>
+                          <EyeIcon className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" onClick={() => handleDelete(getBookingId(booking))} size="sm">Delete</Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8">
+                    <div className="text-gray-500">No cancelled reservations</div>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+
+          <div className="flex items-center justify-between p-4 border-t">
+            <div className="text-sm text-gray-500">
+              Showing <span className="font-medium">{donePage * PAGE_SIZE + (donePaged.length ? 1 : 0)}</span> to <span className="font-medium">{donePage * PAGE_SIZE + donePaged.length}</span> of{' '}
+              <span className="font-medium">{doneTotal}</span> done reservations
+            </div>
+            <div className="flex space-x-2">
+              <Button variant="outline" size="sm" onClick={() => setDonePage(p => Math.max(0, p - 1))} disabled={donePage <= 0}>
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Previous
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setDonePage(p => Math.min(p + 1, donePageCount - 1))} disabled={donePage >= donePageCount - 1}>
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      {/* View Dialog */}
+      <Dialog open={viewOpen} onOpenChange={setViewOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Booking Details</DialogTitle>
+            <DialogDescription>Details for {selectedBooking ? getBookingId(selectedBooking) : ''}</DialogDescription>
+          </DialogHeader>
+          {selectedBooking ? (
+            <div className="space-y-3">
+              <div className="max-h-[70vh] overflow-auto pr-2">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="col-span-1">
+                    <h3 className="font-semibold">Customer</h3>
+                    <div className="text-sm">{selectedBooking.customerName} &lt;{selectedBooking.customerEmail}&gt;</div>
+                    {selectedBooking.customerPhone && <div className="text-sm">Phone: {selectedBooking.customerPhone}</div>}
+                    <div className="mt-2 text-sm">Status: {getStatusBadge(selectedBooking.status)}</div>
+                    <div className="mt-2 text-sm">Amount: {(getTicketPrice(selectedBooking) != null) ? `$${(getTicketPrice(selectedBooking) as number).toFixed(2)}` : (getAmount(selectedBooking) != null ? `$${(getAmount(selectedBooking) as number).toFixed(2)}` : '-')}</div>
+                  </div>
+
+                  <div className="col-span-1">
+                    <h3 className="font-semibold">Flight</h3>
+                    <div className="text-sm">Destination: {selectedBooking.destination || selectedDetails?.flightDetails?.to || '-'}</div>
+                    <div className="text-sm">Date: {formatDate(selectedBooking)}</div>
+                    {selectedDetails?.flightDetails && (
+                      <div className="mt-2 text-sm">
+                        From: {selectedDetails.flightDetails.from || '-'} {getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).from ? `(${getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).from})` : ''}
+                        <br />
+                        To: {selectedDetails.flightDetails.to || '-'} {getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).to ? `(${getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).to})` : ''}
+                        <br />
+                        Departure: {selectedDetails.flightDetails.departureDate ? formatDateTime(selectedDetails.flightDetails.departureDate) : (selectedDetails.selectedFlight?.departureTime ? formatDateTime(selectedDetails.selectedFlight.departureTime) : '-')}
+                        <br />
+                        Passengers: {formatPassengers(selectedDetails?.flightDetails?.passengers, selectedDetails?.passengerDetails)}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="col-span-1">
+                    <h3 className="font-semibold">Selected Flight</h3>
+                    {selectedDetails?.selectedFlight ? (
+                      <div className="text-sm">
+                        Airline: {selectedDetails.selectedFlight.airline || '-'}
+                        <br />
+                        From: {selectedDetails.selectedFlight.departureAirport || '-'} {getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).from ? `(${getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).from})` : ''}
+                        <br />
+                        Departure: {selectedDetails.selectedFlight.departureTime ? formatDateTime(selectedDetails.selectedFlight.departureTime) : (selectedDetails.selectedFlight.departureDate ? formatDateTime(selectedDetails.selectedFlight.departureDate) : '-')}
+                        <br />
+                        To: {selectedDetails.selectedFlight.arrivalAirport || '-'} {getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).to ? `(${getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).to})` : ''}
+                        <br />
+                        Arrival: {selectedDetails.selectedFlight.arrivalTime ? formatDateTime(selectedDetails.selectedFlight.arrivalTime) : (selectedDetails.selectedFlight.arrivalDate ? formatDateTime(selectedDetails.selectedFlight.arrivalDate) : '-')}
+                        <br />
+                        Class: {selectedDetails.selectedFlight.class || '-'}
+                        <br />
+                        Price: {selectedDetails.selectedFlight.price && typeof selectedDetails.selectedFlight.price.total === 'number' ? `$${selectedDetails.selectedFlight.price.total.toFixed(2)}` : '-'}
+                        <br />
+                        {(() => { const bag = getBaggageInfo(selectedDetails.selectedFlight); return bag ? <div>Baggage: <span className="text-sm text-gray-600">{bag}</span></div> : null; })()}
+                      </div>
+                    ) : (
+                      <div className="text-sm">-</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Price breakdown */}
+                {(() => {
+                  const pb = getPriceBreakdown(selectedDetails?.selectedFlight);
+                  if (!pb) return null;
+                  return (
+                    <div className="mt-4">
+                      <h4 className="font-medium">Price breakdown</h4>
+                      <table className="w-full text-sm mt-2 border-collapse">
+                        <thead>
+                          <tr className="text-left">
+                            <th className="pr-4">Type</th>
+                            <th className="text-right">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pb.map((r, i) => (
+                            <tr key={i} className="border-t">
+                              <td className="py-2">{r.label}</td>
+                              <td className="py-2 text-right">{typeof r.total === 'number' ? `$${r.total.toFixed(2)}` : (typeof r.price === 'number' ? `$${r.price.toFixed(2)}` : '-')}{r.tax ? ` (tax: $${r.tax.toFixed(2)})` : ''}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+
+                {/* Passengers - card/grid side-by-side layout */}
+                {selectedDetails?.passengerDetails && Array.isArray(selectedDetails.passengerDetails) && (
+                  <div className="mt-4">
+                    <h4 className="font-medium">Passengers</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-3">
+                      {selectedDetails.passengerDetails.map((p, i) => (
+                        <div key={i} className="border rounded p-3 bg-white shadow-sm">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <div className="font-medium">{[p.firstName, p.lastName].filter(Boolean).join(' ') || `Passenger ${i+1}`}</div>
+                              <div className="text-xs text-gray-500">{p.type || '-'}</div>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                            <div className="text-gray-600">Passport</div>
+                            <div className="font-medium flex items-center">
+                              <span className="font-medium">{p.passportNumber || '-'}</span>
+                              {p.passportNumber && (
+                                <Button variant="ghost" size="sm" className="ml-2" onClick={() => copyToClipboard(p.passportNumber)}>Copy</Button>
+                              )}
+                            </div>
+
+                            <div className="text-gray-600">Issue</div>
+                            <div className="font-medium">{p.passportIssueDate ? formatDateNice(p.passportIssueDate) : '-'}</div>
+
+                            <div className="text-gray-600">Expiry</div>
+                            <div className="font-medium">{p.passportExpiryDate ? formatDateNice(p.passportExpiryDate) : '-'}</div>
+
+                            <div className="text-gray-600">DOB</div>
+                            <div className="font-medium">{p.dob ? formatDateNice(p.dob) : '-'}</div>
+
+                            <div className="text-gray-600">Phone</div>
+                            <div className="font-medium flex items-center">
+                              <span className="break-words">{p.phone || '-'}</span>
+                              {p.phone && <Button variant="ghost" size="sm" className="ml-2" onClick={() => copyToClipboard(p.phone)}>Copy</Button>}
+                            </div>
+
+                            <div className="text-gray-600">Email</div>
+                            <div className="font-medium break-words flex items-center">
+                              <span className="text-blue-600">{p.email || '-'}</span>
+                              {p.email && <Button variant="ghost" size="sm" className="ml-2" onClick={() => copyToClipboard(p.email)}>Copy</Button>}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* raw booking JSON removed per request */}
+
+                {/* Ticket & payment & admin columns */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                  <div>
+                    <h4 className="font-medium">Ticket</h4>
+                    <div className="text-sm">PNR: {selectedBooking.ticketDetails?.pnr || '-'}</div>
+                    <div className="text-sm">Ticket Number: {selectedBooking.ticketDetails?.ticketNumber || '-'}</div>
+                    {selectedBooking.ticketDetails?.eTicketPath && (
+                      <div className="text-sm">E-ticket: <a className="text-blue-600 underline" href={selectedBooking.ticketDetails.eTicketPath} target="_blank" rel="noreferrer">Download</a></div>
+                    )}
+                  </div>
+                  <div>
+                    <h4 className="font-medium">Payment</h4>
+                    <div className="text-sm">Amount: {(typeof selectedBooking.paymentDetails?.amount === 'number') ? formatSypFromUsd(selectedBooking.paymentDetails!.amount!) : (getAmount(selectedBooking) != null ? formatSypFromUsd(getAmount(selectedBooking) as number) : formatSypFromUsd(0))}</div>
+                    <div className="text-sm">Method: {selectedBooking.paymentDetails?.method || '-'}</div>
+                    <div className="text-sm">Status: {selectedBooking.paymentDetails?.status || '-'}</div>
+                  </div>
+                  <div>
+                    <h4 className="font-medium">Admin Notes</h4>
+                    <div className="text-sm">Assigned To: {selectedBooking.adminData?.assignedTo || '-'}</div>
+                    <div className="text-sm">Notes: {selectedBooking.adminData?.notes || '-'}</div>
+                    {selectedBooking.adminData?.cost && typeof selectedBooking.adminData.cost.amount === 'number' && (
+                      <div className="text-sm">Admin Cost: {formatSypFromUsd(selectedBooking.adminData.cost.amount)}</div>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+              <div className="pt-2">
+                <Button onClick={() => setViewOpen(false)}>Close</Button>
+              </div>
+            </div>
+          ) : (
+            <div>Loading...</div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Upload Dialog */}
+      <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upload E-ticket & Complete Booking</DialogTitle>
+            <DialogDescription>Upload PDF e-ticket, add ticket number/PNR and admin note. This will mark the booking as Done.</DialogDescription>
+          </DialogHeader>
+          {uploadBooking ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-2">
+                <label className="text-sm">E-ticket (PDF)</label>
+                <input type="file" accept="application/pdf" onChange={handleFileChange} />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div>
+                  <label className="text-sm">Ticket Number</label>
+                  <Input value={uploadTicketNumber} onChange={(e) => setUploadTicketNumber(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-sm">PNR</label>
+                  <Input value={uploadPnr} onChange={(e) => setUploadPnr(e.target.value)} />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm">Admin Note</label>
+                <Input value={uploadAdminNote} onChange={(e) => setUploadAdminNote(e.target.value)} />
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-2">
+                <Button variant="ghost" onClick={closeUpload} disabled={uploadLoading}>Cancel</Button>
+                <Button onClick={submitUpload} disabled={uploadLoading}>
+                  {uploadLoading ? 'Uploading...' : 'Save & Complete'}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div>Loading...</div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

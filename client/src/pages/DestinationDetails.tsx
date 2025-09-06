@@ -105,7 +105,7 @@ const DestinationDetails: React.FC = () => {
     if (!flight) return;
     const originCode = nearestAirport?.code || getIataCode(flight.legs[0].from);
     const destinationAirportCode = destination
-      ? (typeof destination.quickInfo.airport === 'string' ? destination.quickInfo.airport : destination.quickInfo.airport.code)
+      ? destination.quickInfo.airport
       : getIataCode(flight.legs[0].to);
 
     if (!originCode || String(originCode).length !== 3) {
@@ -134,69 +134,120 @@ const DestinationDetails: React.FC = () => {
         (flight.price_breakdowns.INF?.total || singlePassengerTotal * 0.1) * (flight.search_query?.inf || 0)
       ) : singlePassengerTotal * totalPassengers);
 
+    // Helper to normalize airport value (may be string or object). Prefer IATA/code when available.
+    const normalizeAirportValue = (val: unknown) => {
+      if (!val && val !== 0) return '';
+      if (typeof val === 'string') return val.toUpperCase();
+      if (typeof val === 'object') {
+        const v = val as Record<string, any>;
+        const candidates = [v.code, v.iata, v.IATA, v.airport, v.en, v.ar];
+        for (const c of candidates) {
+          if (c && typeof c === 'string' && c.trim().length > 0) return c.toUpperCase();
+        }
+        return JSON.stringify(v);
+      }
+      return String(val).toUpperCase();
+    };
+
+    // Server expects flightDetails.from and flightDetails.to as simple strings (IATA or city)
+    const originString = normalizeAirportValue(originCode);
+    const destinationString = normalizeAirportValue(destinationAirportCode);
+
     const payload = {
       flightDetails: {
-        from: { code: String(originCode).toUpperCase(), city: nearestAirport?.city || '' },
-        to: { code: String(destinationAirportCode).toUpperCase(), name: destination?.name?.[currentLang] || '' },
+        // store simple strings for 'from' and 'to' to match FlightBooking schema
+        from: originString,
+        to: destinationString,
         departureDate: flight.legs[0].from.date,
         passengers,
         selectedFlight: {
           tripId: flight.trip_id,
-          flightId: flight.legs[0].segments[0].flightnumber,
+          // ensure flightId is string
+          flightId: String(flight.legs[0].segments[0].flightnumber || ''),
           airline: flight.legs[0].segments[0].airline_name,
           airlineCode: flight.legs[0].segments[0].iata,
           departureTime: flight.legs[0].from.date,
           arrivalTime: flight.legs[0].to.date,
           price: { total: totalPrice, currency: flight.currency },
-          currency: flight.currency,
-          cabin: flight.search_query?.options?.cabin || flight.legs[0]?.cabin_name || 'economy',
+          // server model expects `class` field
+          class: flight.search_query?.options?.cabin || flight.legs[0]?.cabin_name || 'economy',
           segments: flight.legs[0].segments,
-          price_breakdowns: flight.price_breakdowns || null
+          price_breakdowns: flight.price_breakdowns || null,
+          // keep raw provider payload for debugging/record
+          raw: flight
         }
       }
     };
 
+    // Determine whether user is authenticated (token present)
+    const token = localStorage.getItem('token');
+
+    // Helper to persist locally (only used for anonymous users)
+  const persistLocally = () => {
+      try {
+        const item = {
+      // Save readable fields for localStorage
+      from: nearestAirport?.city || String(originCode).toUpperCase(),
+      to: destination?.name?.[currentLang] || String(destinationAirportCode).toUpperCase(),
+      fromIata: String(originCode).toUpperCase(),
+      toIata: String(destinationAirportCode).toUpperCase(),
+      departureTime: payload.flightDetails.departureDate,
+          passengers: payload.flightDetails.passengers,
+          flightId: payload.flightDetails.selectedFlight.flightId,
+          airline: payload.flightDetails.selectedFlight.airline,
+          arrivalTime: payload.flightDetails.selectedFlight.arrivalTime,
+          price: payload.flightDetails.selectedFlight.price.total,
+          currency: payload.flightDetails.selectedFlight.price.currency,
+          class: payload.flightDetails.selectedFlight.class,
+          segments: payload.flightDetails.selectedFlight.segments
+        };
+
+        const existing = JSON.parse(localStorage.getItem('cartItems') || '[]');
+        existing.push(item);
+        localStorage.setItem('cartItems', JSON.stringify(existing));
+        toast({ title: t('success', 'Success'), description: t('flightSavedLocally', 'Flight saved to your cart (local).'), variant: 'default' });
+        navigate('/cart');
+      } catch (err) {
+        console.error('Failed to save cart item locally:', err);
+        toast({ title: t('error', 'Error'), description: t('failedToAddToCart', 'Failed to add flight to cart'), variant: 'destructive' });
+      }
+    };
+
+    // If user appears authenticated, ensure we attempt to save to DB and do NOT fall back to localStorage silently.
+    if (token) {
+      try {
+        const response = await api.post('/cart', payload, { headers: { Authorization: `Bearer ${token}` } });
+        if (response?.data?.success) {
+          toast({ title: t('success', 'Success'), description: t('flightAddedToCart', 'Flight has been added to your cart'), variant: 'default' });
+          navigate('/cart');
+          return;
+        }
+
+        // Backend responded but indicated failure - show error to the user instead of silently saving locally
+        console.warn('Add to cart response not successful for authenticated user', response?.data);
+        toast({ title: t('error', 'Error'), description: response?.data?.message || t('failedToAddToCart', 'Failed to add flight to cart'), variant: 'destructive' });
+        return;
+      } catch (err) {
+        console.error('API add to cart failed for authenticated user:', err);
+        toast({ title: t('error', 'Error'), description: t('failedToAddToCart', 'Failed to add flight to cart'), variant: 'destructive' });
+        return;
+      }
+    }
+
+    // Anonymous user: try server (will use session) and fall back to localStorage if server call fails
     try {
       const response = await api.post('/cart', payload);
       if (response?.data?.success) {
         toast({ title: t('success', 'Success'), description: t('flightAddedToCart', 'Flight has been added to your cart'), variant: 'default' });
-        // Navigate to cart to show the added item
         navigate('/cart');
         return;
       }
 
-      // If backend responds but indicates failure, fall back to localStorage and still navigate
-      console.warn('Add to cart response not successful, falling back to localStorage', response?.data);
+      console.warn('Add to cart response not successful for anonymous user, falling back to localStorage', response?.data);
+      persistLocally();
     } catch (err) {
-      console.error('API add to cart failed, falling back to localStorage:', err);
-    }
-
-    // Fallback: store in localStorage (for unauthenticated users or API failure)
-    try {
-      const item = {
-        from: payload.flightDetails.from.city || payload.flightDetails.from.code,
-        to: payload.flightDetails.to.name || payload.flightDetails.to.code,
-        fromIata: payload.flightDetails.from.code,
-        toIata: payload.flightDetails.to.code,
-        departureTime: payload.flightDetails.departureDate,
-        passengers: payload.flightDetails.passengers,
-        flightId: payload.flightDetails.selectedFlight.flightId,
-        airline: payload.flightDetails.selectedFlight.airline,
-        arrivalTime: payload.flightDetails.selectedFlight.arrivalTime,
-        price: payload.flightDetails.selectedFlight.price.total,
-        currency: payload.flightDetails.selectedFlight.price.currency,
-        class: payload.flightDetails.selectedFlight.cabin,
-        segments: payload.flightDetails.selectedFlight.segments
-      };
-
-      const existing = JSON.parse(localStorage.getItem('cartItems') || '[]');
-      existing.push(item);
-      localStorage.setItem('cartItems', JSON.stringify(existing));
-      toast({ title: t('success', 'Success'), description: t('flightSavedLocally', 'Flight saved to your cart (local).'), variant: 'default' });
-      navigate('/cart');
-    } catch (err) {
-      console.error('Failed to save cart item locally:', err);
-      toast({ title: t('error', 'Error'), description: t('failedToAddToCart', 'Failed to add flight to cart'), variant: 'destructive' });
+      console.error('API add to cart failed for anonymous user, falling back to localStorage:', err);
+      persistLocally();
     }
   };
 
@@ -331,7 +382,17 @@ const DestinationDetails: React.FC = () => {
       try {
         const response = await api.get(`/destinations/${destinationId}`);
         if (response.data.success) {
-          setDestination(response.data.data);
+          // Normalize quickInfo.airport to string if backend returned an object
+          const dest = response.data.data;
+          try {
+            if (dest && dest.quickInfo && dest.quickInfo.airport && typeof dest.quickInfo.airport !== 'string') {
+              const ap = dest.quickInfo.airport;
+              dest.quickInfo.airport = (ap && ap.code) ? String(ap.code) : String(ap);
+            }
+          } catch (nn) {
+            // ignore normalization errors and keep original
+          }
+          setDestination(dest);
         } else {
           setErrorDestination('Destination not found.');
         }
@@ -349,11 +410,8 @@ const DestinationDetails: React.FC = () => {
   const searchFlightsForDestination = useCallback(async () => {
     if (!destinationId || !nearestAirport || !destination) return;
 
-    // Validate airport codes
-    // Handle both string and object airport data structures
-    const destinationAirportCode = typeof destination.quickInfo.airport === 'string'
-      ? destination.quickInfo.airport
-      : destination.quickInfo.airport.code;
+  // Validate airport codes (airport stored as single string)
+  const destinationAirportCode = destination.quickInfo.airport;
 
     if (!nearestAirport.code || nearestAirport.code.length !== 3 || !destinationAirportCode || destinationAirportCode.length !== 3) {
       console.error('Invalid airport codes:', { origin: nearestAirport.code, destination: destinationAirportCode });
@@ -376,10 +434,11 @@ const DestinationDetails: React.FC = () => {
       console.log('Destination airport code:', destination.quickInfo.airport);
       console.log('Destination object:', destination);
 
-      // Calculate date 15 days from now
-      const futureDate = new Date();
-      futureDate.setDate(futureDate.getDate() + 15);
-      const searchDate = format(futureDate, 'yyyy-MM-dd');
+  // Calculate date based on destination.searchWindowDays (fallback to 30)
+  const searchWindowDays = (destination as any)?.searchWindowDays ?? 30;
+  const futureDate = new Date();
+  futureDate.setDate(futureDate.getDate() + Number(searchWindowDays));
+  const searchDate = format(futureDate, 'yyyy-MM-dd');
 
       console.log('Searching for flights on:', searchDate); // Debug log
 
@@ -387,9 +446,7 @@ const DestinationDetails: React.FC = () => {
         flightSegments: [
           {
             from: nearestAirport.code,
-            to: typeof destination.quickInfo.airport === 'string'
-              ? destination.quickInfo.airport
-              : destination.quickInfo.airport.code,
+            to: destination.quickInfo.airport,
             date: searchDate
           }
         ],
@@ -583,9 +640,7 @@ const DestinationDetails: React.FC = () => {
                         {t('airport', currentLang === 'ar' ? 'المطار' : 'Airport')}
                       </p>
                       <p className="font-medium" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
-                        {typeof destination.quickInfo.airport === 'string'
-                          ? destination.quickInfo.airport
-                          : destination.quickInfo.airport[currentLang] || destination.quickInfo.airport.code}
+                        {destination.quickInfo.airport}
                       </p>
                     </div>
                   </div>

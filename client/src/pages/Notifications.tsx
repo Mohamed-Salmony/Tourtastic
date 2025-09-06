@@ -6,9 +6,15 @@ import { Bell, Mail, MapPin, Calendar, CreditCard, CheckCircle, AlertCircle } fr
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
-import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import i18n from '@/i18n';
+import notificationService from '@/services/notificationService';
+import { useAuth } from '@/hooks/useAuth';
+
+// small type guard for axios-like errors
+function isAxiosErrorWithStatus(err: unknown): err is { response?: { status?: number } } {
+  return typeof err === 'object' && err !== null && 'response' in err;
+}
 
 // Notification type icon mapping
 const typeIcons = {
@@ -49,6 +55,13 @@ const getIconColor = (type: string) => {
   }
 };
 
+interface PopulatedUser {
+  _id?: string;
+  name?: string;
+  email?: string;
+  username?: string;
+}
+
 interface Notification {
   _id: string;
   title: {
@@ -62,51 +75,46 @@ interface Notification {
   type: string;
   read: boolean;
   createdAt: string;
+  pdfUrl?: string | null;
+  userId?: PopulatedUser | string;
 }
 
 const Notifications = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [activeTab, setActiveTab] = useState('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'unread'>('all');
+  // Tabs onValueChange provides a string; normalize to our narrow union
+  const handleTabChange = (value: string) => {
+    if (value === 'all' || value === 'unread') {
+      setActiveTab(value);
+    }
+  };
   const [loading, setLoading] = useState(true);
 
-  // Get auth token from localStorage
-  const getAuthToken = useCallback(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      navigate('/login');
-      return null;
-    }
-    return token;
-  }, [navigate]);
+  const { user, loading: authLoading } = useAuth();
 
-  // Configure axios with auth token
-  const configureAxios = useCallback(() => {
-    const token = getAuthToken();
-    if (token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    }
-  }, [getAuthToken]);
-
-  // Fetch notifications
+  // Fetch notifications by userId
   const fetchNotifications = useCallback(async () => {
     try {
-      configureAxios();
-      const response = await axios.get('/api/notifications');
+      // If auth is still initializing, skip fetching until we have a definitive user value
+      if (authLoading) return;
+      if (!user) return navigate('/login');
+  const userId = (user.id ?? (user as unknown as { _id?: string })?._id) as string | undefined;
+  if (!userId) return navigate('/login');
+      const response = await notificationService.fetchNotificationsForUser(userId);
       setNotifications(response.data.data);
       setLoading(false);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error fetching notifications:', error);
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        // If unauthorized, redirect to login
+  if (isAxiosErrorWithStatus(error) && error.response?.status === 401) {
         navigate('/login');
       } else {
-        toast.error(t('notifications.fetchError'));
+        toast.error(t('notifications.fetchError') || 'Failed to fetch notifications');
       }
       setLoading(false);
     }
-  }, [navigate, t, configureAxios]);
+  }, [navigate, t, user, authLoading]);
 
   useEffect(() => {
     fetchNotifications();
@@ -117,21 +125,20 @@ const Notifications = () => {
     ? notifications 
     : notifications.filter(notification => !notification.read);
 
+  // PDF preview state moved to NotificationsList (local to list component)
+
   // Mark a notification as read
   const markAsRead = async (id: string) => {
     try {
-      configureAxios();
-      await axios.put(`/api/notifications/${id}/read`);
-      setNotifications(notifications.map(notification => 
-        notification._id === id ? { ...notification, read: true } : notification
-      ));
+      await notificationService.markNotificationRead(id);
+      setNotifications(notifications.map(notification => (notification._id === id ? { ...notification, read: true } : notification)));
       toast.success(t('notifications.markAsReadSuccess'));
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error marking notification as read:', error);
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
+  if (isAxiosErrorWithStatus(error) && error.response?.status === 401) {
         navigate('/login');
       } else {
-        toast.error(t('notifications.markAsReadError'));
+        toast.error(t('notifications.markAsReadError') || 'Failed to mark notification');
       }
     }
   };
@@ -139,16 +146,15 @@ const Notifications = () => {
   // Mark all notifications as read
   const markAllAsRead = async () => {
     try {
-      configureAxios();
-      await axios.put('/api/notifications/read-all');
+      await notificationService.markAllRead();
       setNotifications(notifications.map(notification => ({ ...notification, read: true })));
       toast.success(t('notifications.markAllAsReadSuccess'));
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error marking all notifications as read:', error);
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
+  if (isAxiosErrorWithStatus(error) && error.response?.status === 401) {
         navigate('/login');
       } else {
-        toast.error(t('notifications.markAllAsReadError'));
+        toast.error(t('notifications.markAllAsReadError') || 'Failed to mark all notifications');
       }
     }
   };
@@ -212,7 +218,7 @@ const Notifications = () => {
       </div>
       
       <div className="py-12 container-custom">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+  <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           <div className="flex justify-between items-center mb-6">
             <TabsList>
               <TabsTrigger value="all">{t('notifications.tabs.all')}</TabsTrigger>
@@ -251,13 +257,14 @@ interface NotificationsListProps {
   getIconColor: (type: string) => string;
 }
 
-const NotificationsList: React.FC<NotificationsListProps> = ({ 
-  notifications, 
-  markAsRead, 
+const NotificationsList: React.FC<NotificationsListProps> = ({
+  notifications,
+  markAsRead,
   formatTimestamp,
   getIconColor
 }) => {
   const { t } = useTranslation();
+  const [previewOpen, setPreviewOpen] = useState<Record<string, boolean>>({});
 
   if (notifications.length === 0) {
     return (
@@ -277,7 +284,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
     <div className="space-y-4">
       {notifications.map((notification) => {
         const IconComponent = typeIcons[notification.type as keyof typeof typeIcons] || Bell;
-        
+        const populatedUser = notification.userId && typeof notification.userId !== 'string' ? notification.userId as PopulatedUser : undefined;
         return (
           <Card 
             key={notification._id} 
@@ -300,6 +307,23 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
                   <p className="text-gray-600 mt-1">
                     {i18n.language === 'ar' ? notification.message.ar : notification.message.en}
                   </p>
+
+                  {/* PDF link and inline preview toggle */}
+                  {notification.pdfUrl && (
+                    <div className="mt-3">
+                      <a href={notification.pdfUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline mr-3">
+                        {i18n.language === 'ar' ? 'تحميل ملف PDF' : 'Download PDF File'}
+                      </a>
+                      <button className="text-sm text-gray-600" onClick={() => setPreviewOpen(prev => ({ ...prev, [notification._id]: !prev[notification._id] }))}>
+                        {previewOpen[notification._id] ? (i18n.language === 'ar' ? 'إخفاء المعاينة' : 'Hide preview') : (i18n.language === 'ar' ? 'عرض المعاينة' : 'Show preview')}
+                      </button>
+                      {previewOpen[notification._id] && (
+                        <div className="mt-2 border rounded overflow-hidden" style={{height: 400}}>
+                          <iframe src={notification.pdfUrl} title={`attachment-${notification._id}`} className="w-full h-full" />
+                        </div>
+                      )}
+                    </div>
+                  )}
                   
                   {!notification.read && (
                     <div className="mt-3 flex justify-end">

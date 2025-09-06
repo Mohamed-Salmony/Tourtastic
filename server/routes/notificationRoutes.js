@@ -1,20 +1,30 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
 const {
   getNotifications,
   markAsRead,
   markAllAsRead,
-  createNotification
-} = require("../controllers/notificationController");
-const { protect } = require("../middleware/auth");
+  createNotification,
+  sendNotification,
+  getNotificationsByUserId
+} = require('../controllers/notificationController');
+const { protect, authorize } = require('../middleware/auth');
 
-router.use(protect); // All notification routes require authentication
+// All routes require authentication
+router.use(protect);
 
-router.route("/")
-  .get(getNotifications)
-  .post(createNotification);
+// Admin-only send endpoint (multipart/form-data)
+router.post('/send', authorize('admin'), sendNotification);
 
-router.put("/:id/read", markAsRead);
-router.put("/read-all", markAllAsRead);
+// Get notifications for a specific userId (user can fetch own, admin can fetch any)
+router.get('/:userId', getNotificationsByUserId);
 
-module.exports = router; 
+// Legacy endpoints for authenticated user
+router.get('/', getNotifications);
+router.post('/', createNotification);
+
+// Mark read endpoints (owners or admin)
+router.put('/mark-read/:notificationId', markAsRead);
+router.put('/read-all', markAllAsRead);
+
+module.exports = router;

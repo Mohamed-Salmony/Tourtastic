@@ -190,8 +190,9 @@ const Cart = () => {
         try {
           const response = await api.get<ApiResponse>('/bookings/my');
           if (response.data.success && Array.isArray(response.data.data)) {
-            // Merge local and server bookings
-            setBookings([...localBookings, ...response.data.data]);
+            // Merge local and server bookings but only include pending bookings
+            const serverPending = response.data.data.filter(b => String(b.status || '').toLowerCase() === 'pending');
+            setBookings([...localBookings, ...serverPending].filter(b => String(b.status || '').toLowerCase() === 'pending'));
           } else {
             setBookings(localBookings);
             console.error('Invalid response format:', response.data);
@@ -201,7 +202,8 @@ const Cart = () => {
           setBookings(localBookings);
         }
       } else {
-        setBookings(localBookings);
+        // Only include pending local bookings
+        setBookings(localBookings.filter((b: FlightBooking) => String(b.status || '').toLowerCase() === 'pending'));
       }
     } catch (error) {
       console.error('Error loading cart:', error);
@@ -743,7 +745,9 @@ const Cart = () => {
             const airlineDisplay = i18n.language === 'ar' ? (airlineTranslations[rawAirlineName] || rawAirlineName) : rawAirlineName;
 
             // Resolve airline logo with fallbacks. Build a prioritized list of candidate URLs
-            const normalizedNameForFile = rawAirlineName.replace(/\s+/g, '-');
+            // Sanitize airline name to produce safer file names (remove punctuation, collapse spaces)
+            const normalizedNameForFile = String(rawAirlineName || '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+            const lowerName = normalizedNameForFile.toLowerCase();
             const logoCandidates: string[] = [];
             if (airlineLogoUrl) logoCandidates.push(airlineLogoUrl);
             if (airlineCode) {
@@ -751,11 +755,14 @@ const Cart = () => {
               if (mapped) logoCandidates.push(mapped);
             }
             if (rawAirlineName) {
-              logoCandidates.push(`/${normalizedNameForFile}-Logo.png`);
-              logoCandidates.push(`/${normalizedNameForFile}-logo.png`);
-              logoCandidates.push(`/${normalizedNameForFile}.png`);
-              logoCandidates.push(`/${normalizedNameForFile.toLowerCase()}-logo.png`);
-              logoCandidates.push(`/${normalizedNameForFile.toLowerCase()}.png`);
+              // Add a few filename variations (sanitized) and lower-cased versions
+              if (normalizedNameForFile) {
+                logoCandidates.push(`/${normalizedNameForFile}-Logo.png`);
+                logoCandidates.push(`/${normalizedNameForFile}-logo.png`);
+                logoCandidates.push(`/${normalizedNameForFile}.png`);
+                logoCandidates.push(`/${lowerName}-logo.png`);
+                logoCandidates.push(`/${lowerName}.png`);
+              }
             }
             // Always include placeholder as last resort
             logoCandidates.push('/placeholder.svg');
@@ -938,7 +945,7 @@ const Cart = () => {
                           onClick={() => handleDelete(booking)}
                           variant="outline"
                           className={`w-full text-red-500 hover:text-red-600 hover:bg-red-50 py-4 rounded-lg border-2 border-red-200 hover:border-red-400 transition-all duration-300 flex items-center justify-center gap-2 ${i18n.language === 'ar' ? 'flex-row-reverse' : ''}`}
-                          disabled={status !== 'pending' || processingPayment === booking._id}
+                          disabled={String(status).toLowerCase() !== 'pending' || processingPayment === booking._id}
                         >
                           <Trash2 className="h-5 w-5" />
                           <span className="text-lg">{t('delete', 'حذف')}</span>

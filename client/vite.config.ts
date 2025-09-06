@@ -12,6 +12,36 @@ export default defineConfig(({ mode }) => ({
         target: 'http://localhost:5000',
         changeOrigin: true,
         secure: false,
+        // Attach a low-level error handler to prevent ECONNREFUSED stack traces
+        // from being printed to the terminal. For connection-refused errors
+        // we quietly end the response (or send a small 502) and do not log
+        // the full error stack.
+        configure: (proxy: any) => {
+          proxy.on('error', (err: any, req: any, res: any) => {
+            try {
+              if (err && err.code === 'ECONNREFUSED') {
+                // suppress stack trace and avoid noisy terminal output
+                if (res && !res.headersSent) {
+                  try {
+                    res.writeHead && res.writeHead(502, { 'Content-Type': 'text/plain' });
+                    res.end && res.end('Proxy target refused connection');
+                  } catch (e) {
+                    // ignore any further errors while sending minimal response
+                  }
+                } else if (res && typeof res.end === 'function') {
+                  try { res.end(); } catch (e) { /* ignore */ }
+                }
+                return;
+              }
+            } catch (e) {
+              // guard: if our handler throws, fall through to default logger below
+            }
+            // For other errors, keep the default behavior so they're visible.
+            // This prints the error but avoids leaking large stacks for connection
+            // refusal which are common during backend restarts.
+            console.error(err);
+          });
+        },
       }
     }
   },

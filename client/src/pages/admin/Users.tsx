@@ -1,76 +1,69 @@
 
-import React, { useState } from 'react';
-import AdminLayout from '@/components/layout/AdminLayout';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Search, Plus, Users, MoreHorizontal, Check, X } from 'lucide-react';
+import { Search, Users, MoreHorizontal, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
+import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
-// Mock user data
-const mockUsers = [
-  {
-    id: 1,
-    name: 'John Doe',
-    email: 'john.doe@example.com',
-    role: 'Admin',
-    status: 'Active',
-    avatar: 'https://randomuser.me/api/portraits/men/1.jpg',
-  },
-  {
-    id: 2,
-    name: 'Jane Smith',
-    email: 'jane.smith@example.com',
-    role: 'Editor',
-    status: 'Active',
-    avatar: 'https://randomuser.me/api/portraits/women/2.jpg',
-  },
-  {
-    id: 3,
-    name: 'Robert Johnson',
-    email: 'robert.j@example.com',
-    role: 'User',
-    status: 'Inactive',
-    avatar: 'https://randomuser.me/api/portraits/men/3.jpg',
-  },
-  {
-    id: 4,
-    name: 'Emily Davis',
-    email: 'emily.davis@example.com',
-    role: 'User',
-    status: 'Active',
-    avatar: 'https://randomuser.me/api/portraits/women/4.jpg',
-  },
-  {
-    id: 5,
-    name: 'Michael Wilson',
-    email: 'michael.w@example.com',
-    role: 'Editor',
-    status: 'Active',
-    avatar: 'https://randomuser.me/api/portraits/men/5.jpg',
-  },
-];
+interface User {
+  _id?: string;
+  id?: number | string;
+  name: string;
+  email: string;
+  username?: string;
+  phone?: string;
+  dateOfBirth?: string;
+  role?: string;
+  status?: string;
+}
 
 const AdminUsers = () => {
-  const [users, setUsers] = useState(mockUsers);
+  const { t } = useTranslation();
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
+  // normalize selected IDs to strings to avoid type mismatches (mongo _id vs numeric id)
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  
+  // Get auth token from localStorage
+  const getAuthToken = useCallback(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate('/login');
+      return null;
+    }
+    return token;
+  }, [navigate]);
+
+  // Configure axios with auth token
+  const configureAxios = useCallback(() => {
+    const token = getAuthToken();
+    if (token) {
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    }
+  }, [getAuthToken]);
   
   // Filter users based on search query
   const filteredUsers = users.filter(user => 
-    user.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    user.email.toLowerCase().includes(searchQuery.toLowerCase())
+    (user.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+    (user.email || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
   
   // Toggle user selection
-  const toggleUserSelection = (userId: number) => {
+  const toggleUserSelection = (userId: string|number) => {
+    const sid = String(userId);
     setSelectedUsers(prev => 
-      prev.includes(userId) 
-        ? prev.filter(id => id !== userId) 
-        : [...prev, userId]
+      prev.includes(sid) 
+        ? prev.filter(id => id !== sid) 
+        : [...prev, sid]
     );
   };
   
@@ -79,57 +72,219 @@ const AdminUsers = () => {
     if (selectedUsers.length === filteredUsers.length) {
       setSelectedUsers([]);
     } else {
-      setSelectedUsers(filteredUsers.map(user => user.id));
+      // store ids as strings
+      const ids = filteredUsers.map(user => String(user._id || user.id)).filter(Boolean) as string[];
+      setSelectedUsers(ids);
     }
   };
   
   // Change user status
-  const changeUserStatus = (userId: number, newStatus: string) => {
-    setUsers(users.map(user => 
-      user.id === userId ? { ...user, status: newStatus } : user
-    ));
-    
-    toast.success(`User status changed to ${newStatus}`);
+  const changeUserStatus = (userId: string|number, newStatus: string) => {
+    // Persist to server and update local state
+    (async () => {
+      try {
+        configureAxios();
+    await axios.put(`/api/admin/users/${userId}`, { status: newStatus.toLowerCase() });
+  setUsers(prev => prev.map(user => (String(user._id || user.id) === String(userId) ? { ...user, status: newStatus } : user)));
+        toast.success(`User status changed to ${newStatus}`);
+      } catch (err) {
+        console.error('Error changing status', err);
+        toast.error('Could not change user status');
+      }
+    })();
   };
   
   // Change user role
-  const changeUserRole = (userId: number, newRole: string) => {
-    setUsers(users.map(user => 
-      user.id === userId ? { ...user, role: newRole } : user
-    ));
-    
-    toast.success(`User role changed to ${newRole}`);
+  const changeUserRole = (userId: string|number, newRole: string) => {
+    (async () => {
+      try {
+        configureAxios();
+    await axios.put(`/api/admin/users/${userId}`, { role: newRole.toLowerCase() });
+  setUsers(prev => prev.map(user => (String(user._id || user.id) === String(userId) ? { ...user, role: newRole } : user)));
+        toast.success(`User role changed to ${newRole}`);
+      } catch (err) {
+        console.error('Error changing role', err);
+        toast.error('Could not change user role');
+      }
+    })();
   };
   
   // Bulk action: activate users
   const bulkActivateUsers = () => {
-    setUsers(users.map(user => 
-      selectedUsers.includes(user.id) ? { ...user, status: 'Active' } : user
-    ));
-    
-    toast.success(`${selectedUsers.length} users activated`);
-    setSelectedUsers([]);
+    (async () => {
+      try {
+        configureAxios();
+  await Promise.all(selectedUsers.map(id => axios.put(`/api/admin/users/${id}`, { status: 'active' })));
+  setUsers(prev => prev.map(user => (
+    selectedUsers.some(sel => String(sel) === String(user._id || user.id)) ? { ...user, status: 'Active' } : user
+  )));
+        toast.success(`${selectedUsers.length} users activated`);
+        setSelectedUsers([]);
+      } catch (err) {
+        console.error('Bulk activate error', err);
+        toast.error('Could not activate selected users');
+      }
+    })();
   };
   
   // Bulk action: deactivate users
   const bulkDeactivateUsers = () => {
-    setUsers(users.map(user => 
-      selectedUsers.includes(user.id) ? { ...user, status: 'Inactive' } : user
-    ));
-    
-    toast.success(`${selectedUsers.length} users deactivated`);
-    setSelectedUsers([]);
+    (async () => {
+      try {
+        configureAxios();
+  await Promise.all(selectedUsers.map(id => axios.put(`/api/admin/users/${id}`, { status: 'inactive' })));
+  setUsers(prev => prev.map(user => (
+    selectedUsers.some(sel => String(sel) === String(user._id || user.id)) ? { ...user, status: 'Inactive' } : user
+  )));
+        toast.success(`${selectedUsers.length} users deactivated`);
+        setSelectedUsers([]);
+      } catch (err) {
+        console.error('Bulk deactivate error', err);
+        toast.error('Could not deactivate selected users');
+      }
+    })();
+  };
+
+  // Fetch users from API
+  const fetchUsers = useCallback(async () => {
+    try {
+      configureAxios();
+      const response = await axios.get('/api/admin/users');
+      // response.data.data is expected (see admin controller)
+      setUsers(response.data.data || []);
+      setLoading(false);
+    } catch (err) {
+      console.error('Error fetching users', err);
+      if (axios.isAxiosError(err)) {
+        const status = err.response?.status;
+        if (status === 401) {
+          // Not authenticated
+          navigate('/login');
+          return;
+        }
+        if (status === 403) {
+          // Forbidden - user is not admin or lacks permissions
+          toast.error('You are not authorized to view this page (Admin only)');
+          // Optionally navigate away to a safer page
+          navigate('/');
+          return;
+        }
+      }
+      toast.error('Could not load users');
+      setLoading(false);
+    }
+  }, [configureAxios, navigate]);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+  
+  // Modal state for viewing/editing a single user
+  const [showModal, setShowModal] = useState(false);
+  const [modalUser, setModalUser] = useState<User | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', email: '', role: 'user', status: 'active' });
+
+  // Accept either a DOB string or a User object and detect common DOB fields
+  const computeAge = (dobOrUser?: string | User | null) => {
+    if (!dobOrUser) return null;
+    let dobStr: string | undefined;
+    if (typeof dobOrUser === 'string') dobStr = dobOrUser;
+    else {
+      const u = dobOrUser as User;
+      const extra = u as unknown as Record<string, unknown>;
+      dobStr = String(u.dateOfBirth || extra['dob'] || extra['birthdate'] || extra['birthDate'] || '');
+      if (!dobStr) dobStr = undefined;
+    }
+    if (!dobStr) return null;
+    const birth = new Date(dobStr);
+    if (isNaN(birth.getTime())) return null;
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
+  const viewUserDetails = async (userId: string) => {
+    try {
+      configureAxios();
+      const res = await axios.get(`/api/admin/users/${userId}`);
+      const u = res.data.data;
+      setModalUser(u);
+      setEditForm({
+        name: u.name || '',
+        email: u.email || '',
+  role: u.role || 'user',
+  status: u.status || 'active'
+      });
+      setShowModal(true);
+    } catch (err) {
+      console.error('Error fetching user details', err);
+      toast.error('Could not load user details');
+    }
+  };
+
+  const saveUserEdits = async () => {
+    if (!modalUser) return;
+    try {
+      configureAxios();
+
+  // Do not allow changing email from this modal; only send name/role/status
+  const payload: Partial<User> = { name: editForm.name, role: editForm.role, status: editForm.status };
+      const res = await axios.put(`/api/admin/users/${modalUser._id || modalUser.id}`, payload);
+      const updated = res.data.data || res.data;
+      setUsers(prev => prev.map(u => (String(u._id || u.id) === String(updated._id || updated.id) ? updated : u)));
+      toast.success('User updated');
+      setShowModal(false);
+      setModalUser(null);
+    } catch (err) {
+      console.error('Error saving user edits', err);
+      // Provide clearer messages for common server errors
+      if (axios.isAxiosError(err)) {
+        const serverMsg = err.response?.data?.message || err.response?.data?.error || err.response?.data;
+        if (serverMsg && /duplicate|unique/i.test(String(serverMsg))) {
+          toast.error('That email is already in use by another account');
+          return;
+        }
+        if (serverMsg) {
+          toast.error(String(serverMsg));
+          return;
+        }
+      }
+      toast.error('Could not save changes');
+    }
+  };
+
+  // Delete a user (admin)
+  const deleteUser = async (userId: string) => {
+    if (!window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) return;
+    try {
+      configureAxios();
+      await axios.delete(`/api/admin/users/${userId}`);
+      setUsers(prev => prev.filter(u => String(u._id || u.id) !== String(userId)));
+      // Remove from selection if present
+      setSelectedUsers(prev => prev.filter(id => id !== String(userId)));
+      toast.success('User deleted');
+    } catch (err) {
+      console.error('Error deleting user', err);
+      if (axios.isAxiosError(err)) {
+        const msg = err.response?.data?.message || err.response?.data?.error || err.response?.data;
+        if (msg) {
+          toast.error(String(msg));
+          return;
+        }
+      }
+      toast.error('Could not delete user');
+    }
   };
   
   return (
-    <AdminLayout>
-      <div className="p-6">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">Users Management</h1>
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            Add New User
-          </Button>
+    
+  <div className="p-6">
+        <div className="flex justify-center mb-6">
+          <h1 className="text-2xl font-bold">{t('admin.users.title', { defaultValue: 'Users Management' })}</h1>
         </div>
         
         <Card className="mb-6">
@@ -138,7 +293,7 @@ const AdminUsers = () => {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
-                  placeholder="Search users..."
+                  placeholder={t('admin.users.searchPlaceholder', { defaultValue: 'Search users...' })}
                   className="pl-9"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -148,15 +303,15 @@ const AdminUsers = () => {
               {selectedUsers.length > 0 && (
                 <div className="flex items-center space-x-2">
                   <span className="text-sm text-gray-500">
-                    {selectedUsers.length} users selected
+                    {t('admin.users.selected', { count: selectedUsers.length, defaultValue: `${selectedUsers.length} users selected` })}
                   </span>
                   <Button size="sm" variant="outline" onClick={bulkActivateUsers}>
                     <Check className="mr-2 h-4 w-4" />
-                    Activate
+                    {t('admin.users.activate', { defaultValue: 'Activate' })}
                   </Button>
                   <Button size="sm" variant="outline" onClick={bulkDeactivateUsers}>
                     <X className="mr-2 h-4 w-4" />
-                    Deactivate
+                    {t('admin.users.deactivate', { defaultValue: 'Deactivate' })}
                   </Button>
                 </div>
               )}
@@ -166,9 +321,15 @@ const AdminUsers = () => {
         
         <Card>
           <CardHeader className="pb-0">
-            <CardTitle className="text-xl">Users List</CardTitle>
+            <CardTitle className="text-xl">{t('admin.users.listTitle', { defaultValue: 'Users List' })}</CardTitle>
           </CardHeader>
           <CardContent className="p-6">
+            {loading && (
+              <div className="flex justify-center items-center py-12">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-tourtastic-blue"></div>
+              </div>
+            )}
+            {!loading && (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -176,110 +337,177 @@ const AdminUsers = () => {
                     <input
                       type="checkbox"
                       className="h-4 w-4"
-                      checked={selectedUsers.length === filteredUsers.length && filteredUsers.length > 0}
+                      checked={
+                        filteredUsers.length > 0 && selectedUsers.length > 0 &&
+                        selectedUsers.length === filteredUsers.map(u => String(u._id || u.id)).filter(Boolean).length
+                      }
                       onChange={selectAllUsers}
                     />
                   </TableHead>
-                  <TableHead>User</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t('admin.users.table.user', { defaultValue: 'User' })}</TableHead>
+                  <TableHead>{t('admin.users.table.role', { defaultValue: 'Role' })}</TableHead>
+                  <TableHead>{t('admin.users.table.status', { defaultValue: 'Status' })}</TableHead>
+                  <TableHead className="text-right">{t('admin.users.table.actions', { defaultValue: 'Actions' })}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.map((user) => (
-                  <TableRow key={user.id} className={user.status === 'Inactive' ? 'opacity-70' : ''}>
-                    <TableCell>
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4"
-                        checked={selectedUsers.includes(user.id)}
-                        onChange={() => toggleUserSelection(user.id)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-9 w-9">
-                          <AvatarImage src={user.avatar} alt={user.name} />
-                          <AvatarFallback>{user.name.substring(0, 2)}</AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-medium">{user.name}</p>
-                          <p className="text-sm text-gray-500">{user.email}</p>
+                {filteredUsers.map((user) => {
+                  const id = String(user._id || user.id);
+                  const defaultRole = user.role ? (user.role.charAt(0).toUpperCase() + user.role.slice(1)) : 'User';
+                  const roleLabel = t(`roles.${user.role}`, { defaultValue: defaultRole });
+                  const defaultStatus = user.status ? (user.status.charAt(0).toUpperCase() + user.status.slice(1)) : 'Inactive';
+                  const statusLabel = t(`status.${user.status}`, { defaultValue: defaultStatus });
+                  return (
+                    <TableRow key={id} className={statusLabel === 'Inactive' ? 'opacity-70' : ''}>
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={selectedUsers.includes(id)}
+                          onChange={() => toggleUserSelection(id)}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-9 w-9">
+                            {/* No avatar images - show initials only */}
+                            <AvatarFallback>{(user.name || '').substring(0, 2)}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium">{user.name}</p>
+                            <p className="text-sm text-gray-500">{user.email}</p>
+                          </div>
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        user.role === 'Admin' 
-                          ? 'bg-purple-100 text-purple-800' 
-                          : user.role === 'Editor' 
-                            ? 'bg-blue-100 text-blue-800' 
-                            : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {user.role}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        user.status === 'Active' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {user.status}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => toast.info(`View user ${user.name}`)}>
-                            View Details
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => toast.info(`Edit user ${user.name}`)}>
-                            Edit User
-                          </DropdownMenuItem>
-                          {user.status === 'Active' ? (
-                            <DropdownMenuItem onClick={() => changeUserStatus(user.id, 'Inactive')}>
-                              Deactivate
+                      </TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          roleLabel === 'Admin' 
+                            ? 'bg-purple-100 text-purple-800' 
+                            : roleLabel === 'Editor' 
+                              ? 'bg-blue-100 text-blue-800' 
+                              : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {roleLabel}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          statusLabel === 'Active' 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {statusLabel}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => viewUserDetails(id)}>
+                              {t('admin.users.viewDetails', { defaultValue: 'View Details' })}
                             </DropdownMenuItem>
-                          ) : (
-                            <DropdownMenuItem onClick={() => changeUserStatus(user.id, 'Active')}>
-                              Activate
+                            {statusLabel === 'Active' ? (
+                              <DropdownMenuItem onClick={() => changeUserStatus(id, 'Inactive')}>
+                                {t('admin.users.deactivate', { defaultValue: 'Deactivate' })}
+                              </DropdownMenuItem>
+                            ) : (
+                                <DropdownMenuItem onClick={() => changeUserStatus(id, 'Active')}>
+                                  {t('admin.users.activate', { defaultValue: 'Activate' })}
+                                </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem 
+                                onClick={() => changeUserRole(id, roleLabel === t('roles.admin', { defaultValue: 'Admin' }) ? 'User' : 'Admin')}
+                            >
+                                {t('admin.users.changeRole', { defaultValue: 'Change Role' })}
                             </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem 
-                            onClick={() => changeUserRole(user.id, user.role === 'Admin' ? 'User' : 'Admin')}
-                          >
-                            Change Role
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                              <DropdownMenuItem onClick={() => deleteUser(id)} className="text-red-600">
+                                {t('admin.users.delete', { defaultValue: 'Delete' })}
+                              </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
                 
-                {filteredUsers.length === 0 && (
+    {filteredUsers.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-6">
                       <div className="flex flex-col items-center">
                         <Users className="h-10 w-10 text-gray-400 mb-2" />
-                        <p className="text-gray-500">No users found</p>
+      <p className="text-gray-500">{t('admin.users.noUsers', { defaultValue: 'No users found' })}</p>
                       </div>
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
+            )}
+
+            {/* Simple modal for viewing/editing a user */}
+            {showModal && modalUser && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+                <div className="bg-white rounded-lg shadow-lg w-full max-w-lg p-6">
+                  <h2 className="text-lg font-semibold mb-4">{t('admin.users.editUser', { defaultValue: 'Edit User' })}</h2>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm text-gray-600">{t('admin.users.name', { defaultValue: 'Name' })}</label>
+                      <input className="mt-1 w-full border rounded px-2 py-1" value={editForm.name} onChange={(e) => setEditForm(f => ({ ...f, name: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600">{t('admin.users.username', { defaultValue: 'Username' })}</label>
+                      <p className="mt-1 w-full text-gray-700">{modalUser?.username || '-'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600">{t('admin.users.email', { defaultValue: 'Email' })}</label>
+                      <p className="mt-1 w-full text-gray-700">{modalUser?.email}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600">{t('admin.users.phone', { defaultValue: 'Phone' })}</label>
+                      <p className="mt-1 w-full text-gray-700">{modalUser?.phone || '-'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600">{t('admin.users.age', { defaultValue: 'Age' })}</label>
+                      <p className="mt-1 w-full text-gray-700">{computeAge(modalUser) ?? '-'}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm text-gray-600">{t('admin.users.role', { defaultValue: 'Role' })}</label>
+                        <select className="mt-1 w-full border rounded px-2 py-1" value={editForm.role} onChange={(e) => setEditForm(f => ({ ...f, role: e.target.value }))}>
+                          <option value="user">User</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-600">{t('admin.users.status', { defaultValue: 'Status' })}</label>
+                        <select className="mt-1 w-full border rounded px-2 py-1" value={editForm.status} onChange={(e) => setEditForm(f => ({ ...f, status: e.target.value }))}>
+                          <option value="active">{t('status.active', { defaultValue: 'Active' })}</option>
+                          <option value="inactive">{t('status.inactive', { defaultValue: 'Inactive' })}</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex justify-end space-x-2">
+                    <Button variant="ghost" onClick={() => { setShowModal(false); setModalUser(null); }}>
+                      {t('cancel', { defaultValue: 'Cancel' })}
+                    </Button>
+                    <Button onClick={saveUserEdits}>
+                      {t('save', { defaultValue: 'Save' })}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
-    </AdminLayout>
   );
 };
 
 export default AdminUsers;
+
+/* Modal markup (kept outside main component return for brevity) */

@@ -87,25 +87,19 @@ const DestinationSchema = new mongoose.Schema({
   },
   quickInfo: {
     airport: {
-      en: {
-        type: String,
-        required: [true, "Please add English airport name"],
-      },
-      ar: {
-        type: String,
-        required: [true, "Please add Arabic airport name"],
-      }
+      type: String,
+      required: [true, "Please add an airport code"],
+      trim: true
     },
     timeZone: {
-      en: {
-        type: String,
-        required: [true, "Please add English time zone"],
-      },
-      ar: {
-        type: String,
-        required: [true, "Please add Arabic time zone"],
-      }
+      type:String, 
     },
+  },
+  // Number of days to use when searching flights for this destination
+  searchWindowDays: {
+    type: Number,
+    default: 30,
+    min: 1,
   },
   popular: {
     type: Boolean,

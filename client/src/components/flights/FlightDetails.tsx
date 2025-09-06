@@ -5,6 +5,7 @@ import { Info, ShoppingCart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Flight } from '../../services/flightService';
 import { getTimeOfDay, getTimeOfDayIcon, getTimeOfDayWithColor, formatBaggage } from './utils/flightHelpers';
+import { formatSypFromUsd } from '@/utils/currency';
 import { getAirportsMap } from '@/services/airportService';
 
 interface FlightDetailsProps {
@@ -213,12 +214,12 @@ const FlightDetails: React.FC<FlightDetailsProps> = ({ flight, onAddToCart }) =>
               <div className="flex justify-between text-sm border-b pb-2">
                 <span className="font-medium">{adtCount} × {t('adults', 'بالغ')}</span>
                 <div className="text-right">
-                  <div>{flight.currency} {breakdown.adt.total.toFixed(2)} {t('each', 'للشخص')}</div>
+                  <div>{formatSypFromUsd(breakdown.adt.total)} {t('each', 'للشخص')}</div>
                   <div className="text-xs text-gray-500">
-                    {t('base', 'السعر الأساسي')}: {flight.currency} {breakdown.adt.price.toFixed(2)} + {t('tax', 'الضرائب')}: {flight.currency} {breakdown.adt.tax.toFixed(2)}
+                    {t('base', 'السعر الأساسي')}: {formatSypFromUsd(breakdown.adt.price)} + {t('tax', 'الضرائب')}: {formatSypFromUsd(breakdown.adt.tax)}
                   </div>
                   <div className="text-xs text-gray-500">
-                    {t('subtotal', 'المجموع الفرعي')}: {flight.currency} {(breakdown.adt.total * adtCount).toFixed(2)}
+                    {t('subtotal', 'المجموع الفرعي')}: {formatSypFromUsd(breakdown.adt.total * adtCount)}
                   </div>
                 </div>
               </div>
@@ -227,12 +228,12 @@ const FlightDetails: React.FC<FlightDetailsProps> = ({ flight, onAddToCart }) =>
               <div className="flex justify-between text-sm border-b pb-2">
                 <span className="font-medium">{chdCount} × {t('children', 'طفل')}</span>
                 <div className="text-right">
-                  <div>{flight.currency} {breakdown.chd.total.toFixed(2)} {t('each', 'للشخص')}</div>
+                  <div>{formatSypFromUsd(breakdown.chd.total)} {t('each', 'للشخص')}</div>
                   <div className="text-xs text-gray-500">
-                    {t('base', 'السعر الأساسي')}: {flight.currency} {breakdown.chd.price.toFixed(2)} + {t('tax', 'الضرائب')}: {flight.currency} {breakdown.chd.tax.toFixed(2)}
+                    {t('base', 'السعر الأساسي')}: {formatSypFromUsd(breakdown.chd.price)} + {t('tax', 'الضرائب')}: {formatSypFromUsd(breakdown.chd.tax)}
                   </div>
                   <div className="text-xs text-gray-500">
-                    {t('subtotal', 'المجموع الفرعي')}: {flight.currency} {(breakdown.chd.total * chdCount).toFixed(2)}
+                    {t('subtotal', 'المجموع الفرعي')}: {formatSypFromUsd(breakdown.chd.total * chdCount)}
                   </div>
                 </div>
               </div>
@@ -241,27 +242,27 @@ const FlightDetails: React.FC<FlightDetailsProps> = ({ flight, onAddToCart }) =>
               <div className="flex justify-between text-sm border-b pb-2">
                 <span className="font-medium">{infCount} × {t('infants', 'رضيع')}</span>
                 <div className="text-right">
-                  <div>{flight.currency} {breakdown.inf.total.toFixed(2)} {t('each', 'للشخص')}</div>
+                  <div>{formatSypFromUsd(breakdown.inf.total)} {t('each', 'للشخص')}</div>
                   <div className="text-xs text-gray-500">
-                    {t('base', 'السعر الأساسي')}: {flight.currency} {breakdown.inf.price.toFixed(2)} + {t('tax', 'الضرائب')}: {flight.currency} {breakdown.inf.tax.toFixed(2)}
+                    {t('base', 'السعر الأساسي')}: {formatSypFromUsd(breakdown.inf.price)} + {t('tax', 'الضرائب')}: {formatSypFromUsd(breakdown.inf.tax)}
                   </div>
                   <div className="text-xs text-gray-500">
-                    {t('subtotal', 'المجموع الفرعي')}: {flight.currency} {(breakdown.inf.total * infCount).toFixed(2)}
+                    {t('subtotal', 'المجموع الفرعي')}: {formatSypFromUsd(breakdown.inf.total * infCount)}
                   </div>
                 </div>
               </div>
             )}
             <div className="flex justify-between">
               <span className="text-gray-500">{t('base', 'السعر الأساسي')}</span>
-              <span>{flight.currency} {(flight.price || 0).toFixed(2)}</span>
+              <span>{formatSypFromUsd(flight.price || 0)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">{t('taxes', 'الضرائب')}</span>
-              <span>{flight.currency} {(flight.tax || 0).toFixed(2)}</span>
+              <span>{formatSypFromUsd(flight.tax || 0)}</span>
             </div>
             <div className="flex justify-between font-semibold border-t pt-2">
               <span>{t('total', 'المجموع')}</span>
-              <span>{flight.currency} {grandTotal.toFixed(2)}</span>
+              <span>{formatSypFromUsd(grandTotal)}</span>
             </div>
           </div>
           {onAddToCart && (

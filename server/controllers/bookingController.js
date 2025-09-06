@@ -66,8 +66,6 @@ exports.createBooking = asyncHandler(async (req, res, next) => {
 
   const { flightDetails } = req.body;
 
-  console.log('createBooking called by user:', req.user ? req.user.id : 'no-user', 'flightDetails present:', !!flightDetails);
-
   // Basic validation for flight bookings
   if (!flightDetails || !flightDetails.selectedFlight) {
     return res.status(400).json({ success: false, message: "Missing required flight booking details" });
@@ -275,6 +273,60 @@ exports.updateBooking = asyncHandler(async (req, res, next) => {
   await booking.save();
 
   res.status(200).json({ success: true, data: booking });
+});
+
+// @desc    Return a usable URL (public or signed) for a booking ticket
+// @route   GET /api/bookings/:id/ticket-url
+// @access  Private
+exports.getTicketUrl = asyncHandler(async (req, res, next) => {
+  const booking = await FlightBooking.findById(req.params.id);
+  if (!booking) {
+    return res.status(404).json({ success: false, message: 'Booking not found' });
+  }
+
+  // Look for common fields where tickets are stored
+  const raw = (booking.ticketDetails && booking.ticketDetails.eTicketPath) || booking.ticketUrl || booking.ticketPdfUrl || (booking.ticketInfo && booking.ticketInfo.filePath) || (booking.ticketDetails && booking.ticketDetails.additionalDocuments && booking.ticketDetails.additionalDocuments[0] && booking.ticketDetails.additionalDocuments[0].path) || null;
+
+  if (!raw) {
+    return res.status(404).json({ success: false, message: 'No ticket file recorded for this booking' });
+  }
+
+  // If it's already a full URL, return it directly
+  if (/^https?:\/\//i.test(raw)) {
+    return res.status(200).json({ success: true, url: raw });
+  }
+
+  // If it's a local uploads path (served under /uploads), build absolute URL
+  if (raw.startsWith('uploads') || raw.startsWith('/uploads')) {
+    const pathPart = raw.startsWith('/') ? raw : `/${raw}`;
+    const url = `${req.protocol}://${req.get('host')}${pathPart}`;
+    return res.status(200).json({ success: true, url });
+  }
+
+  // Otherwise, attempt to generate a signed URL from GCS if configured
+  try {
+    const { bucket, generatePublicUrl } = require('../utils/gcsStorage');
+    if (bucket) {
+      const file = bucket.file(raw);
+      try {
+        const [signedUrl] = await file.getSignedUrl({ action: 'read', expires: Date.now() + 7 * 24 * 60 * 60 * 1000 });
+        return res.status(200).json({ success: true, url: signedUrl });
+      } catch (err) {
+        // fallback to public URL format if signed URL failed
+        try {
+          const publicUrl = generatePublicUrl(raw);
+          return res.status(200).json({ success: true, url: publicUrl });
+        } catch (e) {
+          console.error('GCS public URL generation failed', e);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('GCS not configured or signed URL generation failed', err?.message || err);
+  }
+
+  // Last resort: return the raw path (client may try to resolve)
+  return res.status(200).json({ success: true, url: raw });
 });
 
 // Note: Admin booking management (get all, get by ID, update, delete) will be in adminController

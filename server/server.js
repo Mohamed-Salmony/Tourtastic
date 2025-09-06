@@ -23,6 +23,8 @@ const destinationRoutes = require("./routes/destinations");
 const bookingRoutes = require("./routes/bookings");
 const newsletterRoutes = require("./routes/newsletter");
 const adminRoutes = require("./routes/admin");
+const settingsRoutes = require("./routes/settings");
+const adminController = require("./controllers/adminController");
 const cartRoutes = require("./routes/cart");
 const userRoutes = require("./routes/users");
 const paymentRoutes = require("./routes/payment");
@@ -30,6 +32,7 @@ const airports = require('./routes/airports');
 const notificationRoutes = require('./routes/notificationRoutes');
 const flightRoutes = require('./routes/flights');
 const contactRoutes = require('./routes/contact');
+const supportRoutes = require('./routes/support');
 
 const app = express();
 
@@ -92,6 +95,21 @@ app.use("/api/destinations", destinationRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/newsletter", newsletterRoutes);
 app.use("/api/admin", adminRoutes);
+app.use('/api/settings', settingsRoutes);
+
+// Public development-only endpoint: return flight bookings without auth when explicitly requested.
+// This is useful for local dev environments where the frontend may not have an admin session yet.
+// IMPORTANT: This route is intentionally lightweight and should NOT be enabled in production.
+if (process.env.NODE_ENV !== 'production') {
+  app.get('/api/admin/flight-bookings/public', async (req, res, next) => {
+    try {
+      // Reuse the controller logic to return mapped flight bookings
+      return adminController.getAllFlightBookings(req, res, next);
+    } catch (err) {
+      next(err);
+    }
+  });
+}
 app.use("/api/cart", cartRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/payment", paymentRoutes);
@@ -99,6 +117,7 @@ app.use('/api/airports', airports);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/flights', flightRoutes);
 app.use('/api/contact', contactRoutes);
+app.use('/api/support', supportRoutes);
 
 // Serve static files from the uploads directory
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));

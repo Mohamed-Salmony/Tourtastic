@@ -10,10 +10,9 @@ import {
   Users,
   MapPin,
   BarChart2,
-  Settings,
   LogOut,
   User,
-  Bell,
+  HelpCircle,
   Globe,
   Menu as MenuIcon,
   X as CloseIcon,
@@ -36,9 +35,9 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false); // for mobile drawer
   
   const navigation = [
-    { name: t('dashboard'), href: '/admin', icon: <LayoutDashboard className="h-5 w-5" /> },
     { name: t('bookings'), href: '/admin/bookings', icon: <Ticket className="h-5 w-5" /> },
     { name: t('users'), href: '/admin/users', icon: <Users className="h-5 w-5" /> },
+    { name: t('admin.support.title'), href: '/admin/support', icon: <HelpCircle className="h-5 w-5" /> },
     { name: t('destinations'), href: '/admin/destinations', icon: <MapPin className="h-5 w-5" /> },
     { name: t('reports'), href: '/admin/reports', icon: <BarChart2 className="h-5 w-5" /> },
     { name: t('myProfile'), href: '/admin/profile', icon: <User className="h-5 w-5" /> },
@@ -54,18 +53,18 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       {/* Sidebar Header */}
       <div className="flex items-center justify-between p-4 border-b h-16">
         {!collapsed && (
-          <Link to="/" className="flex-1">
             <Logo />
-          </Link>
         )}
-        <Button 
-          variant="ghost" 
-          size="icon"
-          className="hidden md:flex"
-          onClick={() => setCollapsed(!collapsed)}
-        >
-          {collapsed ? <ChevronRight /> : <ChevronLeft />}
-        </Button>
+        <div className="hidden md:flex items-center space-x-2">
+          <Button 
+            variant="ghost" 
+            size="icon"
+            onClick={() => setCollapsed(!collapsed)}
+          >
+            {collapsed ? <ChevronRight /> : <ChevronLeft />}
+          </Button>
+        </div>
+  {/* (mobile) close button only - globe moved to profile area */}
         {/* Close button for mobile */}
         <Button
           variant="ghost"
@@ -80,7 +79,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
         {navigation.map((item) => (
           <Link 
-            key={item.name} 
+            key={item.href} 
             to={item.href}
             className={cn(
               "flex items-center space-x-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors",
@@ -102,12 +101,21 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             <div className="flex items-center justify-between">
               <Link 
                 to="/" 
-                className="flex items-center space-x-2 text-sm text-gray-600 hover:text-gray-900"
+                className="flex items-center space-x-2 text-sm text-gray-600 hover:text-red-600 transition-colors"
               >
-                <LogOut className="h-4 w-4" />
+                <LogOut className="h-4 w-4 text-current" />
                 <span>{t('logOut')}</span>
               </Link>
-
+              {/* Translation toggle placed next to logout for easy access */}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => toggleLocale()}
+                title={currentLocale === 'ar' ? 'Switch to English' : 'التبديل إلى العربية'}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                <Globe className="h-4 w-4" />
+              </Button>
             </div>
           </>
         )}

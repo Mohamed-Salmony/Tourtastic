@@ -22,7 +22,8 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from 'sonner';
 import { Star, Plane, Calendar, CreditCard, User, Mail, Phone, Eye, EyeOff } from 'lucide-react';
-import api from '@/config/api';
+import apiClient from '@/config/api';
+import { formatSypFromUsd } from '@/utils/currency';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -78,9 +79,12 @@ interface Booking {
   customerEmail: string;
   flightDetails: FlightDetails;
   paymentDetails: PaymentDetails;
-  status: 'pending' | 'confirmed' | 'cancelled';
+  status: 'pending' | 'confirmed' | 'cancelled' | 'done';
   timeline: TimelineEvent[];
+  // Optional URL stored on the booking pointing to the ticket PDF (or file reference)
+  ticketPdfUrl?: string;
 }
+
 
 interface WishlistItem {
   _id: string;
@@ -91,76 +95,7 @@ interface WishlistItem {
   rating?: number;
 }
 
-// Mock user data
-const mockUser = {
-  id: 'user123',
-  name: 'John Smith',
-  username: 'johnsmith',
-  email: 'john.smith@example.com',
-  phone: '+1 (555) 123-4567',
-  avatar: 'https://randomuser.me/api/portraits/men/32.jpg',
-  address: '123 Main St, New York, NY 10001',
-  birthdate: '1985-04-15',
-};
 
-// Mock bookings data
-const mockBookings = [
-  {
-    id: 'book1',
-    type: 'Flight + Hotel',
-    destination: 'Paris, France',
-    status: 'upcoming',
-    dates: 'May 15-22, 2023',
-    price: 1449,
-    image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb&w=200',
-  },
-  {
-    id: 'book2',
-    type: 'Flight',
-    destination: 'Tokyo, Japan',
-    status: 'completed',
-    dates: 'Feb 10-18, 2023',
-    price: 1299,
-    image: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb&w=200',
-  },
-  {
-    id: 'book3',
-    type: 'Hotel',
-    destination: 'Rome, Italy',
-    status: 'cancelled',
-    dates: 'Jan 5-10, 2023',
-    price: 799,
-    image: 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb&w=200',
-  },
-];
-
-// Mock wishlist data
-const mockWishlist = [
-  {
-    id: 'wish1',
-    name: 'Santorini',
-    country: 'Greece',
-    image: 'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb&w=200',
-    rating: 4.9,
-    price: 1499,
-  },
-  {
-    id: 'wish2',
-    name: 'Bali',
-    country: 'Indonesia',
-    image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb&w=200',
-    rating: 4.7,
-    price: 1099,
-  },
-  {
-    id: 'wish3',
-    name: 'Sydney',
-    country: 'Australia',
-    image: 'https://images.unsplash.com/photo-1506973035872-a4ec16b8e8d9?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb&w=200',
-    rating: 4.8,
-    price: 1899,
-  },
-];
 
 const Profile: React.FC = () => {
   const navigate = useNavigate();
@@ -192,14 +127,14 @@ const Profile: React.FC = () => {
         }
 
         // Fetch user profile
-        const userResponse = await api.get(`/users/${authUser._id}`);
+  const userResponse = await apiClient.get(`/users/${authUser._id}`);
         setUser(userResponse.data.data);
         setEditFormData(userResponse.data.data);
 
         // Fetch both cart items (pending) and confirmed bookings
         const [cartResponse, bookingsResponse] = await Promise.all([
-          api.get('/cart'),
-          api.get('/bookings/my')
+          apiClient.get('/cart'),
+          apiClient.get('/bookings/my')
         ]);
         
         console.log('Cart response:', cartResponse.data);
@@ -232,7 +167,7 @@ const Profile: React.FC = () => {
         setBookings(allBookings);
 
         // Fetch user's wishlist
-        const wishlistResponse = await api.get(`/users/${authUser._id}/wishlist`);
+  const wishlistResponse = await apiClient.get(`/users/${authUser._id}/wishlist`);
         console.log('Wishlist response:', wishlistResponse.data);
         setWishlist(wishlistResponse.data.data);
       } catch (error) {
@@ -284,7 +219,7 @@ const Profile: React.FC = () => {
         return;
       }
 
-      const response = await api.put(`/users/${authUser._id}`, editFormData);
+  const response = await apiClient.put(`/users/${authUser._id}`, editFormData);
       setUser(response.data.data);
       setIsEditing(false);
       toast.success('Profile updated successfully!');
@@ -303,7 +238,7 @@ const Profile: React.FC = () => {
         throw new Error('User not authenticated');
       }
 
-      await api.delete(`/users/${authUser._id}/wishlist/${id}`);
+  await apiClient.delete(`/users/${authUser._id}/wishlist/${id}`);
       setWishlist(wishlist.filter(item => item._id !== id));
       toast.success('Item removed from wishlist');
     } catch (error) {
@@ -348,11 +283,13 @@ const Profile: React.FC = () => {
   const translateStatus = (status: string) => {
     switch (status) {
       case 'confirmed':
-        return t('status.confirmed', 'تم التأكيد');
+        return t('statu.confirmed', 'تم التأكيد');
       case 'pending':
-        return t('status.pending', 'قيد الانتظار');
+        return t('statu.pending', 'قيد الانتظار');
       case 'cancelled':
-        return t('status.cancelled', 'ملغي');
+        return t('statu.cancelled', 'ملغي');
+      case 'done':
+        return t('statu.done', 'منجز');
       default:
         return status;
     }
@@ -373,7 +310,7 @@ const Profile: React.FC = () => {
 
     try {
       setIsChangingPassword(true);
-      const response = await api.put('/users/change-password', {
+  const response = await apiClient.put('/users/change-password', {
         currentPassword: passwordData.currentPassword,
         newPassword: passwordData.newPassword
       });
@@ -404,6 +341,119 @@ const Profile: React.FC = () => {
     if (typeof value === 'string') return value;
     return value[i18n.language] || value.en || Object.values(value)[0] || '';
   };
+
+  // Translate city/country names when possible using i18n keys.
+  const slugify = (s: string) =>
+    s
+      .toString()
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s]/g, '')
+      .replace(/\s+/g, '_');
+
+  const translatePlace = (raw: string) => {
+    if (!raw) return raw;
+    // handle "City, Country" or single token
+    const parts = raw.split(',').map(p => p.trim()).filter(Boolean);
+    if (parts.length === 0) return raw;
+    if (parts.length === 1) {
+      const slug = slugify(parts[0]);
+      return t(`places.${slug}`, parts[0]);
+    }
+    // first is city, remaining joined as country
+    const city = parts[0];
+    const country = parts.slice(1).join(', ');
+    const cityTranslated = t(`places.${slugify(city)}`, city);
+    const countryTranslated = t(`countries.${slugify(country)}`, country);
+    return `${cityTranslated}, ${countryTranslated}`;
+  };
+
+  const translateAirline = (name: string) => {
+    if (!name) return name;
+    // try exact key first, fall back to original name
+    return t(`airlines.${name}`, name);
+  };
+
+  const getRouteArrow = () => (i18n.language === 'ar' ? '←' : '→');
+
+  const [ticketPreviewUrl, setTicketPreviewUrl] = useState<string | null>(null);
+  const [ticketLoading, setTicketLoading] = useState(false);
+
+  // When a booking is selected, attempt to obtain a usable ticket URL for preview.
+  // Note: server stores uploaded flight tickets on FlightBooking.ticketDetails.eTicketPath
+  // or as a local uploads path (e.g. 'uploads/...'). Some legacy fields are also checked.
+  const getBookingTicketRawPath = (b: Booking | null) => {
+    if (!b) return null;
+    return (
+      // prefer common/new flight booking field
+      (b as any).ticketDetails?.eTicketPath ||
+      // older/other variants
+      (b as any).ticketUrl ||
+      (b as any).ticketPdfUrl ||
+      (b as any).ticketDetails?.filePath ||
+      (b as any).ticketInfo?.filePath ||
+      (b as any).ticketDetails?.additionalDocuments?.[0]?.path ||
+      null
+    );
+  };
+
+  const resolveBookingPreviewUrl = (b: Booking | null) => {
+    const raw = getBookingTicketRawPath(b);
+    if (!raw) return null;
+    if (/^https?:\/\//i.test(raw)) return raw;
+    const pathPart = raw.startsWith('/') ? raw : `/${raw}`;
+    return `${window.location.origin}${pathPart}`;
+  };
+
+  useEffect(() => {
+    let mounted = true;
+    setTicketPreviewUrl(null);
+    if (!selectedBooking) return;
+
+    const raw = getBookingTicketRawPath(selectedBooking);
+    if (!raw) return;
+
+    const resolveUrl = (p: string) => {
+      if (/^https?:\/\//i.test(p)) return p;
+      // Ensure leading slash then prefix origin so browser can fetch local uploads
+      const pathPart = p.startsWith('/') ? p : `/${p}`;
+      return `${window.location.origin}${pathPart}`;
+    };
+
+    const load = async () => {
+      try {
+        setTicketLoading(true);
+        // If raw is already a full URL, use it directly
+        if (/^https?:\/\//i.test(raw as string)) {
+          if (mounted) setTicketPreviewUrl(raw as string);
+          return;
+        }
+
+        // If raw looks like a local uploads path, resolve to origin/uploads
+        if ((raw as string).startsWith('uploads') || (raw as string).startsWith('/uploads')) {
+          const url = resolveUrl(raw as string);
+          if (mounted) setTicketPreviewUrl(url);
+          return;
+        }
+
+        // Otherwise ask backend to produce a usable URL (public or signed)
+        try {
+          const res = await apiClient.get(`/bookings/${selectedBooking._id}/ticket-url`);
+          const url = res?.data?.url || resolveUrl(raw as string);
+          if (mounted) setTicketPreviewUrl(url);
+        } catch (err) {
+          // fallback to resolving raw path locally
+          const url = resolveUrl(raw as string);
+          if (mounted) setTicketPreviewUrl(url);
+        }
+      } finally {
+        if (mounted) setTicketLoading(false);
+      }
+    };
+
+    load();
+    return () => { mounted = false; };
+  }, [selectedBooking]);
 
   return (
     <>
@@ -520,8 +570,8 @@ const Profile: React.FC = () => {
                                 <TableCell>
                                   <div className="flex items-center gap-4">
                                     <div>
-                                      <p className="font-medium">{booking.flightDetails.from} → {booking.flightDetails.to}</p>
-                                      <p className="text-sm text-gray-500">{booking.flightDetails.selectedFlight.airline}</p>
+                                      <p className="font-medium">{translatePlace(booking.flightDetails.from)} {getRouteArrow()} {translatePlace(booking.flightDetails.to)}</p>
+                                      <p className="text-sm text-gray-500">{translateAirline(booking.flightDetails.selectedFlight.airline)}</p>
                                       <p className="text-sm text-gray-500 md:hidden">{formatDate(booking.flightDetails.departureDate)}</p>
                                     </div>
                                   </div>
@@ -539,16 +589,27 @@ const Profile: React.FC = () => {
                                   </span>
                                 </TableCell>
                                 <TableCell className="text-right">
-                                  ${booking.flightDetails.selectedFlight.price.total}
+                                    {formatSypFromUsd(booking.flightDetails.selectedFlight.price.total)}
                                 </TableCell>
                                 <TableCell className="text-right">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleViewDetails(booking)}
-                                  >
-                                    {t('viewDetails', 'عرض التفاصيل')}
-                                  </Button>
+                                  <div className="flex items-center justify-end gap-2">
+                                        {resolveBookingPreviewUrl(booking) && (
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => window.open(resolveBookingPreviewUrl(booking) as string, '_blank', 'noopener')}
+                                          >
+                                            {t('booking.openTicket', 'Open Ticket (PDF)')}
+                                          </Button>
+                                        )}
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleViewDetails(booking)}
+                                    >
+                                      {t('viewDetails', 'عرض التفاصيل')}
+                                    </Button>
+                                  </div>
                                 </TableCell>
                               </TableRow>
                             ))}
@@ -557,8 +618,8 @@ const Profile: React.FC = () => {
                       </div>
                     ) : (
                       <div className="text-center py-8">
-                        <p className="text-gray-500">You don't have any bookings yet.</p>
-                        <Button className="mt-4">Find Your Next Trip</Button>
+                        <p className="text-gray-500">{t('profile.noBookings', "You don't have any bookings yet.")}</p>
+                        <Button className="mt-4">{t('profile.findYourNextTrip', 'Find Your Next Trip')}</Button>
                       </div>
                     )}
                   </CardContent>
@@ -831,16 +892,16 @@ const Profile: React.FC = () => {
                     <div className="space-y-2">
                       <h3 className="text-base font-semibold flex items-center gap-2">
                         <Plane className="h-4 w-4 text-tourtastic-blue" />
-                        Flight Information
+                        {t('booking.flightInformation', 'Flight Information')}
                       </h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
                           <p className="text-xs text-gray-500">{t('booking.route', 'المسار')}</p>
-                          <p className="text-sm font-medium">{selectedBooking.flightDetails.from} → {selectedBooking.flightDetails.to}</p>
+                          <p className="text-sm font-medium">{translatePlace(selectedBooking.flightDetails.from)} {getRouteArrow()} {translatePlace(selectedBooking.flightDetails.to)}</p>
                         </div>
                         <div>
                           <p className="text-xs text-gray-500">{t('booking.airline', 'شركة الطيران')}</p>
-                          <p className="text-sm font-medium">{selectedBooking.flightDetails.selectedFlight.airline}</p>
+                          <p className="text-sm font-medium">{translateAirline(selectedBooking.flightDetails.selectedFlight.airline)}</p>
                         </div>
                         <div>
                           <p className="text-xs text-gray-500">{t('booking.departure', 'المغادرة')}</p>
@@ -848,7 +909,7 @@ const Profile: React.FC = () => {
                         </div>
                         <div>
                           <p className="text-xs text-gray-500">{t('booking.class', 'الدرجة')}</p>
-                          <p className="text-sm font-medium">{selectedBooking.flightDetails.selectedFlight.class}</p>
+                          <p className="text-sm font-medium">{t(`cabin.${selectedBooking.flightDetails.selectedFlight.class}`, selectedBooking.flightDetails.selectedFlight.class)}</p>
                         </div>
                       </div>
                     </div>
@@ -858,24 +919,24 @@ const Profile: React.FC = () => {
                     {/* Passenger Details */}
                     <div className="space-y-2">
                       <h3 className="text-base font-semibold flex items-center gap-2">
-                        <User className="h-4 w-4 text-tourtastic-blue" />
-                        Passenger Information
-                      </h3>
+                          <User className="h-4 w-4 text-tourtastic-blue" />
+                          {t('booking.passengerInformation', 'Passenger Information')}
+                        </h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
-                          <p className="text-xs text-gray-500">{t('passenger.name', 'الاسم')}</p>
+                          <p className="text-xs text-gray-500">{t('passenge.name', 'الاسم')}</p>
                           <p className="text-sm font-medium">{selectedBooking.customerName}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-gray-500">{t('passenger.email', 'البريد الإلكتروني')}</p>
+                          <p className="text-xs text-gray-500">{t('passenge.email', 'البريد الإلكتروني')}</p>
                           <p className="text-sm font-medium">{selectedBooking.customerEmail}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-gray-500">{t('passenger.count', 'الركاب')}</p>
+                          <p className="text-xs text-gray-500">{t('passenge.count', 'الركاب')}</p>
                           <p className="text-sm font-medium">
-                            {selectedBooking.flightDetails.passengers.adults} {t('passenger.adult', 'بالغ')}
-                            {selectedBooking.flightDetails.passengers.children > 0 && `, ${selectedBooking.flightDetails.passengers.children} ${t('passenger.child', 'طفل')}`}
-                            {selectedBooking.flightDetails.passengers.infants > 0 && `, ${selectedBooking.flightDetails.passengers.infants} ${t('passenger.infant', 'رضيع')}`}
+                            {selectedBooking.flightDetails.passengers.adults} {t('passenge.adult', 'بالغ')}
+                            {selectedBooking.flightDetails.passengers.children > 0 && `, ${selectedBooking.flightDetails.passengers.children} ${t('passenge.child', 'طفل')}`}
+                            {selectedBooking.flightDetails.passengers.infants > 0 && `, ${selectedBooking.flightDetails.passengers.infants} ${t('passenge.infant', 'رضيع')}`}
                           </p>
                         </div>
                       </div>
@@ -886,13 +947,13 @@ const Profile: React.FC = () => {
                     {/* Payment Details */}
                     <div className="space-y-2">
                       <h3 className="text-base font-semibold flex items-center gap-2">
-                        <CreditCard className="h-4 w-4 text-tourtastic-blue" />
-                        Payment Information
-                      </h3>
+                          <CreditCard className="h-4 w-4 text-tourtastic-blue" />
+                          {t('booking.paymentInformation', 'Payment Information')}
+                        </h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
                           <p className="text-xs text-gray-500">{t('payment.amount', 'المبلغ')}</p>
-                          <p className="text-sm font-medium">${selectedBooking.flightDetails.selectedFlight.price.total}</p>
+                          <p className="text-sm font-medium">{formatSypFromUsd(selectedBooking.flightDetails.selectedFlight.price.total)}</p>
                         </div>
                         <div>
                           <p className="text-xs text-gray-500">{t('payment.status', 'حالة الدفع')}</p>
@@ -906,9 +967,9 @@ const Profile: React.FC = () => {
                     {/* Timeline */}
                     <div className="space-y-2">
                       <h3 className="text-base font-semibold flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-tourtastic-blue" />
-                        Booking Timeline
-                      </h3>
+                          <Calendar className="h-4 w-4 text-tourtastic-blue" />
+                          {t('booking.timeline', 'Booking Timeline')}
+                        </h3>
                       <div className="space-y-2">
                         {selectedBooking.timeline.map((event, index) => (
                           <div key={index} className="flex items-start gap-2">
@@ -924,6 +985,44 @@ const Profile: React.FC = () => {
                         ))}
                       </div>
                     </div>
+
+                    {/* Ticket PDF preview / link */}
+                    {ticketLoading ? (
+                      <div className="py-4 text-center">{t('booking.loadingTicket', 'Loading ticket...')}</div>
+                    ) : (
+                      ticketPreviewUrl && selectedBooking.status === 'done' && (
+                      <>
+                        <Separator />
+                        <div className="space-y-2">
+                          <h3 className="text-base font-semibold">{t('booking.ticket', 'E-ticket')}</h3>
+                          <p className="text-sm text-gray-600">{t('booking.ticketUploaded', 'E-ticket uploaded')}</p>
+                          <div className="mt-2">
+                            {ticketPreviewUrl.toLowerCase().endsWith('.pdf') ? (
+                              <div className="border rounded overflow-hidden">
+                                <iframe
+                                  src={ticketPreviewUrl}
+                                  title={t('booking.ticketPreview', 'Ticket Preview')}
+                                  className="w-full h-64"
+                                />
+                              </div>
+                            ) : (
+                              <p className="text-sm text-gray-500">{t('booking.ticketLinkAvailable', 'Ticket file available')}</p>
+                            )}
+                            <div className="mt-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                asChild={false}
+                                onClick={() => window.open(ticketPreviewUrl as string, '_blank', 'noopener')}
+                              >
+                                {t('booking.openTicket', 'Open Ticket (PDF)')}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                      )
+                    )}
                   </div>
                 )}
               </DialogContent>

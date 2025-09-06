@@ -8,6 +8,7 @@ const Home = lazy(() => import('./pages/Home'));
 const Flights = lazy(() => import('./pages/Flights'));
 const Destinations = lazy(() => import('./pages/Destinations'));
 const DestinationDetails = lazy(() => import('./pages/DestinationDetails'));
+const ProductManagement = lazy(() => import('./pages/ProductManagement'));
 const About = lazy(() => import('./pages/About'));
 const Contact = lazy(() => import('./pages/Contact'));
 const Login = lazy(() => import('./pages/Login'));
@@ -19,13 +20,12 @@ const Cart = lazy(() => import('./pages/Cart'));
 const Profile = lazy(() => import('./pages/Profile'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 const AdminLayout = lazy(() => import('./components/layout/AdminLayout'));
-const AdminDashboard = lazy(() => import('./pages/admin/Dashboard'));
 const AdminBookings = lazy(() => import('./pages/admin/Bookings'));
 const AdminProfile = lazy(() => import('./pages/admin/Profile'));
 const AdminUsers = lazy(() => import('./pages/admin/Users'));
 const AdminDestinations = lazy(() => import('./pages/admin/Destinations'));
 const AdminReports = lazy(() => import('./pages/admin/Reports'));
-
+const AdminSupport = lazy(() => import('./pages/admin/Support'));
 // Support pages
 const Support247 = lazy(() => import('./pages/support/Support247'));
 const HelpCenter = lazy(() => import('./pages/support/HelpCenter'));
@@ -45,12 +45,13 @@ const PageLoader = () => (
 const AppRoutes = () => {
   return (
     <Routes>
-      {/* Public Routes */}
+      {/* Public + User Routes wrapped by main site Layout (Header/Footer present) */}
       <Route element={<Layout><Outlet /></Layout>}>
         <Route index element={<Suspense fallback={<PageLoader />}><Home /></Suspense>} />
         <Route path="/flights" element={<Suspense fallback={<PageLoader />}><Flights /></Suspense>} />
         <Route path="/destinations" element={<Suspense fallback={<PageLoader />}><Destinations /></Suspense>} />
         <Route path="/destinations/:destinationId" element={<Suspense fallback={<PageLoader />}><DestinationDetails /></Suspense>} />
+        <Route path="/products" element={<Suspense fallback={<PageLoader />}><ProductManagement /></Suspense>} />
         <Route path="/about" element={<Suspense fallback={<PageLoader />}><About /></Suspense>} />
         <Route path="/contact" element={<Suspense fallback={<PageLoader />}><Contact /></Suspense>} />
         <Route path="/login" element={<Suspense fallback={<PageLoader />}><Login /></Suspense>} />
@@ -59,17 +60,9 @@ const AppRoutes = () => {
         <Route path="/payment/success" element={<Suspense fallback={<PageLoader />}><PaymentSuccess /></Suspense>} />
         <Route path="/cart" element={<Suspense fallback={<PageLoader />}><Cart /></Suspense>} />
 
-        {/* Protected User Routes */}
+        {/* Protected User Routes (still use main Layout) */}
         <Route path="/profile" element={<RequireAuth><Suspense fallback={<PageLoader />}><Profile /></Suspense></RequireAuth>} />
         <Route path="/notifications" element={<RequireAuth><Suspense fallback={<PageLoader />}><Notifications /></Suspense></RequireAuth>} />
-
-        {/* Admin Routes */}
-        <Route path="/admin" element={<RequireAuth><Suspense fallback={<PageLoader />}><AdminLayout><AdminDashboard /></AdminLayout></Suspense></RequireAuth>} />
-        <Route path="/admin/bookings" element={<RequireAuth><Suspense fallback={<PageLoader />}><AdminLayout><AdminBookings /></AdminLayout></Suspense></RequireAuth>} />
-        <Route path="/admin/users" element={<RequireAuth><Suspense fallback={<PageLoader />}><AdminLayout><AdminUsers /></AdminLayout></Suspense></RequireAuth>} />
-        <Route path="/admin/destinations" element={<RequireAuth><Suspense fallback={<PageLoader />}><AdminLayout><AdminDestinations /></AdminLayout></Suspense></RequireAuth>} />
-        <Route path="/admin/reports" element={<RequireAuth><Suspense fallback={<PageLoader />}><AdminLayout><AdminReports /></AdminLayout></Suspense></RequireAuth>} />
-        <Route path="/admin/profile" element={<RequireAuth><Suspense fallback={<PageLoader />}><AdminLayout><AdminProfile /></AdminLayout></Suspense></RequireAuth>} />
 
         {/* Support Pages */}
         <Route path="/support/247-support" element={<Suspense fallback={<PageLoader />}><Support247 /></Suspense>} />
@@ -80,9 +73,19 @@ const AppRoutes = () => {
         <Route path="/support/terms-conditions" element={<Suspense fallback={<PageLoader />}><TermsConditions /></Suspense>} />
         <Route path="/support/cookie-policy" element={<Suspense fallback={<PageLoader />}><CookiePolicy /></Suspense>} />
 
-        {/* 404 Route */}
+        {/* 404 Route (keeps main site chrome) */}
         <Route path="*" element={<Suspense fallback={<PageLoader />}><NotFound /></Suspense>} />
       </Route>
+
+      {/* Admin Routes - NOT wrapped by main site Layout so only AdminLayout is used */}
+
+  <Route path="/admin" element={<RequireAuth><Suspense fallback={<PageLoader />}><AdminLayout><AdminReports /></AdminLayout></Suspense></RequireAuth>} />
+  <Route path="/admin/bookings" element={<RequireAuth><Suspense fallback={<PageLoader />}><AdminLayout><AdminBookings /></AdminLayout></Suspense></RequireAuth>} />
+      <Route path="/admin/users" element={<RequireAuth><Suspense fallback={<PageLoader />}><AdminLayout><AdminUsers /></AdminLayout></Suspense></RequireAuth>} />
+      <Route path="/admin/destinations" element={<RequireAuth><Suspense fallback={<PageLoader />}><AdminLayout><AdminDestinations /></AdminLayout></Suspense></RequireAuth>} />
+      <Route path="/admin/reports" element={<RequireAuth><Suspense fallback={<PageLoader />}><AdminLayout><AdminReports /></AdminLayout></Suspense></RequireAuth>} />
+      <Route path="/admin/profile" element={<RequireAuth><Suspense fallback={<PageLoader />}><AdminLayout><AdminProfile /></AdminLayout></Suspense></RequireAuth>} />
+  <Route path="/admin/support" element={<RequireAuth><Suspense fallback={<PageLoader />}><AdminLayout><AdminSupport /></AdminLayout></Suspense></RequireAuth>} />
     </Routes>
   );
 };

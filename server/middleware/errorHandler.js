@@ -7,6 +7,16 @@ const errorHandler = (err, req, res, next) => {
   console.error("Error Stack:", err.stack);
   console.error("Full Error Object:", err);
 
+  // Multer errors (file upload middleware) - provide clearer client-facing messages
+  // Multer sets err.name === 'MulterError' and err.code values like 'LIMIT_FILE_SIZE' or 'LIMIT_UNEXPECTED_FILE'
+  if (err && (err.name === 'MulterError' || typeof err.code === 'string' && err.code.startsWith('LIMIT_'))) {
+    let message = 'File upload error';
+    if (err.code === 'LIMIT_FILE_SIZE') message = 'Uploaded file is too large';
+    else if (err.code === 'LIMIT_UNEXPECTED_FILE') message = `Unexpected file field: ${err.field || 'unknown'}`;
+    else message = err.message || String(err);
+    error = { statusCode: 400, message };
+  }
+
   // Mongoose bad ObjectId
   if (err.name === "CastError") {
     const message = `Resource not found with id of ${err.value}`;

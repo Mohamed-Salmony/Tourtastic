@@ -22,12 +22,8 @@ export interface Destination {
   shopping: LocalizedArray[];
   bestTimeToVisit: LocalizedString;
   quickInfo: {
-    airport: string | {
-      code: string;
-      en: string;
-      ar: string;
-    };
-    timeZone: string | LocalizedString;
+  airport: string;
+  timeZone: string;
   };
   // Remove airportCode since it doesn't exist in the database model
   popular: boolean;
@@ -50,10 +46,41 @@ export const getDestination = async (id: string): Promise<Destination> => {
   return response.data.data;
 };
 
+export const updateDestination = async (id: string, data: Partial<Destination>): Promise<Destination> => {
+  // Admin update endpoint - server expects this under /api/admin/destinations/:id
+  // Support FormData (for file upload)
+  let response;
+  if (data instanceof FormData) {
+  response = await api.put(`/admin/destinations/${id}`, data);
+  } else {
+    response = await api.put(`/admin/destinations/${id}`, data);
+  }
+  if (!response.data.success) {
+    throw new Error(response.data.message || 'Failed to update destination');
+  }
+  return response.data.data;
+};
+
+export const createDestination = async (data: FormData): Promise<Destination> => {
+  const response = await api.post('/admin/destinations', data);
+  if (!response.data.success) {
+    throw new Error(response.data.message || 'Failed to create destination');
+  }
+  return response.data.data;
+};
+
 export const updateDestinationPopular = async (id: string, popular: boolean): Promise<Destination> => {
   const response = await api.patch(`/destinations/${id}/popular`, { popular });
   if (!response.data.success) {
     throw new Error(response.data.message || 'Failed to update destination');
   }
   return response.data.data;
+};
+
+export const deleteDestination = async (id: string): Promise<void> => {
+  const response = await api.delete(`/admin/destinations/${id}`);
+  if (!response.data.success) {
+    throw new Error(response.data.message || 'Failed to delete destination');
+  }
+  return;
 };

@@ -23,6 +23,7 @@ const {
     getAllFlightBookings,
     getFlightBookingById,
     updateFlightBooking,
+    deleteFlightBooking,
     uploadFlightTicket,
     sendFlightTicket
 } = require("../controllers/adminController");
@@ -64,11 +65,11 @@ router.route("/users/:id")
 // Destination Management (CRUD operations)
 router.route("/destinations")
     // Use upload middleware for POST request to handle potential destination image upload
-    // It expects the file field name to be 'destinationImage'
-    .post(upload.single("destinationImage"), createDestination); 
+    // Temporarily accept any file field (destinationImage or image) to diagnose client/server mismatch
+    .post(upload.any(), createDestination); 
 router.route("/destinations/:id")
     // Use upload middleware for PUT request to handle potential destination image upload
-    .put(upload.single("destinationImage"), updateDestination)
+    .put(upload.any(), updateDestination)
     .delete(deleteDestination); 
 
 // Newsletter Management
@@ -87,6 +88,9 @@ router.route("/flight-bookings")
 router.route("/flight-bookings/:bookingId")
     .get(getFlightBookingById)
     .put(updateFlightBooking);
+
+// Allow admin deletion of flight bookings
+router.route('/flight-bookings/:bookingId').delete(deleteFlightBooking);
 
 router.post(
     "/flight-bookings/:bookingId/upload-ticket",

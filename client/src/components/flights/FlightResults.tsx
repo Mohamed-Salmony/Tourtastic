@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
 import { Plane, Info, ShoppingCart } from 'lucide-react';
@@ -10,6 +10,7 @@ import { getAirlineLogo, formatBaggage } from './utils/flightHelpers';
 import { getAirportsMap } from '../../services/airportService';
 import type { Airport as ApiAirport } from '../../services/airportService';
 import type { FlightSegment } from '../../services/flightService';
+import { formatSypFromUsd } from '@/utils/currency';
 
 // Helper function to get time of day
 const getTimeOfDay = (dateString: string) => {
@@ -150,7 +151,8 @@ const FlightCard: React.FC<FlightCardProps> = ({
   onAddToCart
   , airportsMap
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  // local expanded removed; mobile taps call onFlightSelection to show details
 
   const getAirlineDisplay = (segment: FlightSegment) => {
     const airlineName = segment.airline_name || segment.iata;
@@ -196,11 +198,54 @@ const FlightCard: React.FC<FlightCardProps> = ({
   }, [flight.search_query, flight.price_breakdowns, flight.total_price, flight.price, flight.tax]);
 
   return (
-    <Card className={`p-6 hover:shadow-lg transition-all duration-200 cursor-pointer border-l-4 ${selectedFlight?.trip_id === flight.trip_id
+    <Card className={`p-4 md:p-6 hover:shadow-lg transition-all duration-200 cursor-pointer border-l-4 ${selectedFlight?.trip_id === flight.trip_id
         ? 'border-l-tourtastic-blue bg-blue-50'
         : 'border-l-transparent hover:border-l-tourtastic-blue'
       }`}>
-      <div className="flex flex-col lg:flex-row lg:items-center gap-6">
+      {/* Compact header for mobile: tap the ticket to open details (buttons removed on mobile) */}
+      <div
+        className="md:hidden flex items-center justify-between gap-4 cursor-pointer"
+        role="button"
+        tabIndex={0}
+        onClick={() => onFlightSelection(flight)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onFlightSelection(flight); } }}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <img
+            src={getAirlineLogo(flight.legs[0].segments[0].iata)}
+            alt={flight.legs[0].segments[0].iata}
+            className="h-10 w-10 object-contain"
+            onError={(e) => { e.currentTarget.src = '/placeholder.svg'; }}
+          />
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-gray-900 truncate">
+              {/* show arrow direction based on language (RTL should reverse) */}
+              {(() => {
+                const arrow = i18n?.language === 'ar' ? '←' : '→';
+                return `${getAirportDisplay(flight.legs[0].segments[0].from).city} ${arrow} ${getAirportDisplay(flight.legs[flight.legs.length - 1].segments.slice(-1)[0].to).city}`;
+              })()}
+            </div>
+            <div className="text-xs text-gray-500 truncate">
+              {flight.legs[0].segments[0].iata} {flight.legs[0].segments[0].flightnumber}
+            </div>
+            {/* Trip date for mobile */}
+            <div className="text-xs text-gray-400 truncate mt-0.5">
+              {format(new Date(flight.legs[0].segments[0].from.date), 'EEE, MMM d')}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <div className="text-lg font-bold text-gray-900">{formatSypFromUsd(totalPrice)}</div>
+            <div className="text-xs text-gray-500">{t('perPerson', 'per person')}</div>
+          </div>
+          {/* mobile: buttons removed to make header tappable */}
+        </div>
+      </div>
+
+  {/* Full card: hidden on mobile, visible on md+ */}
+  <div className="hidden md:block">
+    <div className="flex flex-col lg:flex-row lg:items-center gap-6">
         {/* Flight Info Section */}
         <div className="flex-1 space-y-4">
           {/* Date and Flight Number */}
@@ -304,19 +349,19 @@ const FlightCard: React.FC<FlightCardProps> = ({
             {/* Per Person Price (Adult Rate) - Show First */}
             <div className="text-center lg:text-right">
               <div className="text-2xl font-bold text-gray-900">
-                {flight.currency} {((flight.price_breakdowns?.ADT?.total || 0)).toFixed(2)}
+                {formatSypFromUsd(flight.price_breakdowns?.ADT?.total || 0)}
               </div>
               <div className="text-sm text-gray-500">
                 {t('perPerson', 'per person')}
               </div>
               <div className="text-xs text-gray-400">
-                {t('baseFare', 'Base')}: {flight.currency} {(flight.price_breakdowns?.ADT?.price || 0).toFixed(2)} + 
-                {t('taxes', 'Taxes')}: {flight.currency} {(flight.price_breakdowns?.ADT?.tax || 0).toFixed(2)}
+                {t('baseFare', 'Base')}: {formatSypFromUsd(flight.price_breakdowns?.ADT?.price || 0)} + 
+                {t('taxes', 'Taxes')}: {formatSypFromUsd(flight.price_breakdowns?.ADT?.tax || 0)}
               </div>
             </div>          {/* Total Price for All Passengers - Show Second */}
           <div className="text-center lg:text-right">
             <div className="text-lg font-semibold text-tourtastic-blue">
-              {t('total', 'Total')}: {flight.currency} {totalPrice.toFixed(2)}
+              {t('total', 'Total')}: {formatSypFromUsd(totalPrice)}
             </div>
             <div className="text-xs text-gray-600">
               {(flight.search_query?.adt || 0) > 0 && `${flight.search_query.adt} ${t('adults', 'Adults')}`}
@@ -350,7 +395,34 @@ const FlightCard: React.FC<FlightCardProps> = ({
         </div>
       </div>
 
-      {/* Flight Details Sectio */}
+      {/* Mobile small details: show only the compact details when this flight is selected on mobile */}
+      { (selectedFlight?.trip_id === flight.trip_id || showDetails === flight.trip_id) && (
+        <div className="md:hidden mt-2 p-3 bg-white border rounded-lg shadow-sm">
+          <div className="flex items-start justify-between">
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-gray-900">
+                {(() => {
+                  const arrow = i18n?.language === 'ar' ? '←' : '→';
+                  return `${getAirportDisplay(flight.legs[0].segments[0].from).city} ${arrow} ${getAirportDisplay(flight.legs[flight.legs.length - 1].segments.slice(-1)[0].to).city}`;
+                })()}
+              </div>
+              <div className="text-xs text-gray-500">{flight.legs[0].segments[0].iata} {flight.legs[0].segments[0].flightnumber}</div>
+              <div className="text-xs text-gray-400 mt-0.5">{format(new Date(flight.legs[0].segments[0].from.date), 'EEE, MMM d')}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-sm font-semibold text-tourtastic-blue">{formatSypFromUsd(totalPrice)}</div>
+              <div className="text-xs text-gray-500">{t('perPerson', 'per person')}</div>
+            </div>
+          </div>
+          <div className="mt-3 text-xs text-gray-700">
+            <div>{t('baggage', 'Baggage')}: {formatBaggage(flight.baggage_allowance || flight.legs[0]?.bags?.ADT?.checked?.desc || '', t)}</div>
+            <div className="mt-2">{t('refundable', 'Refundable')}: {flight.can_refund ? t('yes', 'Yes') : t('no', 'No')}</div>
+          </div>
+        </div>
+      )}
+
+  </div>
+  {/* Flight Details Sectio */}
       {showDetails === flight.trip_id && (
         <div className="mt-6 pt-6 border-t">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -408,13 +480,13 @@ const FlightCard: React.FC<FlightCardProps> = ({
                         {flight.search_query.adt} × {t('adultPassenger', 'Adult')}
                       </span>
                       <div className="text-right">
-                        <div>{flight.currency} {flight.price_breakdowns.ADT.total.toFixed(2)} {t('perPerson', 'per person')}</div>
+                        <div>{formatSypFromUsd(flight.price_breakdowns.ADT.total)} {t('perPerson', 'per person')}</div>
                         <div className="text-xs text-gray-500">
-                          {t('baseFare', 'Base')}: {flight.currency} {flight.price_breakdowns.ADT.price.toFixed(2)} + 
-                          {t('taxes', 'Taxes')}: {flight.currency} {flight.price_breakdowns.ADT.tax.toFixed(2)}
+                          {t('baseFare', 'Base')}: {formatSypFromUsd(flight.price_breakdowns.ADT.price)} + 
+                          {t('taxes', 'Taxes')}: {formatSypFromUsd(flight.price_breakdowns.ADT.tax)}
                         </div>
                         <div className="text-xs text-gray-500">
-                          {t('subtotalAmount', 'Subtotal')}: {flight.currency} {(flight.price_breakdowns.ADT.total * flight.search_query.adt).toFixed(2)}
+                          {t('subtotalAmount', 'Subtotal')}: {formatSypFromUsd((flight.price_breakdowns.ADT.total || 0) * (flight.search_query?.adt || 0))}
                         </div>
                       </div>
                     </div>
@@ -427,13 +499,13 @@ const FlightCard: React.FC<FlightCardProps> = ({
                         {flight.search_query.chd} × {flight.price_breakdowns.CHD.label || t('children', 'Children')}
                       </span>
                       <div className="text-right">
-                        <div>{flight.currency} {flight.price_breakdowns.CHD.total.toFixed(2)} {t('each', 'each')}</div>
+                        <div>{formatSypFromUsd(flight.price_breakdowns.CHD.total)} {t('each', 'each')}</div>
                         <div className="text-xs text-gray-500">
-                          {t('base', 'Base')}: {flight.currency} {flight.price_breakdowns.CHD.price.toFixed(2)} + 
-                          {t('tax', 'Tax')}: {flight.currency} {flight.price_breakdowns.CHD.tax.toFixed(2)}
+                          {t('base', 'Base')}: {formatSypFromUsd(flight.price_breakdowns.CHD.price)} + 
+                          {t('tax', 'Tax')}: {formatSypFromUsd(flight.price_breakdowns.CHD.tax)}
                         </div>
                         <div className="text-xs text-gray-500">
-                          {t('subtotal', 'Subtotal')}: {flight.currency} {(flight.price_breakdowns.CHD.total * flight.search_query.chd).toFixed(2)}
+                          {t('subtotal', 'Subtotal')}: {formatSypFromUsd((flight.price_breakdowns.CHD.total || 0) * (flight.search_query?.chd || 0))}
                         </div>
                       </div>
                     </div>
@@ -446,13 +518,13 @@ const FlightCard: React.FC<FlightCardProps> = ({
                         {flight.search_query.inf} × {flight.price_breakdowns.INF.label || t('infants', 'Infants')}
                       </span>
                       <div className="text-right">
-                        <div>{flight.currency} {flight.price_breakdowns.INF.total.toFixed(2)} {t('each', 'each')}</div>
+                        <div>{formatSypFromUsd(flight.price_breakdowns.INF.total)} {t('each', 'each')}</div>
                         <div className="text-xs text-gray-500">
-                          {t('base', 'Base')}: {flight.currency} {flight.price_breakdowns.INF.price.toFixed(2)} + 
-                          {t('tax', 'Tax')}: {flight.currency} {flight.price_breakdowns.INF.tax.toFixed(2)}
+                          {t('base', 'Base')}: {formatSypFromUsd(flight.price_breakdowns.INF.price)} + 
+                          {t('tax', 'Tax')}: {formatSypFromUsd(flight.price_breakdowns.INF.tax)}
                         </div>
                         <div className="text-xs text-gray-500">
-                          {t('subtotal', 'Subtotal')}: {flight.currency} {(flight.price_breakdowns.INF.total * flight.search_query.inf).toFixed(2)}
+                          {t('subtotal', 'Subtotal')}: {formatSypFromUsd((flight.price_breakdowns.INF.total || 0) * (flight.search_query?.inf || 0))}
                         </div>
                       </div>
                     </div>
@@ -463,7 +535,7 @@ const FlightCard: React.FC<FlightCardProps> = ({
                 <div className="border-t pt-2 space-y-1">
                   <div className="flex justify-between font-semibold text-lg">
                     <span>{t('grandTotal', 'Grand Total')}</span>
-                    <span>{flight.currency} {totalPrice.toFixed(2)}</span>
+                    <span>{formatSypFromUsd(totalPrice)}</span>
                   </div>
                 </div>
               </div>

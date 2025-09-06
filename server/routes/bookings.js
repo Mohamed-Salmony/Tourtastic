@@ -2,6 +2,7 @@ const express = require("express");
 const {
   createBooking,
   getMyBookings,
+  getTicketUrl,
 } = require("../controllers/bookingController");
 const { protect } = require("../middleware/auth");
 
@@ -12,6 +13,9 @@ router.use(protect);
 
 router.route("/").post(createBooking);
 router.route("/my").get(getMyBookings);
+
+// Return a usable URL for an uploaded ticket (public or signed)
+router.route('/:id/ticket-url').get(getTicketUrl);
 
 const { deleteBooking, updateBooking } = require('../controllers/bookingController');
 // Allow users to delete or update their own bookings

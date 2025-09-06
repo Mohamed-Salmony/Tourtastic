@@ -31,6 +31,10 @@ const NotificationSchema = new mongoose.Schema({
     enum: ["welcome", "booking", "payment", "profile", "cart", "system"],
     required: true
   },
+  pdfUrl: {
+    type: String,
+    default: null
+  },
   read: {
     type: Boolean,
     default: false
