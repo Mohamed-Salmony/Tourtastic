@@ -107,19 +107,43 @@ exports.getDashboardStats = asyncHandler(async (req, res, next) => {
 // @desc    Get data for reports
 // @route   GET /api/admin/reports
 // @access  Private/Admin
-// Helper: compute monthly revenue for a given year
+// Helper: compute monthly revenue for a given year from FlightBooking
 const computeRevenueByMonth = async (year) => {
   const start = new Date(year, 0, 1);
   const end = new Date(year + 1, 0, 1);
-  const agg = await Booking.aggregate([
-    { $match: { bookingDate: { $gte: start, $lt: end } } },
-    { $group: { _id: { $month: "$bookingDate" }, total: { $sum: { $ifNull: ["$amount", 0] } } } },
+  const agg = await FlightBooking.aggregate([
+    { $match: { createdAt: { $gte: start, $lt: end }, status: { $in: ['done','confirmed'] } } },
+    {
+      $addFields: {
+        txnTotal: {
+          $sum: {
+            $map: {
+              input: { $ifNull: ['$paymentDetails.transactions', []] },
+              as: 't',
+              in: { $ifNull: ['$$t.amount', 0] }
+            }
+          }
+        }
+      }
+    },
+    {
+      $group: {
+        _id: { $month: '$createdAt' },
+        total: {
+          $sum: {
+            $ifNull: [
+              '$paymentDetails.amount',
+              { $ifNull: ['$txnTotal', { $ifNull: ['$flightDetails.selectedFlight.price.total', 0] }] }
+            ]
+          }
+        }
+      }
+    },
     { $sort: { _id: 1 } }
   ]);
-  // Build array for 12 months
   const months = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, total: 0 }));
-  agg.forEach(a => { months[a._id - 1].total = a.total; });
-  return months.map(m => m.total);
+  agg.forEach(a => { if (a._id >= 1 && a._id <= 12) months[a._id - 1].total = a.total; });
+  return months.map(m => m.total || 0);
 };
 
 // @desc Get data for reports
@@ -128,14 +152,19 @@ exports.getReports = asyncHandler(async (req, res, next) => {
   const year = parseInt(req.query.year) || new Date().getFullYear();
   const lastYear = year - 1;
 
-  // total revenue and bookings
-  const revenueThisYearAgg = await Booking.aggregate([
-    { $match: { bookingDate: { $gte: new Date(year, 0, 1), $lt: new Date(year + 1, 0, 1) } } },
-    { $group: { _id: null, total: { $sum: { $ifNull: ["$amount", 0] } }, count: { $sum: 1 } } }
+  // total revenue and bookings - from FlightBooking
+  const yearlyMatch = { createdAt: { $gte: new Date(year, 0, 1), $lt: new Date(year + 1, 0, 1) }, status: { $in: ['done','confirmed'] } };
+  const lastYearMatch = { createdAt: { $gte: new Date(lastYear, 0, 1), $lt: new Date(lastYear + 1, 0, 1) }, status: { $in: ['done','confirmed'] } };
+
+  const revenueThisYearAgg = await FlightBooking.aggregate([
+    { $match: yearlyMatch },
+    { $addFields: { txnTotal: { $sum: { $map: { input: { $ifNull: ['$paymentDetails.transactions', []] }, as: 't', in: { $ifNull: ['$$t.amount', 0] } } } } } },
+    { $group: { _id: null, total: { $sum: { $ifNull: ['$paymentDetails.amount', { $ifNull: ['$txnTotal', { $ifNull: ['$flightDetails.selectedFlight.price.total', 0] }] }] } }, count: { $sum: 1 } } }
   ]);
-  const revenueLastYearAgg = await Booking.aggregate([
-    { $match: { bookingDate: { $gte: new Date(lastYear, 0, 1), $lt: new Date(lastYear + 1, 0, 1) } } },
-    { $group: { _id: null, total: { $sum: { $ifNull: ["$amount", 0] } }, count: { $sum: 1 } } }
+  const revenueLastYearAgg = await FlightBooking.aggregate([
+    { $match: lastYearMatch },
+    { $addFields: { txnTotal: { $sum: { $map: { input: { $ifNull: ['$paymentDetails.transactions', []] }, as: 't', in: { $ifNull: ['$$t.amount', 0] } } } } } },
+    { $group: { _id: null, total: { $sum: { $ifNull: ['$paymentDetails.amount', { $ifNull: ['$txnTotal', { $ifNull: ['$flightDetails.selectedFlight.price.total', 0] }] }] } }, count: { $sum: 1 } } }
   ]);
 
   const totalRevenue = (revenueThisYearAgg[0] && revenueThisYearAgg[0].total) || 0;
@@ -149,35 +178,40 @@ exports.getReports = asyncHandler(async (req, res, next) => {
   // revenue by month
   const revenueByMonth = await computeRevenueByMonth(year);
 
-  // booking distribution by destination
-  const distAgg = await Booking.aggregate([
-    { $group: { _id: "$destination", count: { $sum: 1 } } },
+  // booking distribution by destination (FlightBooking), include done and pending
+  const distAgg = await FlightBooking.aggregate([
+    { $match: { status: { $in: ['done','pending'] } } },
+    { $group: { _id: '$flightDetails.to', count: { $sum: 1 } } },
     { $sort: { count: -1 } },
     { $limit: 50 }
   ]);
   const totalDist = distAgg.reduce((s, d) => s + d.count, 0) || 1;
   const bookingDistribution = distAgg.map(d => ({ name: d._id || 'Unknown', value: d.count, percent: Math.round((d.count / totalDist) * 100) }));
 
-  // top destinations (compare with last year's counts)
+  // top destinations (compare with last year's counts) based on FlightBooking
   const topDestinations = await Promise.all(distAgg.slice(0, 10).map(async (d) => {
     const city = d._id || 'Unknown';
     const thisCount = d.count;
-    const lastAgg = await Booking.aggregate([
-      { $match: { destination: city, bookingDate: { $gte: new Date(lastYear, 0, 1), $lt: new Date(lastYear + 1, 0, 1) } } },
-      { $group: { _id: "$destination", count: { $sum: 1 } } }
+    const lastAgg = await FlightBooking.aggregate([
+      { $match: { 'flightDetails.to': city, createdAt: { $gte: new Date(lastYear, 0, 1), $lt: new Date(lastYear + 1, 0, 1) } } },
+      { $group: { _id: '$flightDetails.to', count: { $sum: 1 } } }
     ]);
     const lastCount = (lastAgg[0] && lastAgg[0].count) || 0;
     const growth = lastCount > 0 ? Math.round(((thisCount - lastCount) / lastCount) * 100) : 0;
     return { destination: city, bookings: thisCount, growthPercent: growth };
   }));
 
-  // search logs (recent 50)
-  const searchLogs = await SearchLog.find().sort({ searchedAt: -1 }).limit(50).lean();
+  // search logs aggregated (top 50 routes with counts)
+  const searchLogsAgg = await require('../models/SearchLog').aggregate([
+    { $group: { _id: { from: '$from', to: '$to' }, count: { $sum: 1 }, lastSearchedAt: { $max: '$searchedAt' } } },
+    { $sort: { count: -1, lastSearchedAt: -1 } },
+    { $limit: 50 }
+  ]);
+  const searchLogs = searchLogsAgg.map(s => ({ from: s._id.from, to: s._id.to, count: s.count, lastSearchedAt: s.lastSearchedAt }));
 
   res.status(200).json({ success: true, data: {
     totalRevenue,
     totalBookings,
-    customerSatisfaction: 87, // placeholder
     growthRate: { revenue: growthRateRevenue, bookings: growthRateBookings },
     revenueByMonth,
     bookingDistribution,
@@ -186,38 +220,66 @@ exports.getReports = asyncHandler(async (req, res, next) => {
   } });
 });
 
-// @desc    Download report (e.g., CSV)
+// @desc    Download report (XLSX/CSV) with full FlightBooking details
 // @route   GET /api/admin/reports/download
 // @access  Private/Admin
 exports.downloadReport = asyncHandler(async (req, res, next) => {
-  // Export bookings/orders to XLSX
-  const bookings = await Booking.find().populate('userId', 'name email').lean();
+  // Pull flight bookings with rich details
+  const bookings = await FlightBooking.find().lean();
+
+  // Robust amount computation per booking
+  const computeAmount = (b) => {
+    const pd = b?.paymentDetails || {};
+    const txSum = Array.isArray(pd.transactions)
+      ? pd.transactions.reduce((s, t) => s + (Number(t?.amount) || 0), 0)
+      : 0;
+    const selectedPrice = b?.flightDetails?.selectedFlight?.price?.total || 0;
+    return Number(pd.amount) || txSum || selectedPrice || 0;
+  };
+
+  const safe = (v) => (v == null ? '' : v);
+
+  const rows = bookings.map((b) => ({
+    bookingId: safe(b.bookingId || b._id),
+    status: safe(b.status),
+    customerName: safe(b.customerName),
+    customerEmail: safe(b.customerEmail),
+    customerPhone: safe(b.customerPhone),
+    createdAt: b.createdAt ? new Date(b.createdAt).toISOString() : '',
+    updatedAt: b.updatedAt ? new Date(b.updatedAt).toISOString() : '',
+    // Flight details
+    from: safe(b.flightDetails?.from || b.flightDetails?.fromAirportCode),
+    to: safe(b.flightDetails?.to || b.flightDetails?.toAirportCode),
+    departureDate: b.flightDetails?.departureDate ? new Date(b.flightDetails.departureDate).toISOString() : '',
+    returnDate: b.flightDetails?.returnDate ? new Date(b.flightDetails.returnDate).toISOString() : '',
+    passengers_adults: safe(b.flightDetails?.passengerDetails ? b.flightDetails.passengerDetails.filter(p=>p?.type?.toUpperCase?.()==='ADT').length : b.flightDetails?.passengers?.adults),
+    passengers_children: safe(b.flightDetails?.passengerDetails ? b.flightDetails.passengerDetails.filter(p=>p?.type?.toUpperCase?.()==='CHD').length : b.flightDetails?.passengers?.children),
+    passengers_infants: safe(b.flightDetails?.passengerDetails ? b.flightDetails.passengerDetails.filter(p=>p?.type?.toUpperCase?.()==='INF').length : b.flightDetails?.passengers?.infants),
+    airline: safe(b.flightDetails?.selectedFlight?.airline || b.flightDetails?.selectedFlight?.airline_name),
+    airlineCode: safe(b.flightDetails?.selectedFlight?.airlineCode),
+    flightId: safe(b.flightDetails?.selectedFlight?.flightId),
+    departureTime: safe(b.flightDetails?.selectedFlight?.departureTime),
+    arrivalTime: safe(b.flightDetails?.selectedFlight?.arrivalTime),
+    currency: safe(b.flightDetails?.selectedFlight?.price?.currency || b.paymentDetails?.currency),
+    amount: computeAmount(b),
+    // Ticket details
+    ticketNumber: safe(b.ticketDetails?.ticketNumber),
+    pnr: safe(b.ticketDetails?.pnr),
+    eTicketPath: safe(b.ticketDetails?.eTicketPath)
+  }));
 
   // Build workbook using exceljs if available, otherwise fallback to CSV
   let ExcelJS;
   try { ExcelJS = require('exceljs'); } catch (e) { ExcelJS = null; }
-  const rows = bookings.map(b => ({
-    bookingId: b.bookingId || b._id,
-    user: (b.userId && (b.userId.name || b.userId.email)) || '',
-    from: (b.details && b.details.flightDetails && b.details.flightDetails.from) || '',
-    to: (b.details && b.details.flightDetails && b.details.flightDetails.to) || b.destination || '',
-    bookingDate: b.bookingDate ? new Date(b.bookingDate).toISOString() : (b.createdAt ? new Date(b.createdAt).toISOString() : ''),
-    amount: b.amount || 0,
-    status: b.status || ''
-  }));
 
-  if (ExcelJS) {
+  if (ExcelJS && rows.length > 0) {
     try {
       const workbook = new ExcelJS.Workbook();
       const sheet = workbook.addWorksheet('Orders');
-
-      // Define columns
-      const cols = Object.keys(rows[0] || {}).map(k => ({ header: k, key: k }));
+      // Define columns based on rows keys
+      const cols = Object.keys(rows[0]).map(k => ({ header: k, key: k }));
       sheet.columns = cols;
-
-      // Add rows
       rows.forEach(r => sheet.addRow(r));
-
       const buffer = await workbook.xlsx.writeBuffer();
       res.setHeader('Content-Disposition', 'attachment; filename="tourtastic_orders.xlsx"');
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -228,9 +290,14 @@ exports.downloadReport = asyncHandler(async (req, res, next) => {
     }
   }
 
-  // Fallback to CSV
-  const header = Object.keys(rows[0] || {}).join(',') + '\n';
-  const csv = rows.map(r => Object.values(r).map(v => `"${String(v || '')}"`).join(',')).join('\n');
+  // Fallback to CSV (even if rows empty, produce header)
+  const headers = rows.length > 0 ? Object.keys(rows[0]) : [
+    'bookingId','status','customerName','customerEmail','customerPhone','createdAt','updatedAt',
+    'from','to','departureDate','returnDate','passengers_adults','passengers_children','passengers_infants',
+    'airline','airlineCode','flightId','departureTime','arrivalTime','currency','amount','ticketNumber','pnr','eTicketPath'
+  ];
+  const header = headers.join(',') + '\n';
+  const csv = rows.map(r => headers.map(h => `"${String(r[h] ?? '')}"`).join(',')).join('\n');
   const csvContent = header + csv;
   res.setHeader('Content-Disposition', 'attachment; filename="tourtastic_orders.csv"');
   res.setHeader('Content-Type', 'text/csv');
@@ -492,7 +559,8 @@ exports.createDestination = asyncHandler(async (req, res, next) => {
     try {
       const { uploadFile } = require('../utils/gcsStorage');
       const ext = require('path').extname(uploaded.path) || '.jpg';
-      const destPath = `destinations/${Date.now()}-${Math.round(Math.random()*1e9)}${ext}`;
+      const prefix = process.env.GCP_UPLOAD_PREFIX_DESTINATIONS || 'destinations';
+      const destPath = `${prefix}/${Date.now()}-${Math.round(Math.random()*1e9)}${ext}`;
       const publicUrl = await uploadFile(uploaded.path, destPath, uploaded.mimetype || 'image/jpeg');
       data.image = publicUrl;
     } catch (err) {
@@ -504,7 +572,8 @@ exports.createDestination = asyncHandler(async (req, res, next) => {
   // If buffer exists (unlikely with diskStorage) handle buffer upload
   if (uploaded && uploaded.buffer) {
     try {
-      const destPath = `destinations/${Date.now()}-${Math.round(Math.random()*1e9)}.jpg`;
+      const prefix = process.env.GCP_UPLOAD_PREFIX_DESTINATIONS || 'destinations';
+      const destPath = `${prefix}/${Date.now()}-${Math.round(Math.random()*1e9)}.jpg`;
       const { uploadBuffer } = require('../utils/gcsStorage');
       const publicUrl = await uploadBuffer(uploaded.buffer, destPath, uploaded.mimetype || 'image/jpeg');
       data.image = publicUrl;
@@ -624,15 +693,40 @@ exports.updateDestination = asyncHandler(async (req, res, next) => {
   const updateData = { ...req.body };
   updateData.updatedAt = Date.now(); // Manually update updatedAt
 
-  if (req.file) {
-      // Delete old image if it exists
-      if (destination.imageUrl) {
-          const oldPath = path.join(__dirname, '..', destination.imageUrl);
-          fs.unlink(oldPath, (err) => {
-              if (err) console.error("Error deleting old destination image:", oldPath, err);
-          });
-      }
-      updateData.imageUrl = req.file.path.replace(/^\.\//, ''); // Store new relative path
+  // Find an uploaded file from multer (accept any field like destinationImage or image)
+  const uploaded = (() => {
+    if (req.file) return req.file;
+    if (Array.isArray(req.files) && req.files.length > 0) {
+      const found = req.files.find(f => f.fieldname === 'destinationImage' || f.fieldname === 'image');
+      return found || req.files[0];
+    }
+    return null;
+  })();
+
+  if (uploaded && uploaded.path && !uploaded.buffer) {
+    try {
+      const { uploadFile } = require('../utils/gcsStorage');
+      const ext = require('path').extname(uploaded.path) || '.jpg';
+      const prefix = process.env.GCP_UPLOAD_PREFIX_DESTINATIONS || 'destinations';
+      const destPath = `${prefix}/${Date.now()}-${Math.round(Math.random()*1e9)}${ext}`;
+      const publicUrl = await uploadFile(uploaded.path, destPath, uploaded.mimetype || 'image/jpeg');
+      updateData.image = publicUrl;
+      // optionally remove old local file reference if existed
+    } catch (err) {
+      console.error('GCS upload (admin.updateDestination local file) failed:', err);
+      return res.status(500).json({ success: false, error: 'Image upload failed', details: String(err) });
+    }
+  } else if (uploaded && uploaded.buffer) {
+    try {
+      const { uploadBuffer } = require('../utils/gcsStorage');
+      const prefix = process.env.GCP_UPLOAD_PREFIX_DESTINATIONS || 'destinations';
+      const destPath = `${prefix}/${Date.now()}-${Math.round(Math.random()*1e9)}.jpg`;
+      const publicUrl = await uploadBuffer(uploaded.buffer, destPath, uploaded.mimetype || 'image/jpeg');
+      updateData.image = publicUrl;
+    } catch (err) {
+      console.error('GCS upload (admin.updateDestination buffer) failed:', err);
+      return res.status(500).json({ success: false, error: 'Image upload failed', details: String(err) });
+    }
   }
 
   destination = await Destination.findByIdAndUpdate(req.params.id, updateData, {
@@ -904,29 +998,20 @@ exports.uploadFlightTicket = asyncHandler(async (req, res, next) => {
     });
   }
 
-  // If Google Cloud Storage is configured, upload file there and use public URL
+  // Upload file to GCS via centralized util and use returned URL; fallback to local path if it fails
   let publicUrl = null;
   if (req.file) {
     const localPath = req.file.path;
     const originalName = req.file.originalname || path.basename(localPath);
-    // Allow either GCLOUD_BUCKET or GCP_BUCKET_NAME (the repo .env uses GCP_BUCKET_NAME)
-    const bucketName = process.env.GCLOUD_BUCKET || process.env.GCP_BUCKET_NAME || process.env.GCP_BUCKET;
-    if (Storage && bucketName) {
-      try {
-        const storage = new Storage();
-  const bucket = storage.bucket(bucketName);
-        const dest = `tickets/${booking.bookingId}/${Date.now()}_${originalName}`;
-        // Upload local file to GCS
-        await bucket.upload(localPath, { destination: dest, metadata: { contentType: req.file.mimetype || 'application/pdf' } });
-        // make public (optional - required if you want direct https URL)
-        try { await bucket.file(dest).makePublic(); } catch (e) { /* ignore */ }
-        publicUrl = `https://storage.googleapis.com/${bucketName}/${dest}`;
-      } catch (err) {
-        console.error('GCS upload failed, falling back to local storage', err);
-        publicUrl = null;
-      }
+    const prefix = process.env.GCP_UPLOAD_PREFIX_BOOKINGS || 'tickets';
+    const dest = `${prefix}/${booking.bookingId}/${Date.now()}_${originalName}`;
+    try {
+      const { uploadFile } = require('../utils/gcsStorage');
+      publicUrl = await uploadFile(localPath, dest);
+    } catch (err) {
+      console.error('GCS upload failed, falling back to local storage', err);
+      publicUrl = null;
     }
-
     // Fallback to local path if GCS not available
     if (!publicUrl) {
       publicUrl = req.file.path.replace(/^\.\//, '');

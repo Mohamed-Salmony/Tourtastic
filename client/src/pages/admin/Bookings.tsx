@@ -22,6 +22,7 @@ import {
 import api from '@/config/api';
 import { formatSypFromUsd } from '@/utils/currency';
 import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
 import {
   Dialog,
   DialogContent,
@@ -137,6 +138,7 @@ const getErrorMessage = (err: unknown) => {
 // Mock bookings removed — bookings will be loaded from the API at runtime
 
 const AdminBookings: React.FC = () => {
+  const { t } = useTranslation();
   const [bookings, setBookings] = useState<BookingType[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -172,8 +174,8 @@ const AdminBookings: React.FC = () => {
   // Split bookings by status
   const pendingBookings = searchedBookings.filter(b => b.status === 'pending');
   const confirmedBookings = searchedBookings.filter(b => b.status === 'confirmed');
-  // Treat previously "cancelled" reservations as Done for the new UI label.
-  const doneBookings = searchedBookings.filter(b => b.status === 'cancelled' || b.status === 'done');
+  // Treat previously "done" reservations as Done for the new UI label.
+  const doneBookings = searchedBookings.filter(b => b.status === 'done');
 
   // Reset pages when search term changes (or when the searched list changes)
   useEffect(() => {
@@ -253,18 +255,20 @@ const AdminBookings: React.FC = () => {
       case 'pending':
         badgeClass = 'bg-yellow-100 text-yellow-800';
         break;
-      case 'cancelled':
       case 'done':
-        // show Done label for cancelled/done statuses (now blue)
         badgeClass = 'bg-blue-100 text-blue-800';
         break;
       default:
         badgeClass = 'bg-gray-100 text-gray-800';
     }
 
-    const displayText = (status === 'cancelled' || status === 'done')
-      ? 'Done'
-      : status.charAt(0).toUpperCase() + status.slice(1);
+    const displayText = (status === 'done')
+      ? t('statu.done')
+      : status === 'confirmed'
+        ? t('statu.confirmed')
+        : status === 'pending'
+          ? t('statu.pending')
+          : status;
 
     return (
       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badgeClass}`}>
@@ -613,7 +617,7 @@ const AdminBookings: React.FC = () => {
   return (
     <div className="p-8 space-y-6">
       <div className="flex justify-center items-center">
-        <h1 className="text-3xl font-bold">Bookings Management</h1>
+        <h1 className="text-3xl font-bold">{t('admin.bookings.title')}</h1>
       </div>
       
       {/* Filters */}
@@ -622,7 +626,7 @@ const AdminBookings: React.FC = () => {
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex-1 min-w-[240px]">
               <Input
-                placeholder="Search bookings..."
+                placeholder={t('admin.bookings.searchPlaceholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full"
@@ -637,18 +641,18 @@ const AdminBookings: React.FC = () => {
       <Card>
         <CardContent className="p-0">
           <div className="p-4 border-b">
-            <h2 className="text-lg font-semibold">Pending Reservations</h2>
+            <h2 className="text-lg font-semibold">{t('admin.bookings.pendingReservations')}</h2>
           </div>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Booking ID</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Destination</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead className="w-[100px]">Actions</TableHead>
+                <TableHead>{t('bookingId')}</TableHead>
+                <TableHead>{t('admin.bookings.customer')}</TableHead>
+                <TableHead>{t('destination')}</TableHead>
+                <TableHead>{t('date')}</TableHead>
+                <TableHead>{t('status')}</TableHead>
+                <TableHead>{t('amount')}</TableHead>
+                <TableHead className="w-[100px]">{t('actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -671,7 +675,7 @@ const AdminBookings: React.FC = () => {
                         <Button variant="ghost" size="icon" onClick={() => handleView(booking)}>
                           <EyeIcon className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" onClick={() => handleDelete(getBookingId(booking))} size="sm">Delete</Button>
+                        <Button variant="ghost" onClick={() => handleDelete(getBookingId(booking))} size="sm">{t('delete')}</Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -679,7 +683,7 @@ const AdminBookings: React.FC = () => {
               ) : (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8">
-                    <div className="text-gray-500">No pending reservations</div>
+                    <div className="text-gray-500">{t('admin.bookings.noPending')}</div>
                   </TableCell>
                 </TableRow>
               )}
@@ -688,16 +692,20 @@ const AdminBookings: React.FC = () => {
 
           <div className="flex items-center justify-between p-4 border-t">
             <div className="text-sm text-gray-500">
-              Showing <span className="font-medium">{pendingPage * PAGE_SIZE + (pendingPaged.length ? 1 : 0)}</span> to <span className="font-medium">{pendingPage * PAGE_SIZE + pendingPaged.length}</span> of{' '}
-              <span className="font-medium">{pendingTotal}</span> pending reservations
+              {t('admin.bookings.showingRange', {
+                from: pendingPage * PAGE_SIZE + (pendingPaged.length ? 1 : 0),
+                to: pendingPage * PAGE_SIZE + pendingPaged.length,
+                total: pendingTotal,
+                segment: t('admin.bookings.pendingReservationsLower')
+              })}
             </div>
             <div className="flex space-x-2">
               <Button variant="outline" size="sm" onClick={() => setPendingPage(p => Math.max(0, p - 1))} disabled={pendingPage <= 0}>
                 <ChevronLeft className="h-4 w-4 mr-1" />
-                Previous
+                {t('admin.bookings.previous')}
               </Button>
               <Button variant="outline" size="sm" onClick={() => setPendingPage(p => Math.min(p + 1, pendingPageCount - 1))} disabled={pendingPage >= pendingPageCount - 1}>
-                Next
+                {t('admin.bookings.next')}
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             </div>
@@ -709,18 +717,18 @@ const AdminBookings: React.FC = () => {
       <Card>
         <CardContent className="p-0">
           <div className="p-4 border-b">
-            <h2 className="text-lg font-semibold">Confirmed Reservations</h2>
+            <h2 className="text-lg font-semibold">{t('admin.bookings.confirmedReservations')}</h2>
           </div>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Booking ID</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Destination</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead className="w-[100px]">Actions</TableHead>
+                <TableHead>{t('bookingId')}</TableHead>
+                <TableHead>{t('admin.bookings.customer')}</TableHead>
+                <TableHead>{t('destination')}</TableHead>
+                <TableHead>{t('date')}</TableHead>
+                <TableHead>{t('status')}</TableHead>
+                <TableHead>{t('amount')}</TableHead>
+                <TableHead className="w-[100px]">{t('actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -743,7 +751,7 @@ const AdminBookings: React.FC = () => {
                         <Button variant="ghost" size="icon" onClick={() => handleView(booking)}>
                           <EyeIcon className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => openUpload(booking)} title="Upload ticket & complete">
+                        <Button variant="ghost" size="icon" onClick={() => openUpload(booking)} title={t('admin.bookings.uploadAndComplete')}>
                           <Check className="h-4 w-4" />
                         </Button>
                       </div>
@@ -753,7 +761,7 @@ const AdminBookings: React.FC = () => {
               ) : (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8">
-                    <div className="text-gray-500">No confirmed reservations</div>
+                    <div className="text-gray-500">{t('admin.bookings.noConfirmed')}</div>
                   </TableCell>
                 </TableRow>
               )}
@@ -762,16 +770,20 @@ const AdminBookings: React.FC = () => {
 
           <div className="flex items-center justify-between p-4 border-t">
             <div className="text-sm text-gray-500">
-              Showing <span className="font-medium">{confirmedPage * PAGE_SIZE + (confirmedPaged.length ? 1 : 0)}</span> to <span className="font-medium">{confirmedPage * PAGE_SIZE + confirmedPaged.length}</span> of{' '}
-              <span className="font-medium">{confirmedTotal}</span> confirmed reservations
+              {t('admin.bookings.showingRange', {
+                from: confirmedPage * PAGE_SIZE + (confirmedPaged.length ? 1 : 0),
+                to: confirmedPage * PAGE_SIZE + confirmedPaged.length,
+                total: confirmedTotal,
+                segment: t('admin.bookings.confirmedReservationsLower')
+              })}
             </div>
             <div className="flex space-x-2">
               <Button variant="outline" size="sm" onClick={() => setConfirmedPage(p => Math.max(0, p - 1))} disabled={confirmedPage <= 0}>
                 <ChevronLeft className="h-4 w-4 mr-1" />
-                Previous
+                {t('admin.bookings.previous')}
               </Button>
               <Button variant="outline" size="sm" onClick={() => setConfirmedPage(p => Math.min(p + 1, confirmedPageCount - 1))} disabled={confirmedPage >= confirmedPageCount - 1}>
-                Next
+                {t('admin.bookings.next')}
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             </div>
@@ -783,18 +795,18 @@ const AdminBookings: React.FC = () => {
       <Card>
         <CardContent className="p-0">
           <div className="p-4 border-b">
-            <h2 className="text-lg font-semibold">Cancelled Reservations</h2>
+            <h2 className="text-lg font-semibold">{t('admin.bookings.doneReservations')}</h2>
           </div>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Booking ID</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Destination</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead className="w-[100px]">Actions</TableHead>
+                <TableHead>{t('bookingId')}</TableHead>
+                <TableHead>{t('admin.bookings.customer')}</TableHead>
+                <TableHead>{t('destination')}</TableHead>
+                <TableHead>{t('date')}</TableHead>
+                <TableHead>{t('status')}</TableHead>
+                <TableHead>{t('amount')}</TableHead>
+                <TableHead className="w-[100px]">{t('actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -817,7 +829,7 @@ const AdminBookings: React.FC = () => {
                         <Button variant="ghost" size="icon" onClick={() => handleView(booking)}>
                           <EyeIcon className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" onClick={() => handleDelete(getBookingId(booking))} size="sm">Delete</Button>
+                        <Button variant="ghost" onClick={() => handleDelete(getBookingId(booking))} size="sm">{t('delete')}</Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -825,7 +837,7 @@ const AdminBookings: React.FC = () => {
               ) : (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8">
-                    <div className="text-gray-500">No cancelled reservations</div>
+                    <div className="text-gray-500">{t('admin.bookings.noDone')}</div>
                   </TableCell>
                 </TableRow>
               )}
@@ -834,16 +846,20 @@ const AdminBookings: React.FC = () => {
 
           <div className="flex items-center justify-between p-4 border-t">
             <div className="text-sm text-gray-500">
-              Showing <span className="font-medium">{donePage * PAGE_SIZE + (donePaged.length ? 1 : 0)}</span> to <span className="font-medium">{donePage * PAGE_SIZE + donePaged.length}</span> of{' '}
-              <span className="font-medium">{doneTotal}</span> done reservations
+              {t('admin.bookings.showingRange', {
+                from: donePage * PAGE_SIZE + (donePaged.length ? 1 : 0),
+                to: donePage * PAGE_SIZE + donePaged.length,
+                total: doneTotal,
+                segment: t('admin.bookings.doneReservationsLower')
+              })}
             </div>
             <div className="flex space-x-2">
               <Button variant="outline" size="sm" onClick={() => setDonePage(p => Math.max(0, p - 1))} disabled={donePage <= 0}>
                 <ChevronLeft className="h-4 w-4 mr-1" />
-                Previous
+                {t('admin.bookings.previous')}
               </Button>
               <Button variant="outline" size="sm" onClick={() => setDonePage(p => Math.min(p + 1, donePageCount - 1))} disabled={donePage >= donePageCount - 1}>
-                Next
+                {t('admin.bookings.next')}
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             </div>
@@ -854,57 +870,57 @@ const AdminBookings: React.FC = () => {
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Booking Details</DialogTitle>
-            <DialogDescription>Details for {selectedBooking ? getBookingId(selectedBooking) : ''}</DialogDescription>
+            <DialogTitle>{t('booking.detailsTitle')}</DialogTitle>
+            <DialogDescription>{t('admin.bookings.detailsFor', { id: selectedBooking ? getBookingId(selectedBooking) : '' })}</DialogDescription>
           </DialogHeader>
           {selectedBooking ? (
             <div className="space-y-3">
               <div className="max-h-[70vh] overflow-auto pr-2">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="col-span-1">
-                    <h3 className="font-semibold">Customer</h3>
-                    <div className="text-sm">{selectedBooking.customerName} &lt;{selectedBooking.customerEmail}&gt;</div>
-                    {selectedBooking.customerPhone && <div className="text-sm">Phone: {selectedBooking.customerPhone}</div>}
-                    <div className="mt-2 text-sm">Status: {getStatusBadge(selectedBooking.status)}</div>
-                    <div className="mt-2 text-sm">Amount: {(getTicketPrice(selectedBooking) != null) ? `$${(getTicketPrice(selectedBooking) as number).toFixed(2)}` : (getAmount(selectedBooking) != null ? `$${(getAmount(selectedBooking) as number).toFixed(2)}` : '-')}</div>
+                    <h3 className="font-semibold">{t('admin.bookings.customer')}</h3>
+                    <div className="text-sm break-words">{selectedBooking.customerName} &lt;{selectedBooking.customerEmail}&gt;</div>
+                    {selectedBooking.customerPhone && <div className="text-sm">{t('phone')}: {selectedBooking.customerPhone}</div>}
+                    <div className="mt-2 text-sm">{t('status')}: {getStatusBadge(selectedBooking.status)}</div>
+                    <div className="mt-2 text-sm">{t('amount')}: {(getTicketPrice(selectedBooking) != null) ? formatSypFromUsd(getTicketPrice(selectedBooking) as number) : (getAmount(selectedBooking) != null ? formatSypFromUsd(getAmount(selectedBooking) as number) : '-')}</div>
                   </div>
 
                   <div className="col-span-1">
-                    <h3 className="font-semibold">Flight</h3>
-                    <div className="text-sm">Destination: {selectedBooking.destination || selectedDetails?.flightDetails?.to || '-'}</div>
-                    <div className="text-sm">Date: {formatDate(selectedBooking)}</div>
+                    <h3 className="font-semibold">{t('flightDetails')}</h3>
+                    <div className="text-sm">{t('destination')}: {selectedBooking.destination || selectedDetails?.flightDetails?.to || '-'}</div>
+                    <div className="text-sm">{t('date')}: {formatDate(selectedBooking)}</div>
                     {selectedDetails?.flightDetails && (
                       <div className="mt-2 text-sm">
-                        From: {selectedDetails.flightDetails.from || '-'} {getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).from ? `(${getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).from})` : ''}
+                        {t('from')}: {selectedDetails.flightDetails.from || '-'} {getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).from ? `(${getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).from})` : ''}
                         <br />
-                        To: {selectedDetails.flightDetails.to || '-'} {getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).to ? `(${getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).to})` : ''}
+                        {t('to')}: {selectedDetails.flightDetails.to || '-'} {getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).to ? `(${getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).to})` : ''}
                         <br />
-                        Departure: {selectedDetails.flightDetails.departureDate ? formatDateTime(selectedDetails.flightDetails.departureDate) : (selectedDetails.selectedFlight?.departureTime ? formatDateTime(selectedDetails.selectedFlight.departureTime) : '-')}
+                        {t('departure')}: {selectedDetails.flightDetails.departureDate ? formatDateTime(selectedDetails.flightDetails.departureDate) : (selectedDetails.selectedFlight?.departureTime ? formatDateTime(selectedDetails.selectedFlight.departureTime) : '-')}
                         <br />
-                        Passengers: {formatPassengers(selectedDetails?.flightDetails?.passengers, selectedDetails?.passengerDetails)}
+                        {t('passengers')}: {formatPassengers(selectedDetails?.flightDetails?.passengers, selectedDetails?.passengerDetails)}
                       </div>
                     )}
                   </div>
 
                   <div className="col-span-1">
-                    <h3 className="font-semibold">Selected Flight</h3>
+                    <h3 className="font-semibold">{t('booking.flightInformation')}</h3>
                     {selectedDetails?.selectedFlight ? (
                       <div className="text-sm">
-                        Airline: {selectedDetails.selectedFlight.airline || '-'}
+                        {t('booking.airline')}: {selectedDetails.selectedFlight.airline || '-'}
                         <br />
-                        From: {selectedDetails.selectedFlight.departureAirport || '-'} {getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).from ? `(${getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).from})` : ''}
+                        {t('from')}: {selectedDetails.selectedFlight.departureAirport || '-'} {getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).from ? `(${getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).from})` : ''}
                         <br />
-                        Departure: {selectedDetails.selectedFlight.departureTime ? formatDateTime(selectedDetails.selectedFlight.departureTime) : (selectedDetails.selectedFlight.departureDate ? formatDateTime(selectedDetails.selectedFlight.departureDate) : '-')}
+                        {t('departure')}: {selectedDetails.selectedFlight.departureTime ? formatDateTime(selectedDetails.selectedFlight.departureTime) : (selectedDetails.selectedFlight.departureDate ? formatDateTime(selectedDetails.selectedFlight.departureDate) : '-')}
                         <br />
-                        To: {selectedDetails.selectedFlight.arrivalAirport || '-'} {getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).to ? `(${getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).to})` : ''}
+                        {t('to')}: {selectedDetails.selectedFlight.arrivalAirport || '-'} {getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).to ? `(${getAirportCodes(selectedDetails.selectedFlight, selectedDetails.flightDetails).to})` : ''}
                         <br />
-                        Arrival: {selectedDetails.selectedFlight.arrivalTime ? formatDateTime(selectedDetails.selectedFlight.arrivalTime) : (selectedDetails.selectedFlight.arrivalDate ? formatDateTime(selectedDetails.selectedFlight.arrivalDate) : '-')}
+                        {t('arrivalTime')}: {selectedDetails.selectedFlight.arrivalTime ? formatDateTime(selectedDetails.selectedFlight.arrivalTime) : (selectedDetails.selectedFlight.arrivalDate ? formatDateTime(selectedDetails.selectedFlight.arrivalDate) : '-')}
                         <br />
-                        Class: {selectedDetails.selectedFlight.class || '-'}
+                        {t('class')}: {selectedDetails.selectedFlight.class || '-'}
                         <br />
-                        Price: {selectedDetails.selectedFlight.price && typeof selectedDetails.selectedFlight.price.total === 'number' ? `$${selectedDetails.selectedFlight.price.total.toFixed(2)}` : '-'}
+                        {t('price')}: {selectedDetails.selectedFlight.price && typeof selectedDetails.selectedFlight.price.total === 'number' ? formatSypFromUsd(selectedDetails.selectedFlight.price.total) : '-'}
                         <br />
-                        {(() => { const bag = getBaggageInfo(selectedDetails.selectedFlight); return bag ? <div>Baggage: <span className="text-sm text-gray-600">{bag}</span></div> : null; })()}
+                        {(() => { const bag = getBaggageInfo(selectedDetails.selectedFlight); return bag ? <div>{t('baggage')}: <span className="text-sm text-gray-600">{bag}</span></div> : null; })()}
                       </div>
                     ) : (
                       <div className="text-sm">-</div>
@@ -918,12 +934,12 @@ const AdminBookings: React.FC = () => {
                   if (!pb) return null;
                   return (
                     <div className="mt-4">
-                      <h4 className="font-medium">Price breakdown</h4>
+                      <h4 className="font-medium">{t('priceBreakdown')}</h4>
                       <table className="w-full text-sm mt-2 border-collapse">
                         <thead>
                           <tr className="text-left">
-                            <th className="pr-4">Type</th>
-                            <th className="text-right">Amount</th>
+                            <th className="pr-4">{t('admin.bookings.type')}</th>
+                            <th className="text-right">{t('amount')}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -942,7 +958,7 @@ const AdminBookings: React.FC = () => {
                 {/* Passengers - card/grid side-by-side layout */}
                 {selectedDetails?.passengerDetails && Array.isArray(selectedDetails.passengerDetails) && (
                   <div className="mt-4">
-                    <h4 className="font-medium">Passengers</h4>
+                    <h4 className="font-medium">{t('passengers')}</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-3">
                       {selectedDetails.passengerDetails.map((p, i) => (
                         <div key={i} className="border rounded p-3 bg-white shadow-sm">
@@ -954,33 +970,33 @@ const AdminBookings: React.FC = () => {
                           </div>
 
                           <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                            <div className="text-gray-600">Passport</div>
+                            <div className="text-gray-600">{t('passportNumber')}</div>
                             <div className="font-medium flex items-center">
                               <span className="font-medium">{p.passportNumber || '-'}</span>
                               {p.passportNumber && (
-                                <Button variant="ghost" size="sm" className="ml-2" onClick={() => copyToClipboard(p.passportNumber)}>Copy</Button>
+                                <Button variant="ghost" size="sm" className="ml-2" onClick={() => copyToClipboard(p.passportNumber)}>{t('admin.bookings.copy')}</Button>
                               )}
                             </div>
 
-                            <div className="text-gray-600">Issue</div>
+                            <div className="text-gray-600">{t('passportIssueDate')}</div>
                             <div className="font-medium">{p.passportIssueDate ? formatDateNice(p.passportIssueDate) : '-'}</div>
 
-                            <div className="text-gray-600">Expiry</div>
+                            <div className="text-gray-600">{t('passportExpiryDate')}</div>
                             <div className="font-medium">{p.passportExpiryDate ? formatDateNice(p.passportExpiryDate) : '-'}</div>
 
-                            <div className="text-gray-600">DOB</div>
+                            <div className="text-gray-600">{t('dob')}</div>
                             <div className="font-medium">{p.dob ? formatDateNice(p.dob) : '-'}</div>
 
-                            <div className="text-gray-600">Phone</div>
+                            <div className="text-gray-600">{t('phone')}</div>
                             <div className="font-medium flex items-center">
                               <span className="break-words">{p.phone || '-'}</span>
-                              {p.phone && <Button variant="ghost" size="sm" className="ml-2" onClick={() => copyToClipboard(p.phone)}>Copy</Button>}
+                              {p.phone && <Button variant="ghost" size="sm" className="ml-2" onClick={() => copyToClipboard(p.phone)}>{t('admin.bookings.copy')}</Button>}
                             </div>
 
-                            <div className="text-gray-600">Email</div>
-                            <div className="font-medium break-words flex items-center">
-                              <span className="text-blue-600">{p.email || '-'}</span>
-                              {p.email && <Button variant="ghost" size="sm" className="ml-2" onClick={() => copyToClipboard(p.email)}>Copy</Button>}
+                            <div className="text-gray-600">{t('email')}</div>
+                            <div className="font-medium flex items-center min-w-0">
+                              <span className="text-blue-600 break-all">{p.email || '-'}</span>
+                              {p.email && <Button variant="ghost" size="sm" className="ml-2 shrink-0" onClick={() => copyToClipboard(p.email)}>{t('admin.bookings.copy')}</Button>}
                             </div>
                           </div>
                         </div>
@@ -994,36 +1010,36 @@ const AdminBookings: React.FC = () => {
                 {/* Ticket & payment & admin columns */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
                   <div>
-                    <h4 className="font-medium">Ticket</h4>
+                    <h4 className="font-medium">{t('booking.ticket')}</h4>
                     <div className="text-sm">PNR: {selectedBooking.ticketDetails?.pnr || '-'}</div>
-                    <div className="text-sm">Ticket Number: {selectedBooking.ticketDetails?.ticketNumber || '-'}</div>
+                    <div className="text-sm">{t('admin.bookings.ticketNumber')}: {selectedBooking.ticketDetails?.ticketNumber || '-'}</div>
                     {selectedBooking.ticketDetails?.eTicketPath && (
-                      <div className="text-sm">E-ticket: <a className="text-blue-600 underline" href={selectedBooking.ticketDetails.eTicketPath} target="_blank" rel="noreferrer">Download</a></div>
+                      <div className="text-sm">{t('booking.ticket')}: <a className="text-blue-600 underline" href={selectedBooking.ticketDetails.eTicketPath} target="_blank" rel="noreferrer">{t('booking.openTicket')}</a></div>
                     )}
                   </div>
                   <div>
-                    <h4 className="font-medium">Payment</h4>
-                    <div className="text-sm">Amount: {(typeof selectedBooking.paymentDetails?.amount === 'number') ? formatSypFromUsd(selectedBooking.paymentDetails!.amount!) : (getAmount(selectedBooking) != null ? formatSypFromUsd(getAmount(selectedBooking) as number) : formatSypFromUsd(0))}</div>
-                    <div className="text-sm">Method: {selectedBooking.paymentDetails?.method || '-'}</div>
-                    <div className="text-sm">Status: {selectedBooking.paymentDetails?.status || '-'}</div>
+                    <h4 className="font-medium">{t('paymentDetails')}</h4>
+                    <div className="text-sm">{t('amount')}: {(typeof selectedBooking.paymentDetails?.amount === 'number') ? formatSypFromUsd(selectedBooking.paymentDetails!.amount!) : (getAmount(selectedBooking) != null ? formatSypFromUsd(getAmount(selectedBooking) as number) : formatSypFromUsd(0))}</div>
+                    <div className="text-sm">{t('admin.bookings.method')}: {selectedBooking.paymentDetails?.method || '-'}</div>
+                    <div className="text-sm">{t('status')}: {selectedBooking.paymentDetails?.status || '-'}</div>
                   </div>
                   <div>
-                    <h4 className="font-medium">Admin Notes</h4>
-                    <div className="text-sm">Assigned To: {selectedBooking.adminData?.assignedTo || '-'}</div>
-                    <div className="text-sm">Notes: {selectedBooking.adminData?.notes || '-'}</div>
+                    <h4 className="font-medium">{t('admin.bookings.adminNotes')}</h4>
+                    <div className="text-sm">{t('admin.bookings.assignedTo')}: {selectedBooking.adminData?.assignedTo || '-'}</div>
+                    <div className="text-sm">{t('admin.bookings.notes')}: {selectedBooking.adminData?.notes || '-'}</div>
                     {selectedBooking.adminData?.cost && typeof selectedBooking.adminData.cost.amount === 'number' && (
-                      <div className="text-sm">Admin Cost: {formatSypFromUsd(selectedBooking.adminData.cost.amount)}</div>
+                      <div className="text-sm">{t('admin.bookings.adminCost')}: {formatSypFromUsd(selectedBooking.adminData.cost.amount)}</div>
                     )}
                   </div>
                 </div>
 
               </div>
               <div className="pt-2">
-                <Button onClick={() => setViewOpen(false)}>Close</Button>
+                <Button onClick={() => setViewOpen(false)}>{t('cancel')}</Button>
               </div>
             </div>
           ) : (
-            <div>Loading...</div>
+            <div>{t('loading')}</div>
           )}
         </DialogContent>
       </Dialog>
@@ -1032,19 +1048,19 @@ const AdminBookings: React.FC = () => {
       <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Upload E-ticket & Complete Booking</DialogTitle>
-            <DialogDescription>Upload PDF e-ticket, add ticket number/PNR and admin note. This will mark the booking as Done.</DialogDescription>
+            <DialogTitle>{t('admin.bookings.uploadTitle')}</DialogTitle>
+            <DialogDescription>{t('admin.bookings.uploadDescription')}</DialogDescription>
           </DialogHeader>
           {uploadBooking ? (
             <div className="space-y-4">
               <div className="grid grid-cols-1 gap-2">
-                <label className="text-sm">E-ticket (PDF)</label>
+                <label className="text-sm">{t('booking.ticket')} (PDF)</label>
                 <input type="file" accept="application/pdf" onChange={handleFileChange} />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <div>
-                  <label className="text-sm">Ticket Number</label>
+                  <label className="text-sm">{t('admin.bookings.ticketNumber')}</label>
                   <Input value={uploadTicketNumber} onChange={(e) => setUploadTicketNumber(e.target.value)} />
                 </div>
                 <div>
@@ -1054,19 +1070,19 @@ const AdminBookings: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-sm">Admin Note</label>
+                <label className="text-sm">{t('admin.bookings.adminNote')}</label>
                 <Input value={uploadAdminNote} onChange={(e) => setUploadAdminNote(e.target.value)} />
               </div>
 
               <div className="flex justify-end space-x-2 pt-2">
-                <Button variant="ghost" onClick={closeUpload} disabled={uploadLoading}>Cancel</Button>
+                <Button variant="ghost" onClick={closeUpload} disabled={uploadLoading}>{t('cancel')}</Button>
                 <Button onClick={submitUpload} disabled={uploadLoading}>
-                  {uploadLoading ? 'Uploading...' : 'Save & Complete'}
+                  {uploadLoading ? t('admin.bookings.uploading') : t('admin.bookings.saveAndComplete')}
                 </Button>
               </div>
             </div>
           ) : (
-            <div>Loading...</div>
+            <div>{t('loading')}</div>
           )}
         </DialogContent>
       </Dialog>

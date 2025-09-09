@@ -455,6 +455,11 @@ const Profile: React.FC = () => {
     return () => { mounted = false; };
   }, [selectedBooking]);
 
+  // Whether to show the Actions column (only if at least one booking has a ticket and is done)
+  const hasActionableBookings = bookings.some(
+    (b) => b.status === 'done' && !!resolveBookingPreviewUrl(b)
+  );
+
   return (
     <>
       <div className="bg-gradient-to-r from-gray-50 to-gray-100 py-8 md:py-12">
@@ -543,36 +548,41 @@ const Profile: React.FC = () => {
                         <Table>
                           <TableHeader>
                             <TableRow>
+                              <TableHead className="w-16 md:w-20">{t('airline', 'Airline')}</TableHead>
                               <TableHead>{t('bookingId', 'Booking')}</TableHead>
                               <TableHead>{t('flightDetails', 'Flight Details')}</TableHead>
                               <TableHead className="hidden md:table-cell">{t('date', 'Date')}</TableHead>
                               <TableHead>{t('status', 'Status')}</TableHead>
                               <TableHead className="text-right">{t('price', 'Amount')}</TableHead>
-                              <TableHead className="text-right">{t('actions', 'Actions')}</TableHead>
+                              {hasActionableBookings && (
+                                <TableHead className="text-right">{t('actions', 'Actions')}</TableHead>
+                              )}
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {bookings.map((booking, idx) => (
-                              <TableRow key={`${booking._id ?? booking.bookingId ?? 'booking'}-${idx}`}>
+                              <TableRow
+                                key={`${booking._id ?? booking.bookingId ?? 'booking'}-${idx}`}
+                                onClick={() => handleViewDetails(booking)}
+                                className="cursor-pointer hover:bg-muted/30"
+                              >
                                 <TableCell>
-                                  <div className="flex items-center gap-2">
-                                        <img 
-                                          src={`/${booking.flightDetails.selectedFlight.airline.replace(/\s+/g, '-')}-Logo.png`}
-                                          alt={booking.flightDetails.selectedFlight.airline}
-                                          className="h-10 w-10 object-contain md:h-12 md:w-12"
-                                          onError={(e) => {
-                                            e.currentTarget.src = '/placeholder.svg';
-                                          }}
-                                        />
-                                    <span className="font-medium">{booking.bookingId}</span>
-                                  </div>
+                                  <img
+                                    src={`/${booking.flightDetails.selectedFlight.airline.replace(/\s+/g, '-')}-Logo.png`}
+                                    alt={booking.flightDetails.selectedFlight.airline}
+                                    className="h-10 w-10 object-contain md:h-12 md:w-12"
+                                    onError={(e) => {
+                                      e.currentTarget.src = '/placeholder.svg';
+                                    }}
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <span className="font-medium">{booking.bookingId}</span>
                                 </TableCell>
                                 <TableCell>
                                   <div className="flex items-center gap-4">
                                     <div>
                                       <p className="font-medium">{translatePlace(booking.flightDetails.from)} {getRouteArrow()} {translatePlace(booking.flightDetails.to)}</p>
-                                      <p className="text-sm text-gray-500">{translateAirline(booking.flightDetails.selectedFlight.airline)}</p>
-                                      <p className="text-sm text-gray-500 md:hidden">{formatDate(booking.flightDetails.departureDate)}</p>
                                     </div>
                                   </div>
                                 </TableCell>
@@ -591,26 +601,24 @@ const Profile: React.FC = () => {
                                 <TableCell className="text-right">
                                     {formatSypFromUsd(booking.flightDetails.selectedFlight.price.total)}
                                 </TableCell>
-                                <TableCell className="text-right">
-                                  <div className="flex items-center justify-end gap-2">
-                                        {resolveBookingPreviewUrl(booking) && (
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => window.open(resolveBookingPreviewUrl(booking) as string, '_blank', 'noopener')}
-                                          >
-                                            {t('booking.openTicket', 'Open Ticket (PDF)')}
-                                          </Button>
-                                        )}
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleViewDetails(booking)}
-                                    >
-                                      {t('viewDetails', 'عرض التفاصيل')}
-                                    </Button>
-                                  </div>
-                                </TableCell>
+                                {hasActionableBookings && (
+                                  <TableCell className="text-right">
+                                    <div className="flex items-center justify-end gap-2">
+                                      {booking.status === 'done' && resolveBookingPreviewUrl(booking) && (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            window.open(resolveBookingPreviewUrl(booking) as string, '_blank', 'noopener');
+                                          }}
+                                        >
+                                          {t('booking.openTicket', 'Open Ticket (PDF)')}
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                )}
                               </TableRow>
                             ))}
                           </TableBody>
@@ -630,7 +638,7 @@ const Profile: React.FC = () => {
               <TabsContent value="wishlist">
                 <Card>
                   <CardContent className="p-6">
-                    <h3 className="text-xl font-bold mb-6">My Wishlist</h3>
+                    <h3 className="text-xl font-bold mb-6">{t('profile.myWishlist', 'My Wishlist')}</h3>
                     
                     {wishlist.length > 0 ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -963,28 +971,6 @@ const Profile: React.FC = () => {
                     </div>
 
                     <Separator />
-
-                    {/* Timeline */}
-                    <div className="space-y-2">
-                      <h3 className="text-base font-semibold flex items-center gap-2">
-                          <Calendar className="h-4 w-4 text-tourtastic-blue" />
-                          {t('booking.timeline', 'Booking Timeline')}
-                        </h3>
-                      <div className="space-y-2">
-                        {selectedBooking.timeline.map((event, index) => (
-                          <div key={index} className="flex items-start gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-tourtastic-blue mt-1.5"></div>
-                            <div>
-                              <p className="text-sm font-medium">{event.status}</p>
-                              <p className="text-xs text-gray-500">{formatDate(event.date)}</p>
-                              {event.notes && (
-                                <p className="text-xs text-gray-500">{event.notes}</p>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
 
                     {/* Ticket PDF preview / link */}
                     {ticketLoading ? (

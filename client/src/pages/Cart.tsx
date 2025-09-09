@@ -6,7 +6,7 @@ import 'react-datepicker/dist/react-datepicker.css';
 import '@/styles/datepicker.css';
 import { Trash2, Plane, Calendar, Users, CreditCard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
@@ -15,6 +15,7 @@ import { useNavigate } from 'react-router-dom';
 import { paymentService } from '@/services/paymentService';
 import { useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
 import { getAirlineLogo } from '@/components/flights/utils/flightHelpers';
+import { formatSypFromUsd } from '@/utils/currency';
 
 interface Transaction {
   id: string;
@@ -84,6 +85,7 @@ interface LocalCartItem {
 
 const Cart = () => {
   const { t, i18n } = useTranslation();
+  const isArabic = (i18n.language || '').toLowerCase().startsWith('ar');
   const navigate = useNavigate();
   const authenticatedAction = useAuthenticatedAction();
   // Simple airport type used for airports API responses
@@ -96,7 +98,8 @@ const Cart = () => {
     country?: string;
     country_arbic?: string;
   }
-  const [airportsMap, setAirportsMap] = useState<Record<string, SimpleAirport>>({});
+  const [airportsMapAr, setAirportsMapAr] = useState<Record<string, SimpleAirport>>({});
+  const [airportsMapEn, setAirportsMapEn] = useState<Record<string, SimpleAirport>>({});
   const [bookings, setBookings] = useState<FlightBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingPayment, setProcessingPayment] = useState<string | null>(null);
@@ -222,24 +225,29 @@ const Cart = () => {
     fetchBookings();
   }, [fetchBookings]);
 
-  // Load airports map for localized names
+  // Load airports map for both languages so we can match by English while displaying Arabic (and vice versa)
   useEffect(() => {
-    const loadAirports = async () => {
+    const loadAirportsBoth = async () => {
       try {
-        const lang = i18n.language === 'ar' ? 'ar' : 'en';
-        const resp = await api.get(`/airports?lang=${lang}`);
-        if (resp.data && Array.isArray(resp.data.data)) {
-          const map: Record<string, SimpleAirport> = {};
-          resp.data.data.forEach((a: SimpleAirport) => {
-            if (a.iata_code) map[a.iata_code] = a;
-          });
-          setAirportsMap(map);
+        const [respAr, respEn] = await Promise.all([
+          api.get(`/airports?lang=ar`),
+          api.get(`/airports?lang=en`),
+        ]);
+        if (respAr.data && Array.isArray(respAr.data.data)) {
+          const mapAr: Record<string, SimpleAirport> = {};
+          respAr.data.data.forEach((a: SimpleAirport) => { if (a.iata_code) mapAr[a.iata_code] = a; });
+          setAirportsMapAr(mapAr);
+        }
+        if (respEn.data && Array.isArray(respEn.data.data)) {
+          const mapEn: Record<string, SimpleAirport> = {};
+          respEn.data.data.forEach((a: SimpleAirport) => { if (a.iata_code) mapEn[a.iata_code] = a; });
+          setAirportsMapEn(mapEn);
         }
       } catch (err) {
-        console.error('Failed to load airports for Cart:', err);
+        console.error('Failed to load airports for Cart (both langs):', err);
       }
     };
-    loadAirports();
+    loadAirportsBoth();
   }, [i18n.language]);
 
   const handleCheckout = () => {
@@ -483,6 +491,9 @@ const Cart = () => {
         <DialogContent className="max-w-3xl w-[95vw]">
           <DialogHeader>
             <DialogTitle>{t('passengerDetailsTitle', 'Passenger Details / تفاصيل المسافر')}</DialogTitle>
+            <DialogDescription>
+              {t('passengerDetailsDesc', 'Please fill in the required passenger information for each traveler.')}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 max-h-[70vh] overflow-y-auto py-2">
             {passengerForms.map((p, idx) => (
@@ -706,19 +717,81 @@ const Cart = () => {
             // Helper: get airport display name (prefer Arabic when available)
             const getAirportDisplay = (iataOrText: string | null) => {
               if (!iataOrText) return 'N/A';
-              const code = typeof iataOrText === 'string' && iataOrText.length === 3 ? iataOrText.toUpperCase() : null;
-              if (code && airportsMap[code]) {
-                const a = airportsMap[code];
-                if (i18n.language === 'ar') {
-                  const name = a.name_arbic || a.name || '';
-                  const city = a.municipality_arbic || a.municipality || '';
-                  return `${a.iata_code} - ${name}${city ? ` (${city})` : ''}`;
+              let maybeCode: string | null = null;
+              if (typeof iataOrText === 'string') {
+                const trimmed = iataOrText.trim();
+                // Case 1: Already an IATA code (e.g., DAM)
+                if (/^[A-Za-z]{3}$/.test(trimmed)) {
+                  maybeCode = trimmed.toUpperCase();
                 }
-                const nameEn = a.name || a.name_arbic || '';
-                const cityEn = a.municipality || a.municipality_arbic || '';
-                return `${a.iata_code} - ${nameEn}${cityEn ? ` (${cityEn})` : ''}`;
+                // Case 2: Pattern like "DAM - Damascus International Airport (...)"
+                else if (trimmed.includes(' - ')) {
+                  const parts = trimmed.split(' - ');
+                  if (parts[0] && /^[A-Za-z]{3}$/.test(parts[0].trim())) {
+                    maybeCode = parts[0].trim().toUpperCase();
+                  }
+                }
+                // Case 3: Pattern like "... (DAM)"
+                if (!maybeCode) {
+                  const paren = trimmed.match(/\(([A-Za-z]{3})\)/);
+                  if (paren && paren[1]) {
+                    maybeCode = paren[1].toUpperCase();
+                  }
+                }
+                // Case 4: Plain city or airport name (Arabic or English) -> try to resolve to IATA by lookup
+                if (!maybeCode) {
+                  // Extract city token (before comma if exists)
+                  const cityToken = trimmed.split(',')[0].trim().toLowerCase();
+                  const entriesAr = Object.values(airportsMapAr || {});
+                  const entriesEn = Object.values(airportsMapEn || {});
+                  // Helper to find exact then contains in a list of entries, with field preferences
+                  const findIn = (entries: SimpleAirport[], preferArabic: boolean) => {
+                    const exact = entries.find(a => (
+                      (preferArabic && a.municipality_arbic && a.municipality_arbic.toLowerCase() === cityToken) ||
+                      (!preferArabic && a.municipality && a.municipality.toLowerCase() === cityToken) ||
+                      (preferArabic && a.name_arbic && a.name_arbic.toLowerCase() === cityToken) ||
+                      (!preferArabic && a.name && a.name.toLowerCase() === cityToken)
+                    ));
+                    if (exact) return exact;
+                    return entries.find(a => (
+                      (preferArabic && a.municipality_arbic && a.municipality_arbic.toLowerCase().includes(cityToken)) ||
+                      (!preferArabic && a.municipality && a.municipality.toLowerCase().includes(cityToken)) ||
+                      (preferArabic && a.name_arbic && a.name_arbic.toLowerCase().includes(cityToken)) ||
+                      (!preferArabic && a.name && a.name.toLowerCase().includes(cityToken))
+                    ));
+                  };
+                  // Prioritize Arabic fields if UI is Arabic, else English; then fall back to the other list
+                  let found: SimpleAirport | undefined;
+                  if (isArabic) {
+                    found = findIn(entriesAr, true) || findIn(entriesEn, false);
+                  } else {
+                    found = findIn(entriesEn, false) || findIn(entriesAr, true);
+                  }
+                  if (found && found.iata_code) {
+                    maybeCode = String(found.iata_code).toUpperCase();
+                  }
+                }
               }
-              // fallback: show raw string (could be a city name or full label)
+
+              // If we recognized a code and it's in either map, build a localized label
+              const displayMap = isArabic ? airportsMapAr : airportsMapEn;
+              const fallbackMap = isArabic ? airportsMapEn : airportsMapAr;
+              if (maybeCode && (displayMap[maybeCode] || fallbackMap[maybeCode])) {
+                const a = displayMap[maybeCode] || fallbackMap[maybeCode];
+                if (isArabic) {
+                  // Prefer city (municipality) in Arabic; fall back to airport Arabic name, then English
+                  const city = a.municipality_arbic || a.municipality || '';
+                  const name = a.name_arbic || a.name || '';
+                  // In Arabic UI, show only the city/name (no IATA code prefix)
+                  return city || name || a.iata_code;
+                }
+                // English UI: prefer city; fall back to airport name; include IATA code only if neither present
+                const cityEn = a.municipality || a.municipality_arbic || '';
+                const nameEn = a.name || a.name_arbic || '';
+                return cityEn || nameEn || a.iata_code;
+              }
+
+              // Fallback: return the original text as-is
               return iataOrText;
             };
 
@@ -803,14 +876,13 @@ const Cart = () => {
                         <div className="flex-1">
                           <h2 className="text-xl font-bold text-tourtastic-blue">{airlineDisplay}</h2>
                         <div className={`flex items-center gap-2 ${i18n.language === 'ar' ? 'justify-end' : ''}`}>
-                          <span className="text-sm font-medium text-gray-600">{i18n.language === 'ar' ? `رحلة ${cleanFlightNumber}` : `Flight ${cleanFlightNumber}`}</span>
                         </div>
                       </div>
                     </div>                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-white p-4 rounded-lg shadow-sm">
                         <div className={`${i18n.language === 'ar' ? 'border-l' : 'border-r'} border-gray-200 ${i18n.language === 'ar' ? 'pl-4' : 'pr-4'}`}>
                           <div className={`flex items-center ${i18n.language === 'ar' ? 'flex-row-reverse' : ''} gap-2 text-tourtastic-blue mb-2`}>
                             <Calendar className="h-4 w-4" />
-                            <div className="text-sm font-medium">{t('route', 'المسار')}</div>
+                            <div className="text-sm font-medium">{i18n.language === 'ar' ? 'المسار' : t('route', 'Route')}</div>
                           </div>
                           <div className={`font-semibold text-lg ${i18n.language === 'ar' ? 'text-right' : 'text-left'}`}>
                             <span className="text-gray-700">{getAirportDisplay(fromIata)}</span>
@@ -913,7 +985,7 @@ const Cart = () => {
                         {t('totalPrice', 'السعر الإجمالي')}
                       </div>
                       <div className={`text-3xl font-bold text-tourtastic-blue ${i18n.language === 'ar' ? 'text-right' : 'text-left'}`}>
-                        {i18n.language === 'ar' ? `${price.total} ${price.currency}` : `${price.currency} ${price.total}`}
+                        {formatSypFromUsd(price.total)}
                       </div>
                       </div>
 

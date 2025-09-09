@@ -314,6 +314,7 @@
   "flightSegments": "محطات الرحلة",
   "noFlightsFound": "لم يتم العثور على رحلات",
   "searchingFlights": "جاري البحث عن الرحلات...",
+  "airline": "شركة الطيران",
   
   "profile": {
     "title": "ملفي الشخصي",
@@ -332,8 +333,8 @@
     "accountSettings": "إعدادات الحساب",
     "noWishlist": "لم تقم بحفظ أي وجهات بعد.",
     "exploreDestinations": "استكشف الوجهات",
-  "noBookings": "ليس لديك أي حجوزات بعد.",
-  "findYourNextTrip": "ابحث عن رحلتك القادمة",
+    "noBookings": "ليس لديك أي حجوزات بعد.",
+    "findYourNextTrip": "ابحث عن رحلتك القادمة",
     "viewDetails": "عرض التفاصيل",
     "personalInfo": "المعلومات الشخصية",
     "name": "الاسم",
@@ -346,7 +347,9 @@
     "changePassword": "تغيير كلمة المرور",
     "changingPassword": "جاري تغيير كلمة المرور...",
     "passwordUpdated": "تم تحديث كلمة المرور بنجاح",
-    "failedToChangePassword": "فشل في تغيير كلمة المرور"
+    "failedToChangePassword": "فشل في تغيير كلمة المرور",
+    "username": "اسم المستخدم",
+    "saveProfile": "حفظ الملف الشخصي"
   },
   "allFlights": "جميع الرحلات",
   "addToWishlist": "أضف إلى المفضلة",
@@ -441,6 +444,38 @@
       "copyFail": "فشل النسخ",
       "loadMessagesFail": "فشل في تحميل الرسائل",
       "notAuthorized": "أنت غير مخول لعرض هذه الصفحة"
+    },
+    "bookings": {
+      "title": "إدارة الحجوزات",
+      "searchPlaceholder": "البحث في الحجوزات...",
+      "pendingReservations": "الحجوزات قيد الانتظار",
+      "confirmedReservations": "الحجوزات المؤكدة",
+      "doneReservations": "الحجوزات المنجزة",
+      "pendingReservationsLower": "حجوزات قيد الانتظار",
+      "confirmedReservationsLower": "حجوزات مؤكدة",
+      "doneReservationsLower": "حجوزات منجزة",
+      "previous": "السابق",
+      "next": "التالي",
+      "noPending": "لا توجد حجوزات قيد الانتظار",
+      "noConfirmed": "لا توجد حجوزات مؤكدة",
+      "noDone": "لا توجد حجوزات منجزة",
+      "showingRange": "عرض {{from}} إلى {{to}} من أصل {{total}} {{segment}}",
+      "customer": "العميل",
+      "uploadAndComplete": "رفع التذكرة وإكمال الحجز",
+      "type": "النوع",
+      "copy": "نسخ",
+      "ticketNumber": "رقم التذكرة",
+      "method": "الطريقة",
+      "adminNotes": "ملاحظات الإدارة",
+      "assignedTo": "مُسند إلى",
+      "notes": "الملاحظات",
+      "adminCost": "تكلفة الإدارة",
+      "detailsFor": "التفاصيل للحجز {{id}}",
+      "uploadTitle": "رفع التذكرة الإلكترونية وإكمال الحجز",
+      "uploadDescription": "قم برفع ملف التذكرة (PDF)، وإضافة رقم التذكرة/PNR وملاحظة إدارية. سيتم وسم الحجز كمُنجز.",
+      "adminNote": "ملاحظة إدارية",
+      "uploading": "جارٍ الرفع...",
+      "saveAndComplete": "حفظ وإكمال"
     }
   },
   "logOut": "تسجيل الخروج",
@@ -458,6 +493,13 @@
   "topDestinations": "أفضل الوجهات",
   "downloadReport": "تنزيل التقرير",
   "vs": "مقارنة بالعام الماضي",
+  "searchQueries": "استعلامات البحث",
+  "orders": "الطلبات",
+  "count": "العدد",
+  "orderId": "رقم الطلب",
+  "user": "المستخدم",
+  "amount": "المبلغ",
+  "month": "الشهر",
   
   "yourCart": "سلة التسوق",
   "subtotal": "المجموع الفرعي",
@@ -729,5 +771,7 @@
   "timeZoneSingle": "المنطقة الزمنية (قيمة واحدة)",
   "popularDestination": "وجهة شائعة",
   "update": "تحديث",
-  "add": "إضافة"
+  "add": "إضافة",
+  "passengerDetailsDesc": "يرجى ملء معلومات الركاب المطلوبة لكل مسافر",
+  "saveChanges": "حفظ التغييرات"
 }

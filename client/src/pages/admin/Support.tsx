@@ -236,13 +236,26 @@ const AdminSupport: React.FC = () => {
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {newsletters.map((n) => (
-                        <div key={n._id} className="border rounded p-3 bg-white shadow-sm flex items-center justify-between">
-                          <div>
-                            <div className="font-medium">{n.email}</div>
-                            <div className="text-sm text-gray-500">{n.createdAt ? new Date(n.createdAt).toLocaleString() : ''}</div>
+                        <div
+                          key={n._id}
+                          className="border rounded p-3 bg-white shadow-sm flex items-center justify-between gap-3"
+                        >
+                          <div className="flex-1 min-w-0">
+                            {/* Email: allow wrapping on mobile to avoid overflow; on larger screens it will behave normally */}
+                            <div className="font-medium break-all sm:break-words overflow-hidden">
+                              {n.email}
+                            </div>
+                            <div className="text-sm text-gray-500 whitespace-nowrap overflow-hidden text-ellipsis">
+                              {n.createdAt ? new Date(n.createdAt).toLocaleString() : ''}
+                            </div>
                           </div>
-                          <div>
-                            <button onClick={() => handleCopyNewsletter(n.email)} className="text-sm text-blue-600">Copy</button>
+                          <div className="shrink-0">
+                            <button
+                              onClick={() => handleCopyNewsletter(n.email)}
+                              className="text-sm text-blue-600"
+                            >
+                              Copy
+                            </button>
                           </div>
                         </div>
                       ))}

@@ -38,6 +38,8 @@
   "departure": "Departure",
   "return": "Return",
   "passengers": "Passengers",
+  "date": "Date",
+  "actions": "Actions",
 
   "months": {
     "Jan": "Jan",
@@ -221,7 +223,7 @@
   "admin": {
     "support": {
       "title": "Support",
-      "sendNotification": "Send Notification",
+      "sendNotification": "Notification",
       "messages": "Messages",
       "recipient": "Recipient",
       "singleUser": "Single user",
@@ -245,6 +247,38 @@
       "copyFail": "Failed to copy",
       "loadMessagesFail": "Failed to load messages",
       "notAuthorized": "You are not authorized to view this page."
+    },
+    "bookings": {
+      "title": "Bookings Management",
+      "searchPlaceholder": "Search bookings...",
+      "pendingReservations": "Pending Reservations",
+      "confirmedReservations": "Confirmed Reservations",
+      "doneReservations": "Done Reservations",
+      "pendingReservationsLower": "pending reservations",
+      "confirmedReservationsLower": "confirmed reservations",
+      "doneReservationsLower": "done reservations",
+      "previous": "Previous",
+      "next": "Next",
+      "noPending": "No pending reservations",
+      "noConfirmed": "No confirmed reservations",
+      "noDone": "No done reservations",
+      "showingRange": "Showing {{from}} to {{to}} of {{total}} {{segment}}",
+      "customer": "Customer",
+      "uploadAndComplete": "Upload ticket & complete",
+      "type": "Type",
+      "copy": "Copy",
+      "ticketNumber": "Ticket Number",
+      "method": "Method",
+      "adminNotes": "Admin Notes",
+      "assignedTo": "Assigned To",
+      "notes": "Notes",
+      "adminCost": "Admin Cost",
+      "detailsFor": "Details for {{id}}",
+      "uploadTitle": "Upload E-ticket & Complete Booking",
+      "uploadDescription": "Upload PDF e-ticket, add ticket number/PNR and admin note. This will mark the booking as Done.",
+      "adminNote": "Admin Note",
+      "uploading": "Uploading...",
+      "saveAndComplete": "Save & Complete"
     }
   }
 ,
@@ -294,7 +328,9 @@
     "route": "Route",
     "airline": "Airline",
     "departure": "Departure",
-    "class": "Class"
+    "class": "Class",
+    "ticket": "E-ticket",
+    "openTicket": "Open Ticket (PDF)"
   },
   "passenge": {
     "name": "Name",
@@ -314,4 +350,14 @@
     "cancelled": "Cancelled",
     "done": "Done"
   }
+  ,
+  "searchQueries": "Search Queries",
+  "orders": "Orders",
+  "count": "Count",
+  "orderId": "Order ID",
+  "user": "User",
+  "amount": "Amount",
+  "status": "Status",
+  "month": "Month",
+  "bookings": "Bookings"
 }

@@ -23,7 +23,7 @@ import { Airport } from '@/services/airportService';
 import { toast } from '@/hooks/use-toast';
 import api from '@/config/api';
 import { MultiCityFlightResults } from '@/components/flights/MultiCityFlightResults';
-import { useMultiCitySearch } from '@/hooks/useMultiCitySearch';
+import { useMultiCitySearch, SegmentInput } from '@/hooks/useMultiCitySearch';
 
 // Form schema
 const searchFormSchema = z.object({
@@ -271,6 +271,15 @@ const Flights = () => {
   const direct = watch('direct');
 
   const { searchSections, startMultiSearch, loadMore } = useMultiCitySearch();
+  // Keep track of the last submitted search so we can retry automatically if needed
+  const lastSearchPayloadRef = useRef<{
+    segments: SegmentInput[];
+    passengers: PassengerCount;
+    cabin?: 'e' | 'p' | 'b' | 'f';
+    direct?: boolean;
+  } | null>(null);
+  const hasRetriedRef = useRef(false);
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Keep a ref to the latest searchSections so polling helpers can read it
   const searchSectionsRef = useRef(searchSections);
@@ -279,7 +288,7 @@ const Flights = () => {
   }, [searchSections]);
 
   // Wait for search results to arrive (polls searchSectionsRef). Resolves true if results found, false on timeout.
-  const waitForResults = (timeoutMs = 20000, pollInterval = 500) => {
+  const waitForResults = (timeoutMs = 60000, pollInterval = 1000) => {
     return new Promise<boolean>((resolve) => {
       const start = Date.now();
       const check = () => {
@@ -329,6 +338,23 @@ const Flights = () => {
         toDisplay: toAirportNames[idx] || segment.to,
       }));
 
+      // Save payload for potential retry
+      lastSearchPayloadRef.current = {
+        segments: segmentsForHook,
+        passengers: {
+          adults: data.passengers.adults ?? 1,
+          children: data.passengers.children ?? 0,
+          infants: data.passengers.infants ?? 0,
+        },
+        cabin: data.cabin,
+        direct: data.direct,
+      };
+      hasRetriedRef.current = false;
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
+
       await startMultiSearch(segmentsForHook, {
         adults: data.passengers.adults ?? 1,
         children: data.passengers.children ?? 0,
@@ -336,16 +362,33 @@ const Flights = () => {
       }, data.cabin, data.direct);
 
       // Wait for the hook to populate results (avoid race where startMultiSearch returns a job id)
-      const gotResults = await waitForResults(20000, 500);
+      const gotResults = await waitForResults(60000, 1000);
       if (gotResults) {
         setHasSearched(true);
       } else {
-        // No results arrived within timeout - inform user and keep on search page
+        // No results arrived within timeout - inform user and schedule a retry once
         toast({
           title: t('searchErrorTitle', 'Search Error'),
           description: t('noFlightsFoundTimeout', 'No flights found after multiple attempts. Please try different search criteria.'),
           variant: 'destructive',
         });
+        if (!hasRetriedRef.current && lastSearchPayloadRef.current) {
+          const delayMs = 15000; // 15 seconds before retry
+          toast({
+            title: t('retryingSearch', 'Retrying Search'),
+            description: t('retryingSearchInSeconds', 'We will retry your search automatically in a few seconds.'),
+          });
+          hasRetriedRef.current = true;
+          retryTimeoutRef.current = setTimeout(async () => {
+            const payload = lastSearchPayloadRef.current!;
+            setIsSubmitting(true);
+            try {
+              await startMultiSearch(payload.segments, payload.passengers, payload.cabin, payload.direct);
+            } finally {
+              setIsSubmitting(false);
+            }
+          }, delayMs);
+        }
       }
     } catch (error) {
       toast({
@@ -411,17 +454,48 @@ const Flights = () => {
       (async () => {
         try {
           setIsSubmitting(true);
+          // Save payload for potential retry
+          lastSearchPayloadRef.current = {
+            segments: segmentsForHook,
+            passengers: passengerCounts || { adults: 1, children: 0, infants: 0 },
+            cabin: undefined,
+            direct: undefined,
+          };
+          hasRetriedRef.current = false;
+          if (retryTimeoutRef.current) {
+            clearTimeout(retryTimeoutRef.current);
+            retryTimeoutRef.current = null;
+          }
+
           await startMultiSearch(segmentsForHook, passengerCounts || { adults: 1, children: 0, infants: 0 }, undefined, undefined);
 
-          const gotResults = await waitForResults(20000, 500);
+          const gotResults = await waitForResults(60000, 1000);
           if (gotResults) {
             setHasSearched(true);
           } else {
+            // No results arrived within timeout - inform user and schedule a retry once
             toast({
               title: t('searchErrorTitle', 'Search Error'),
               description: t('noFlightsFoundTimeout', 'No flights found after multiple attempts. Please try different search criteria.'),
               variant: 'destructive',
             });
+            if (!hasRetriedRef.current && lastSearchPayloadRef.current) {
+              const delayMs = 15000; // 15 seconds before retry
+              toast({
+                title: t('retryingSearch', 'Retrying Search'),
+                description: t('retryingSearchInSeconds', 'We will retry your search automatically in a few seconds.'),
+              });
+              hasRetriedRef.current = true;
+              retryTimeoutRef.current = setTimeout(async () => {
+                const payload = lastSearchPayloadRef.current!;
+                setIsSubmitting(true);
+                try {
+                  await startMultiSearch(payload.segments, payload.passengers, payload.cabin, payload.direct);
+                } finally {
+                  setIsSubmitting(false);
+                }
+              }, delayMs);
+            }
           }
         } catch (error) {
           toast({
@@ -437,6 +511,52 @@ const Flights = () => {
 
     initializedFromStateRef.current = true;
   }, [location.state, onSubmit, setValue, startMultiSearch, t]);
+
+  // If we have searched and all sections are complete with zero results, schedule a one-time retry
+  useEffect(() => {
+    if (!hasSearched) return;
+    if (!searchSections || searchSections.length === 0) return;
+
+    const allComplete = searchSections.every(s => s.isComplete);
+    const totalFlights = searchSections.reduce((acc, s) => acc + (s.flights?.length || 0), 0);
+
+    if (allComplete && totalFlights === 0 && !hasRetriedRef.current && lastSearchPayloadRef.current) {
+      const delayMs = 15000; // 15 seconds
+      toast({
+        title: t('retryingSearch', 'Retrying Search'),
+        description: t('retryingSearchInSeconds', 'We will retry your search automatically in a few seconds.'),
+      });
+      hasRetriedRef.current = true;
+      if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = setTimeout(async () => {
+        const payload = lastSearchPayloadRef.current!;
+        setIsSubmitting(true);
+        try {
+          await startMultiSearch(payload.segments, payload.passengers, payload.cabin, payload.direct);
+        } finally {
+          setIsSubmitting(false);
+        }
+      }, delayMs);
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
+    };
+  }, [hasSearched, searchSections, startMultiSearch, t]);
+
+  // Global unmount cleanup to ensure no stray retry timers remain
+  useEffect(() => {
+    return () => {
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   // Open filters popover automatically on desktop/laptop when results are shown
   useEffect(() => {
@@ -1040,9 +1160,8 @@ const Flights = () => {
             {/* Results */}
             <div className="md:col-span-3">
               <MultiCityFlightResults
-                searchSections={searchSections.map(section => ({
-                  ...section,
-                  flights: section.flights
+                searchSections={searchSections.map(section => {
+                  const derivedFlights = section.flights
                     .filter(flight => {
                       // Apply airline filter
                       if (filters.selectedAirlines.length > 0 &&
@@ -1085,8 +1204,17 @@ const Flights = () => {
                         default:
                           return 0;
                       }
-                    })
-                }))}
+                    });
+
+                  // Recompute hasMore relative to the derived list and streaming state
+                  const hasMoreDerived = section.hasMore || (!section.isComplete) || (derivedFlights.length > section.visibleCount);
+
+                  return {
+                    ...section,
+                    flights: derivedFlights,
+                    hasMore: hasMoreDerived,
+                  };
+                })}
                 passengers={{ adults: passengers.adults, children: passengers.children, infants: passengers.infants }}
                 onFlightSelection={handleFlightSelection}
                 onLoadMore={loadMore}

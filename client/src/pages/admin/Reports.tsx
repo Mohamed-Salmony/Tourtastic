@@ -31,6 +31,10 @@ type SearchLogRecord = {
   _id?: string;
   from?: string;
   to?: string;
+  // backend aggregated shape
+  count?: number;
+  lastSearchedAt?: string | Date;
+  // legacy shape fallback
   searchedAt?: string | Date;
   resultsCount?: number;
 };
@@ -48,6 +52,7 @@ const AdminReports: React.FC = () => {
   const [topDestinations, setTopDestinations] = useState<TopDestination[]>([]);
   const [searchLogs, setSearchLogs] = useState<SearchLogRecord[]>([]);
   const [orders, setOrders] = useState<BookingRecord[]>([]);
+  const [growthRate, setGrowthRate] = useState<{ revenue?: number; bookings?: number }>({});
 
   useEffect(() => { fetchReports(); fetchOrders(); loadSypFromServer(); }, []);
 
@@ -68,7 +73,7 @@ const AdminReports: React.FC = () => {
 
   const fetchReports = async (year?: number) => {
     try {
-  const res = await api.get('/admin/reports', { params: { year } });
+      const res = await api.get('/admin/reports', { params: { year } });
       if (res.data && res.data.success) {
         const d = res.data.data as {
           totalRevenue?: number;
@@ -76,14 +81,16 @@ const AdminReports: React.FC = () => {
           revenueByMonth?: number[];
           bookingDistribution?: DistributionEntry[];
           topDestinations?: TopDestination[];
-          searchLogs?: SearchLogRecord[];
+          searchLogs?: any[];
+          growthRate?: { revenue?: number; bookings?: number };
         };
         setTotalRevenue(d.totalRevenue || 0);
         setTotalBookings(d.totalBookings || 0);
         setRevenueByMonth((d.revenueByMonth || []).map((v:number,i:number) => v));
         setBookingDistribution(d.bookingDistribution || []);
         setTopDestinations(d.topDestinations || []);
-        setSearchLogs(d.searchLogs || []);
+        setSearchLogs((d.searchLogs || []) as SearchLogRecord[]);
+        setGrowthRate(d.growthRate || {});
       }
     } catch (err) {
       console.error('Failed to fetch reports', err);
@@ -92,9 +99,25 @@ const AdminReports: React.FC = () => {
 
   const fetchOrders = async () => {
     try {
-  const res = await api.get('/admin/bookings');
-      if (res.data && res.data.success) {
-        setOrders(res.data.data as BookingRecord[] || []);
+      // Use flight bookings endpoint and show only completed tickets (status = done)
+      const res = await api.get('/admin/flight-bookings');
+      if (res.data && res.data.success && Array.isArray(res.data.data)) {
+        const all = res.data.data as any[];
+        const doneOnly = all.filter(b => (b?.status || '').toLowerCase() === 'done');
+        // adapt to BookingRecord shape for rendering
+        const mapped: BookingRecord[] = doneOnly.map((b) => ({
+          _id: b._id,
+          bookingId: b.bookingId,
+          userId: b.customerName || b.customerEmail,
+          destination: b.details?.flightDetails?.to || b.destination,
+          bookingDate: b.date || b.bookingDate || b.createdAt,
+          createdAt: b.createdAt,
+          amount: b.amount,
+          details: { flightDetails: { from: b.details?.flightDetails?.from, to: b.details?.flightDetails?.to, selectedFlight: b.details?.selectedFlight } },
+          status: b.status,
+          customerName: b.customerName
+        }));
+        setOrders(mapped);
       }
     } catch (err) {
       console.error('Failed to fetch orders', err);
@@ -107,7 +130,7 @@ const AdminReports: React.FC = () => {
 
   const handleDownload = async () => {
     try {
-  const res = await api.get('/admin/reports/download', { responseType: 'blob' });
+      const res = await api.get('/admin/reports/download', { responseType: 'blob' });
       const contentType = res.headers['content-type'];
       const ext = contentType && contentType.includes('spreadsheet') ? 'xlsx' : 'csv';
       const filename = `tourtastic_orders.${ext}`;
@@ -158,7 +181,13 @@ const AdminReports: React.FC = () => {
         
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{/* Show revenue growth */} { /* placeholder */ }%</div>
+            <div className="text-2xl font-bold flex gap-4">
+              <span>{typeof growthRate.revenue === 'number' ? `${growthRate.revenue}%` : '-'}</span>
+              <span className="text-sm text-gray-500">{t('revenue')}</span>
+              <span>|</span>
+              <span>{typeof growthRate.bookings === 'number' ? `${growthRate.bookings}%` : '-'}</span>
+              <span className="text-sm text-gray-500">{t('bookings')}</span>
+            </div>
             <p className="text-sm text-gray-500">{t('growthRate')}</p>
           </CardContent>
         </Card>
@@ -238,28 +267,28 @@ const AdminReports: React.FC = () => {
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Search Queries</CardTitle>
+              <CardTitle className="text-lg">{t('searchQueries', 'Search Queries')}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="overflow-auto max-h-64">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left">
-                      <th>From</th>
-                      <th>To</th>
-                      <th>Date</th>
-                      <th>Results</th>
+                      <th>{t('from', 'From')}</th>
+                      <th>{t('to', 'To')}</th>
+                      <th>{t('date', 'Date')}</th>
+                      <th>{t('count', 'Count')}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {searchLogs.map((s) => (
-                          <tr key={s._id}>
-                            <td>{s.from}</td>
-                            <td>{s.to}</td>
-                            <td>{s.searchedAt ? new Date(s.searchedAt).toLocaleString() : ''}</td>
-                            <td>{s.resultsCount}</td>
-                          </tr>
-                        ))}
+                      {searchLogs.map((s, idx) => (
+                        <tr key={s._id || `${s.from}-${s.to}-${idx}`}>
+                          <td>{s.from}</td>
+                          <td>{s.to}</td>
+                          <td>{s.lastSearchedAt ? new Date(s.lastSearchedAt).toLocaleString() : (s.searchedAt ? new Date(s.searchedAt).toLocaleString() : '')}</td>
+                          <td>{typeof s.count === 'number' ? s.count : (typeof s.resultsCount === 'number' ? s.resultsCount : 0)}</td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>
@@ -269,7 +298,7 @@ const AdminReports: React.FC = () => {
           <Card>
             <CardHeader>
                 <div className="flex items-center justify-between w-full">
-                  <CardTitle className="text-lg">Orders</CardTitle>
+                  <CardTitle className="text-lg">{t('orders', 'Orders')}</CardTitle>
                   <Button variant="outline" size="sm" onClick={handleDownload}>
                     {t('downloadReport')}
                   </Button>
@@ -280,13 +309,13 @@ const AdminReports: React.FC = () => {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left">
-                      <th>Order ID</th>
-                      <th>User</th>
-                      <th>From</th>
-                      <th>To</th>
-                      <th>Date</th>
-                      <th>Amount</th>
-                      <th>Status</th>
+                      <th>{t('orderId', 'Order ID')}</th>
+                      <th>{t('user', 'User')}</th>
+                      <th>{t('from', 'From')}</th>
+                      <th>{t('to', 'To')}</th>
+                      <th>{t('date', 'Date')}</th>
+                      <th>{t('amount', 'Amount')}</th>
+                      <th>{t('status', 'Status')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -296,7 +325,7 @@ const AdminReports: React.FC = () => {
                         <td>{(typeof o.userId === 'object' ? (o.userId && (o.userId.name || o.userId.email)) : o.userId) || o.customerName}</td>
                         <td>{(o.details && o.details.flightDetails && o.details.flightDetails.from) || ''}</td>
                         <td>{(o.details && o.details.flightDetails && o.details.flightDetails.to) || o.destination || ''}</td>
-                        <td>{o.bookingDate ? new Date(o.bookingDate).toLocaleDateString() : (o.createdAt ? new Date(o.createdAt).toLocaleDateString() : '')}</td>
+                        <td>{o.bookingDate ? new Date(o.bookingDate as any).toLocaleDateString() : (o.createdAt ? new Date(o.createdAt as any).toLocaleDateString() : '')}</td>
                         <td>{formatSypFromUsd(o.amount ?? (o.details?.flightDetails?.selectedFlight?.price?.total ?? o.createdAt ? 0 : null))}</td>
                         <td>{o.status}</td>
                       </tr>

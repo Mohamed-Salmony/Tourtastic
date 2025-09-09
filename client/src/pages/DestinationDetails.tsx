@@ -407,6 +407,49 @@ const DestinationDetails: React.FC = () => {
     fetchDestinationDetails();
   }, [destinationId]);
 
+  // Helper to join list fields that may arrive as:
+  // - Array of strings
+  // - Array of localized objects { en: string, ar: string }
+  // - Localized object of arrays { en: string[], ar: string[] }
+  const joinLocalizedList = (value: any): string => {
+    if (!value) return '';
+    // If already an array, map each item to a display string
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => {
+          if (!item && item !== 0) return '';
+          if (typeof item === 'string') return item;
+          if (typeof item === 'object') {
+            const v = item as Record<string, any>;
+            return v[currentLang] || v.en || v.ar || '';
+          }
+          return String(item);
+        })
+        .filter(Boolean)
+        .join(', ');
+    }
+    // If localized object containing arrays per lang
+    if (typeof value === 'object') {
+      const perLang = (value[currentLang] || value.en || value.ar) as any[] | undefined;
+      if (Array.isArray(perLang)) {
+        return perLang
+          .map((item) => {
+            if (!item && item !== 0) return '';
+            if (typeof item === 'string') return item;
+            if (typeof item === 'object') {
+              const v = item as Record<string, any>;
+              return v[currentLang] || v.en || v.ar || '';
+            }
+            return String(item);
+          })
+          .filter(Boolean)
+          .join(', ');
+      }
+    }
+    // Fallback to string
+    return String(value);
+  };
+
   const searchFlightsForDestination = useCallback(async () => {
     if (!destinationId || !nearestAirport || !destination) return;
 
@@ -584,7 +627,7 @@ const DestinationDetails: React.FC = () => {
                         {t('topAttractions', currentLang === 'ar' ? 'أهم المعالم' : 'Top Attractions')}
                       </h3>
                       <p className="text-gray-600 text-sm" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
-                        {destination?.topAttractions?.map(attraction => attraction[currentLang]).join(', ') ||
+                        {joinLocalizedList(destination?.topAttractions) ||
                           t('noAttractions', currentLang === 'ar' ? 'لا توجد معالم مدرجة' : 'No attractions listed')}
                       </p>
                     </div>
@@ -595,7 +638,7 @@ const DestinationDetails: React.FC = () => {
                         {t('localCuisine', currentLang === 'ar' ? 'المأكولات المحلية' : 'Local Cuisine')}
                       </h3>
                       <p className="text-gray-600 text-sm">
-                        {destination?.localCuisine?.map(cuisine => cuisine[currentLang]).join(', ') || t('noCuisine', 'No cuisine information available')}
+                        {joinLocalizedList(destination?.localCuisine) || t('noCuisine', 'No cuisine information available')}
                       </p>
                     </div>
                   </div>
@@ -607,7 +650,7 @@ const DestinationDetails: React.FC = () => {
                         {t('shopping', currentLang === 'ar' ? 'التسوق' : 'Shopping')}
                       </h3>
                       <p className="text-gray-600 text-sm" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
-                        {destination?.shopping?.map(shop => shop[currentLang]).join(', ') ||
+                        {joinLocalizedList(destination?.shopping) ||
                           t('noShopping', currentLang === 'ar' ? 'لا توجد معلومات تسوق متاحة' : 'No shopping information available')}
                       </p>
                     </div>

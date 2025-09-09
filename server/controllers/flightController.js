@@ -1,5 +1,6 @@
 const axios = require('axios');
 const asyncHandler = require('../middleware/asyncHandler');
+const SearchLog = require('../models/SearchLog');
 
 // Seeru API configuration
 const seeruBaseURL = `https://${process.env.SEERU_API_ENDPOINT}/${process.env.SEERU_API_VERSION}/flights`;
@@ -46,6 +47,30 @@ exports.searchFlights = asyncHandler(async (req, res) => {
   }
 
   try {
+    // Persist search log (best-effort, non-blocking)
+    try {
+      // trips format: ORG-DEST-YYYYMMDD(:...)
+      const firstTrip = String(trips || '').split(':')[0] || '';
+      const parts = firstTrip.split('-');
+      const from = (parts[0] || '').toUpperCase();
+      const to = (parts[1] || '').toUpperCase();
+      const dateStr = parts[2];
+      const searchedAt = dateStr && dateStr.length >= 8
+        ? new Date(`${dateStr.slice(0,4)}-${dateStr.slice(4,6)}-${dateStr.slice(6,8)}T00:00:00Z`)
+        : new Date();
+      await SearchLog.create({
+        from,
+        to,
+        searchedAt,
+        resultsCount: 1,
+        ip: req.ip,
+        meta: { cabin, direct: Number(direct) === 1, adults: Number(adults), children: Number(children), infants: Number(infants) }
+      });
+    } catch (e) {
+      // do not fail search on log error
+      console.warn('SearchLog insert failed:', e?.message || e);
+    }
+
     // Use environment variables for the correct API endpoint
     const seeruResponse = await axios.get(
       `https://${process.env.SEERU_API_ENDPOINT}/${process.env.SEERU_API_VERSION}/flights/search/${trips}/${adults}/${children}/${infants}?cabin=${cabin}&direct=${direct}`,

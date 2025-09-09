@@ -124,10 +124,21 @@ export function useMultiCitySearch(): MultiCitySearchApi {
       isComplete: false,
     }));
 
+    // Retry helper: tries once, then retries one additional time after a short delay on failure
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    const withRetryOnce = async <T>(fn: () => Promise<T>, retryDelayMs = 1500): Promise<T> => {
+      try {
+        return await fn();
+      } catch (e) {
+        await delay(retryDelayMs);
+        return await fn();
+      }
+    };
+
     const pollOnce = async (after?: number) => {
       if (!mountedRef.current) return;
       try {
-        const results = await getSearchResults(searchId, after);
+        const results = await withRetryOnce(() => getSearchResults(searchId, after));
 
         // Normalize result fields to avoid boolean coercion issues
         const normalizedComplete = typeof results.complete === 'number' ? results.complete : (results.complete ? 100 : 0);
@@ -157,9 +168,10 @@ export function useMultiCitySearch(): MultiCitySearchApi {
             return;
           }
           
-          // If we've been polling with no results for a while, mark as complete
+          // If we've been polling with no results for a while, be more patient before stopping.
+          // Many providers can take a while to stream first results; wait longer to reduce false negatives.
           ref.emptyPollCount += 1;
-          if (ref.emptyPollCount >= 5) { // Stop after 5 empty polls
+          if (ref.emptyPollCount >= 30) { // ~60s with 2s interval
             updateSection(sectionIndex, (prev) => ({
               ...prev,
               loading: false,
@@ -418,8 +430,16 @@ export function useMultiCitySearch(): MultiCitySearchApi {
           hasMore: true,
         }));
         const promise = (async () => {
-          const resp = await searchFlights(searchParams);
-          return resp.search_id;
+          // Retry starting search once if it fails initially
+          const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+          try {
+            const resp = await searchFlights(searchParams);
+            return resp.search_id;
+          } catch (e) {
+            await delay(1500);
+            const resp = await searchFlights(searchParams);
+            return resp.search_id;
+          }
         })();
         pendingSearches.set(key, promise);
         try {

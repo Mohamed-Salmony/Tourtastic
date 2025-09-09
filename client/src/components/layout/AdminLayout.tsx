@@ -40,7 +40,6 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     { name: t('admin.support.title'), href: '/admin/support', icon: <HelpCircle className="h-5 w-5" /> },
     { name: t('destinations'), href: '/admin/destinations', icon: <MapPin className="h-5 w-5" /> },
     { name: t('reports'), href: '/admin/reports', icon: <BarChart2 className="h-5 w-5" /> },
-    { name: t('myProfile'), href: '/admin/profile', icon: <User className="h-5 w-5" /> },
   ];
 
   const isActive = (path: string) => {

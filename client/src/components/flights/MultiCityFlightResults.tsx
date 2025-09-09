@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plane } from 'lucide-react';
+import PlaneAnimation from '@/components/ui/PlaneAnimation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Flight } from '@/services/flightService';
@@ -21,6 +22,7 @@ interface SearchSection {
   loading: boolean;
   error?: string;
   visibleCount: number;
+  progress: number;
 }
 
 interface MultiCityFlightResultsProps {
@@ -133,10 +135,10 @@ const MultiCityFlightResults: React.FC<MultiCityFlightResultsProps> = ({
         </CardHeader>
         <CardContent>
           {(section.loading || !section.isComplete) && section.flights.length === 0 ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="flex items-center gap-2">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-tourtastic-blue"></div>
-                <span className="text-gray-600">{t('searchingFlights', 'Searching for flights...')}</span>
+            <div className="flex flex-col items-center justify-center py-10 gap-4">
+              <PlaneAnimation size="lg" progress={Math.min(Math.max(section.progress || 0, 0), 100)} />
+              <div className="text-gray-600">
+                {t('searchingFlights', 'Searching for flights...')}
               </div>
             </div>
           ) : section.flights.length > 0 ? (
@@ -179,9 +181,9 @@ const MultiCityFlightResults: React.FC<MultiCityFlightResultsProps> = ({
 
               {!section.isComplete && (
                 <div className="mt-4 text-center text-sm text-gray-500">
-                  <div className="flex items-center justify-center gap-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-tourtastic-blue"></div>
-                    {t('searchingMoreFlights', 'Searching for more flights...')}
+                  <div className="flex items-center justify-center gap-3">
+                    <PlaneAnimation size="sm" progress={Math.min(Math.max(section.progress || 0, 0), 100)} />
+                    <span>{t('searchingMoreFlights', 'Searching for more flights...')}</span>
                   </div>
                 </div>
               )}

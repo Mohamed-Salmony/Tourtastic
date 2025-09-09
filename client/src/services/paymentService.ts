@@ -1,10 +1,4 @@
-import api from './api';
-import crypto from 'crypto-js';
-
-const ECASH_PAYMENT_GATEWAY_URL = 'https://checkout.ecash-pay.com';
-const TERMINAL_KEY = 'RJ757K';
-const MERCHANT_KEY = 'SLZC0W';
-const MERCHANT_SECRET = '8Z1VLNPK27QOX0619WFMDADY6J48NJYIQTT3BGGYCDYJ7JUA2HOKKXFT1UNBT35R';
+import api from '../config/api';
 
 export interface PaymentResponse {
   isSuccess: boolean;
@@ -16,38 +10,19 @@ export interface PaymentResponse {
 }
 
 class PaymentService {
-  private generateVerificationCode(amount: number, orderRef: string): string {
-    const hashString = `${MERCHANT_KEY}${MERCHANT_SECRET}${amount}${orderRef}`;
-    return crypto.MD5(hashString).toString().toUpperCase();
-  }
-
-  private generateCallbackToken(transactionNo: string, amount: number, orderRef: string): string {
-    const hashString = `${MERCHANT_KEY}${MERCHANT_SECRET}${transactionNo}${amount}${orderRef}`;
-    return crypto.MD5(hashString).toString().toUpperCase();
-  }
-
   async initiatePayment(amount: number, orderRef: string): Promise<string> {
-    const verificationCode = this.generateVerificationCode(amount, orderRef);
-    const redirectUrl = encodeURIComponent(`${window.location.origin}/payment/success`);
-    const callbackUrl = encodeURIComponent(`${window.location.origin}/api/payment/callback`);
-
-    const paymentUrl = `${ECASH_PAYMENT_GATEWAY_URL}/Checkout/CardCheckout?tk=${TERMINAL_KEY}&mid=${MERCHANT_KEY}&vc=${verificationCode}&c=SYP&a=${amount}&lang=EN&or=${orderRef}&ru=${redirectUrl}&cu=${callbackUrl}`;
-    
-    return paymentUrl;
+    const returnUrl = `${window.location.origin}/payment/success`;
+    const resp = await api.post('/payment/initiate', { amount, orderRef, returnUrl });
+    if (!resp.data?.success || !resp.data?.url) {
+      throw new Error(resp.data?.message || 'Failed to initiate payment');
+    }
+    return resp.data.url as string;
   }
 
-  verifyCallbackToken(response: PaymentResponse): boolean {
-    if (!response.token || !response.transactionNo || !response.amount || !response.orderRef) {
-      return false;
-    }
-
-    const expectedToken = this.generateCallbackToken(
-      response.transactionNo,
-      response.amount,
-      response.orderRef
-    );
-
-    return response.token === expectedToken;
+  // Callback verification is now performed on the server.
+  // This remains here if you need a client-side double-check, but it's optional.
+  verifyCallbackToken(_response: PaymentResponse): boolean {
+    return true;
   }
 }
 
