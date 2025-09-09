@@ -83,16 +83,10 @@ exports.getUserWishlist = asyncHandler(async (req, res, next) => {
 // @route   POST /api/users/:id/wishlist
 // @access  Private
 exports.addToWishlist = asyncHandler(async (req, res, next) => {
-  console.log('Add to wishlist request:', {
-    userId: req.params.id,
-    destinationId: req.body.destinationId,
-    body: req.body
-  });
 
   const user = await User.findById(req.params.id);
   
   if (!user) {
-    console.log('User not found:', req.params.id);
     return res.status(404).json({
       success: false,
       error: 'User not found'
@@ -101,7 +95,6 @@ exports.addToWishlist = asyncHandler(async (req, res, next) => {
 
   // Check if destination is already in wishlist
   if (user.wishlist.includes(req.body.destinationId)) {
-    console.log('Destination already in wishlist:', req.body.destinationId);
     return res.status(400).json({
       success: false,
       error: 'This destination is already in your wishlist'
@@ -115,8 +108,6 @@ exports.addToWishlist = asyncHandler(async (req, res, next) => {
       { $push: { wishlist: req.body.destinationId } },
       { new: true }
     );
-
-    console.log('Updated user wishlist:', updatedUser.wishlist);
 
     res.status(200).json({
       success: true,

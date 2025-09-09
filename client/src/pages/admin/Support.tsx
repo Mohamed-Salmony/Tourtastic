@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 
 const AdminSupport: React.FC = () => {
   const { user } = useAuth();
-  const [tab, setTab] = useState<'send' | 'messages'>('send');
+  const [tab, setTab] = useState<'send' | 'messages' | 'email'>('send');
 
   // send form states
   const [recipientType, setRecipientType] = useState<'single' | 'all'>('single');
@@ -26,6 +26,14 @@ const AdminSupport: React.FC = () => {
   const [newsletters, setNewsletters] = useState<Newsletter[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const { t } = useTranslation();
+
+  // email tab state
+  const [emailRecipientType, setEmailRecipientType] = useState<'single' | 'all'>('single');
+  const [emailRecipient, setEmailRecipient] = useState('');
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBodyHtml, setEmailBodyHtml] = useState('');
+  const [emailPdf, setEmailPdf] = useState<File | null>(null);
+  const [emailLoading, setEmailLoading] = useState(false);
 
   // fetch handlers for messages (keep hooks and functions unconditional)
   const fetchMessages = useCallback(async () => {
@@ -59,6 +67,41 @@ const AdminSupport: React.FC = () => {
     } catch (err) {
       console.error(err);
       toast.error(t('admin.support.archiveFail'));
+    }
+  };
+
+  const handleEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emailSubject || !emailBodyHtml) {
+      toast.error(t('admin.support.emailSubjectBodyRequired'));
+      return;
+    }
+    setEmailLoading(true);
+    try {
+      const form = new FormData();
+      form.append('recipientType', emailRecipientType);
+      if (emailRecipientType === 'single') {
+        form.append('recipient', emailRecipient);
+      }
+      form.append('subject', emailSubject);
+      form.append('bodyHtml', emailBodyHtml);
+      if (emailPdf) form.append('pdf', emailPdf);
+
+      const resp = await api.post('/support/send-email', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+      if (resp.data?.success) {
+        toast.success(t('admin.support.emailSent'));
+        setEmailRecipient('');
+        setEmailSubject('');
+        setEmailBodyHtml('');
+        setEmailPdf(null);
+      } else {
+        toast.error(t('admin.support.emailFailed'));
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(t('admin.support.emailFailed'));
+    } finally {
+      setEmailLoading(false);
     }
   };
 
@@ -137,6 +180,9 @@ const AdminSupport: React.FC = () => {
             <button onClick={() => setTab('messages')} className={`px-3 py-1 rounded ${tab === 'messages' ? 'bg-blue-600 text-white' : 'border'}`}>
               {t('admin.support.messages')}
             </button>
+            <button onClick={() => setTab('email')} className={`px-3 py-1 rounded ${tab === 'email' ? 'bg-blue-600 text-white' : 'border'}`}>
+              {t('admin.support.emailTab')}
+            </button>
           </div>
         </div>
 
@@ -187,6 +233,54 @@ const AdminSupport: React.FC = () => {
               <div>
                 <button disabled={loading} type="submit" className="bg-blue-600 text-white px-4 py-2 rounded">
                   {loading ? t('admin.support.sending') : t('admin.support.sendButton')}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {tab === 'email' && (
+          <div className="space-y-4">
+            <h2 className="text-lg font-semibold">{t('admin.support.emailTitle')}</h2>
+            <form onSubmit={handleEmailSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">{t('admin.support.recipient')}</label>
+                <div className="flex gap-3 flex-wrap">
+                  <label className="flex items-center gap-2">
+                    <input type="radio" checked={emailRecipientType === 'single'} onChange={() => setEmailRecipientType('single')} />
+                    <span>{t('admin.support.singleUser')}</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="radio" checked={emailRecipientType === 'all'} onChange={() => setEmailRecipientType('all')} />
+                    <span>{t('admin.support.allUsers')}</span>
+                  </label>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  {emailRecipientType === 'all' ? t('admin.support.emailAllHint') : t('admin.support.emailPlaceholder')}
+                </p>
+                {emailRecipientType === 'single' ? (
+                  <input value={emailRecipient} onChange={(e) => setEmailRecipient(e.target.value)} placeholder={t('admin.support.emailPlaceholder')} className="mt-2 w-full border rounded p-2" />
+                ) : null}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">{t('admin.support.emailSubject')}</label>
+                <input value={emailSubject} onChange={(e) => setEmailSubject(e.target.value)} className="w-full border rounded p-2" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">{t('admin.support.emailBodyHtml')}</label>
+                <textarea value={emailBodyHtml} onChange={(e) => setEmailBodyHtml(e.target.value)} className="w-full border rounded p-2" rows={8} />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">{t('admin.support.optionalPdf')}</label>
+                <input type="file" accept="application/pdf" onChange={(e) => setEmailPdf(e.target.files ? e.target.files[0] : null)} />
+              </div>
+
+              <div>
+                <button disabled={emailLoading} type="submit" className="bg-blue-600 text-white px-4 py-2 rounded">
+                  {emailLoading ? t('admin.support.sendingEmail') : t('admin.support.sendEmail')}
                 </button>
               </div>
             </form>

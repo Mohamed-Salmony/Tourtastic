@@ -42,13 +42,13 @@ const Login: React.FC = () => {
         password: formData.password,
         ...(isEmail ? { email: formData.email } : { username: formData.email })
       };
-      console.log('Attempting login with:', loginData);
+      
       const response = await api.post('/auth/login', loginData);
 
-      console.log('Login response:', response.data);
+      
 
       if (response.data.success) {
-        console.log('Login successful, calling login function');
+        
         
         // Log the user in with both tokens and user data
         login(
@@ -64,16 +64,34 @@ const Login: React.FC = () => {
         if (localCartItems.length > 0) {
           try {
             // Create bookings for each local cart item
-                for (const item of localCartItems) {
-                  // The client-side cart items historically used `departureTime` while the
-                  // server expects `departureDate`. Normalize common variants so the
-                  // createBooking endpoint receives a `departureDate` and passes schema validation.
-                  const departureDate = item.departureDate || item.departureTime || item.departure_time ||
-                    item.selectedFlight?.departureTime || item.selectedFlight?.legs?.[0]?.from?.date || null;
+                for (const raw of localCartItems) {
+                  // Normalize dates: server expects `departureDate`
+                  const departureDate = raw.departureDate || raw.departureTime || raw.departure_time ||
+                    raw.selectedFlight?.departureTime || raw.selectedFlight?.legs?.[0]?.from?.date || null;
 
+                  // Build payload matching bookingController expectations
                   const flightDetails = {
-                    ...item,
+                    from: raw.from || raw.origin || raw.fromLabel || '',
+                    to: raw.to || raw.destination || raw.toLabel || '',
+                    fromIata: raw.fromIata || raw.originIata || null,
+                    toIata: raw.toIata || raw.destinationIata || null,
                     departureDate,
+                    passengers: raw.passengers || { adults: 1, children: 0, infants: 0 },
+                    selectedFlight: {
+                      flightId: raw.flightId || raw.flightnumber || raw.trip_id || raw.selectedFlight?.flightId || '',
+                      airline: raw.airline || raw.selectedFlight?.airline || '',
+                      airlineCode: raw.airlineCode || raw.selectedFlight?.airlineCode || null,
+                      airlineLogo: raw.airlineLogo || raw.selectedFlight?.airlineLogo || null,
+                      departureTime: raw.departureTime || departureDate || raw.selectedFlight?.departureTime || null,
+                      arrivalTime: raw.arrivalTime || raw.selectedFlight?.arrivalTime || null,
+                      price: {
+                        total: (raw.price && typeof raw.price === 'object' ? (Number(raw.price.total || raw.price.amount || 0) || 0) : Number(raw.price || 0)) || 0,
+                        currency: (raw.price && typeof raw.price === 'object' ? (raw.price.currency || raw.price.currency_code) : raw.currency) || 'USD'
+                      },
+                      class: raw.class || raw.cabin || raw.selectedFlight?.class || 'economy',
+                      // Keep raw as well for maximum compatibility (server stores under selectedFlight.raw)
+                      raw,
+                    },
                   };
 
                   await api.post('/bookings', { flightDetails });
@@ -90,12 +108,17 @@ const Login: React.FC = () => {
           description: "Successfully logged in",
         });
 
-        // Check if we should redirect to cart for checkout
-        const { state } = location;
-        if (state?.returnUrl === '/cart' && state?.message?.includes('checkout')) {
-          navigate('/cart');
+        // If admin, go straight to admin dashboard
+        if (response.data.user?.role === 'admin') {
+          navigate('/admin');
         } else {
-          navigate(from);
+          // Check if we should redirect to cart for checkout
+          const { state } = location;
+          if (state?.returnUrl === '/cart' && state?.message?.includes('checkout')) {
+            navigate('/cart');
+          } else {
+            navigate(from);
+          }
         }
       }
     } catch (error) {

@@ -130,7 +130,7 @@ exports.getFlightSearchResults = asyncHandler(async (req, res) => {
       params.after = parseInt(after);
     }
     
-    console.log('Fetching Seeru results:', { resultUrl, params });
+    
     
     const response = await seeruApi.get(resultUrl, { params });
 
@@ -504,7 +504,8 @@ function getAirlineName(iataCode) {
     'KL': 'KLM Royal Dutch Airlines',
     'LO': 'LOT Polish Airlines',
     'TO': 'Transavia France',
-    'TU': 'Tunisair'
+    'TU': 'Tunisair',
+    'VY': 'Vueling'
   };
   return airlineMap[iataCode] || iataCode;
 }
@@ -585,7 +586,7 @@ exports.validateFare = asyncHandler(async (req, res) => {
   try {
     const seeruApi = getSeeruApiInstance();
     
-    console.log('Validating fare for booking:', booking.trip_id);
+    
     
     const response = await seeruApi.post('/booking/fare', {
       booking: booking
@@ -639,7 +640,7 @@ exports.saveBooking = asyncHandler(async (req, res) => {
   try {
     const seeruApi = getSeeruApiInstance();
     
-    console.log('Saving booking for trip:', booking.trip_id);
+    
     
     const response = await seeruApi.post('/booking/save', {
       booking: booking,
@@ -680,7 +681,7 @@ exports.getOrderDetails = asyncHandler(async (req, res) => {
   try {
     const seeruApi = getSeeruApiInstance();
     
-    console.log('Fetching order details for:', order_id);
+    
     
     const response = await seeruApi.post('/order/details', {
       order_id: order_id
@@ -730,7 +731,7 @@ exports.cancelOrder = asyncHandler(async (req, res) => {
   try {
     const seeruApi = getSeeruApiInstance();
     
-    console.log('Cancelling order:', order_id);
+    
     
     const response = await seeruApi.post('/order/cancel', {
       order_id: order_id
@@ -776,7 +777,7 @@ exports.issueOrder = asyncHandler(async (req, res) => {
   try {
     const seeruApi = getSeeruApiInstance();
     
-    console.log('Issuing order:', order_id);
+    
     
     const response = await seeruApi.post('/order/issue', {
       order_id: order_id

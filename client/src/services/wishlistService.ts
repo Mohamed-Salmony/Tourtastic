@@ -19,7 +19,6 @@ class WishlistService {
   }
 
   async addToWishlist(id: string, destinationId: string): Promise<void> {
-    console.log('Adding to wishlist:', { id, destinationId });
     try {
       const response = await api.post(`/users/${id}/wishlist`, {
         destinationId: destinationId
@@ -39,7 +38,6 @@ class WishlistService {
   }
 
   async removeFromWishlist(id: string, destinationId: string): Promise<void> {
-    console.log('Removing from wishlist:', { id, destinationId });
     const response = await api.delete(`/users/${id}/wishlist/${destinationId}`);
     if (!response.data.success) {
       throw new Error(response.data.message || 'Failed to remove from wishlist');

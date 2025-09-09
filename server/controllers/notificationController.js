@@ -87,17 +87,13 @@ exports.sendNotification = [
   // multer middleware for single file upload in memory
   memoryUpload.single('pdf'),
   asyncHandler(async (req, res) => {
-    // Debug: log incoming admin sendNotification requests to help diagnose 404/500 from client
     try {
-      console.log('sendNotification handler invoked. user:', req.user ? { id: req.user.id, role: req.user.role } : null);
-      console.log('sendNotification body keys:', Object.keys(req.body || {}));
-      console.log('sendNotification has file:', !!req.file);
     } catch (logErr) {
       console.warn('sendNotification logging failed', logErr);
     }
+
     // Ensure admin
     if (!req.user || req.user.role !== 'admin') {
-      console.log('sendNotification -> rejecting: not admin or no user');
       return res.status(403).json({ success: false, message: 'Admin only' });
     }
 
@@ -118,7 +114,6 @@ exports.sendNotification = [
     }
 
     if (!parsedTitle?.en || !parsedTitle?.ar || !parsedMessage?.en || !parsedMessage?.ar) {
-      console.log('sendNotification -> rejecting: invalid multilingual title/message', { parsedTitle, parsedMessage });
       return res.status(400).json({ success: false, message: 'Title and message must include both English and Arabic versions' });
     }
 
@@ -148,26 +143,22 @@ exports.sendNotification = [
       const users = await User.find({ status: 'active' }).select('_id');
 
       const docs = users.map(u => ({ userId: u._id, ...payload }));
-  await Notification.insertMany(docs);
-  console.log('sendNotification -> success: sent to all users, count=', docs.length);
-  return res.status(201).json({ success: true, message: 'Notifications sent to all users' });
+      await Notification.insertMany(docs);
+      return res.status(201).json({ success: true, message: 'Notifications sent to all users' });
     }
 
     // Send to single user (by email or username)
     if (recipientType === 'single') {
       if (!recipient) {
-        console.log('sendNotification -> rejecting: missing recipient for single');
         return res.status(400).json({ success: false, message: 'Recipient is required for single recipientType' });
       }
 
       const user = await User.findOne({ $or: [{ email: recipient.toLowerCase() }, { username: recipient }] });
       if (!user) {
-        console.log('sendNotification -> recipient not found', { recipient });
         return res.status(404).json({ success: false, message: 'Recipient user not found' });
       }
 
       const notification = await Notification.create({ userId: user._id, ...payload });
-      console.log('sendNotification -> success: sent to single user', { to: user._id });
       return res.status(201).json({ success: true, data: notification });
     }
 

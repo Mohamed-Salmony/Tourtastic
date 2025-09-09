@@ -648,8 +648,7 @@ exports.createDestination = asyncHandler(async (req, res, next) => {
   }
 
   // Debug log
-  console.log('admin.createDestination req.body keys:', Object.keys(req.body));
-  console.log('admin.createDestination found uploaded file:', !!uploaded, uploaded ? uploaded.fieldname : null);
+  
   // Ensure quickInfo is parsed if sent as JSON string and normalize airport to string
   if (typeof data.quickInfo === 'string') {
     try { data.quickInfo = JSON.parse(data.quickInfo); } catch (err) { /* leave as string if not parseable */ }
@@ -668,7 +667,7 @@ exports.createDestination = asyncHandler(async (req, res, next) => {
     data.quickInfo.airport = data.quickInfo.airport || '';
   }
 
-  console.log('admin.createDestination normalized data preview:', { name: data.name, country: data.country, imageUrl: !!data.imageUrl || !!data.image, quickInfo: data.quickInfo });
+  
 
   // validate
   const missing = [];
@@ -727,6 +726,77 @@ exports.updateDestination = asyncHandler(async (req, res, next) => {
       console.error('GCS upload (admin.updateDestination buffer) failed:', err);
       return res.status(500).json({ success: false, error: 'Image upload failed', details: String(err) });
     }
+  }
+
+  // --- Parse and normalize multipart text fields similar to createDestination ---
+  const parseIfJson = (val) => {
+    if (!val) return val;
+    if (typeof val !== 'string') return val;
+    try { return JSON.parse(val); } catch (err) { return val; }
+  };
+
+  // Helper: coalesce localized object from various sources
+  const coalesceLocalized = (base, enKey, arKey, fallback) => {
+    const parsed = parseIfJson(base);
+    if (parsed && typeof parsed === 'object') {
+      const en = parsed.en ?? (typeof parsed === 'string' ? parsed : undefined);
+      const ar = parsed.ar ?? en;
+      if (en !== undefined || ar !== undefined) return { en: String(en || ''), ar: String(ar || '') };
+    }
+    const en = req.body[enKey];
+    const ar = req.body[arKey];
+    if (en !== undefined || ar !== undefined) {
+      return { en: String(en || ''), ar: String(ar || en || '') };
+    }
+    return fallback;
+  };
+
+  // Build/normalize required localized fields. Use existing values as fallback to satisfy validators.
+  updateData.name = coalesceLocalized(req.body.name, 'name.en', 'name.ar', destination.name);
+  updateData.country = coalesceLocalized(req.body.country, 'country.en', 'country.ar', destination.country);
+  updateData.description = coalesceLocalized(req.body.description, 'description.en', 'description.ar', destination.description);
+  updateData.bestTimeToVisit = coalesceLocalized(req.body.bestTimeToVisit, 'bestTimeToVisit.en', 'bestTimeToVisit.ar', destination.bestTimeToVisit);
+
+  // Normalize list fields if provided (accept JSON string in req.body)
+  const normalizeListField = (val, existing) => {
+    if (val === undefined) return existing;
+    const p = parseIfJson(val);
+    if (p && typeof p === 'object') {
+      const enArr = Array.isArray(p.en) ? p.en.map(String) : [];
+      const arArr = Array.isArray(p.ar) ? p.ar.map(String) : (enArr.length ? [...enArr] : []);
+      return { en: enArr, ar: arArr };
+    }
+    if (Array.isArray(p)) {
+      const arr = p.map(String);
+      return { en: arr, ar: [...arr] };
+    }
+    // fallback single string
+    return { en: [String(p)], ar: [String(p)] };
+  };
+
+  updateData.topAttractions = normalizeListField(req.body.topAttractions, destination.topAttractions);
+  updateData.localCuisine = normalizeListField(req.body.localCuisine, destination.localCuisine);
+  updateData.shopping = normalizeListField(req.body.shopping, destination.shopping);
+
+  // quickInfo handling: allow quickInfo[timeZone], quickInfo.timeZone, timeZone; same for airport
+  const qTime = req.body['quickInfo[timeZone]'] || req.body['quickInfo.timeZone'] || req.body.timeZone || req.body.time_zone;
+  const qAirport = req.body['quickInfo[airport]'] || req.body['quickInfo.airport'] || req.body.airport || req.body.airport_code;
+  updateData.quickInfo = updateData.quickInfo || destination.quickInfo || {};
+  if (qTime !== undefined) updateData.quickInfo.timeZone = String(qTime || '');
+  if (qAirport !== undefined) {
+    const ap = qAirport;
+    updateData.quickInfo.airport = typeof ap === 'string' ? ap : (ap && ap.code) ? String(ap.code) : String(ap || '');
+  }
+  // Ensure quickInfo fields are strings
+  if (updateData.quickInfo) {
+    if (updateData.quickInfo.airport !== undefined) updateData.quickInfo.airport = String(updateData.quickInfo.airport || '');
+    if (updateData.quickInfo.timeZone !== undefined) updateData.quickInfo.timeZone = String(updateData.quickInfo.timeZone || '');
+  }
+
+  // Optional numeric field
+  if (req.body.searchWindowDays !== undefined) {
+    const n = parseInt(String(req.body.searchWindowDays), 10);
+    if (!Number.isNaN(n)) updateData.searchWindowDays = Math.max(1, n);
   }
 
   destination = await Destination.findByIdAndUpdate(req.params.id, updateData, {

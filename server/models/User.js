@@ -58,6 +58,18 @@ const UserSchema = new mongoose.Schema({
   lastLogin: {
     type: Date,
   },
+  // Password reset via email OTP
+  resetPasswordCodeHash: {
+    type: String,
+    select: false,
+  },
+  resetPasswordCodeExpires: {
+    type: Date,
+  },
+  resetPasswordVerified: {
+    type: Boolean,
+    default: false,
+  },
 }, { versionKey: false }); // Disable version key
 
 // Encrypt password using bcrypt before saving

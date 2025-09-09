@@ -37,9 +37,7 @@ const Destinations = () => {
         try {
           const wishlistData = await wishlistService.getWishlist(user._id);
           // wishlistData contains the full destination objects
-          console.log('Fetched wishlist data:', wishlistData);
           const wishlistIds = wishlistData.map(destination => destination._id.toString());
-          console.log('Extracted wishlist IDs:', wishlistIds);
           setWishlist(wishlistIds);
         } catch (error) {
           console.error("Error fetching wishlist:", error);
@@ -95,11 +93,7 @@ const Destinations = () => {
     }
 
     try {
-      console.log('Toggling wishlist for:', {
-        userId: user._id,
-        destinationId: destinationId,
-        currentWishlist: wishlist
-      });
+      
       
       const destinationIdStr = destinationId.toString();
       if (wishlist.includes(destinationIdStr)) {

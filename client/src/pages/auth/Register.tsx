@@ -28,12 +28,14 @@ const Register: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [debounceTimeout, setDebounceTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [debounceTimeout, setDebounceTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [existenceErrors, setExistenceErrors] = useState<{
     username?: string;
     email?: string;
   }>({});
   const { t } = useTranslation();
+  // Require: at least 8 non-whitespace chars, must include letters, numbers, and symbols (no strict upper/lowercase requirement)
+  const strongPasswordRegex = /^(?=\S{8,}$)(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/;
 
   // Cleanup debounce timeout on unmount
   React.useEffect(() => {
@@ -46,9 +48,13 @@ const Register: React.FC = () => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value, type, checked } = e.target;
+    // Sanitize password inputs: remove all whitespace characters as the policy disallows them
+    const sanitizedValue = (id === 'password' || id === 'confirmPassword')
+      ? value.replace(/\s+/g, '')
+      : value;
     setFormData(prev => ({
       ...prev,
-      [id]: type === 'checkbox' ? checked : value
+      [id]: type === 'checkbox' ? checked : sanitizedValue
     }));
 
     // Clear any existing existence errors when field is cleared
@@ -98,8 +104,8 @@ const Register: React.FC = () => {
       return response.status === 400 || response.data.exists === true;
     } catch (error) {
       if (error && typeof error === 'object' && 'response' in error && 
-          error.response && typeof error.response === 'object' && 'status' in error.response &&
-          error.response.status === 400) {
+          (error as any).response && typeof (error as any).response === 'object' && 'status' in (error as any).response &&
+          (error as any).response.status === 400) {
         // The field exists if we got a 400 response
         return true;
       }
@@ -182,17 +188,21 @@ const Register: React.FC = () => {
       return;
     }
 
-    // Validate password length
-    if (formData.password.length < 6) {
+    // Trim password fields to avoid accidental spaces
+    const trimmedPassword = (formData.password || '').trim();
+    const trimmedConfirm = (formData.confirmPassword || '').trim();
+
+    // Validate strong password (min 8 non-whitespace chars, includes letters, number, and symbol)
+    if (!strongPasswordRegex.test(trimmedPassword)) {
       toast({
         title: "Error",
-        description: t('passwordTooShort', 'Password must be at least 6 characters long'),
+        description: t('passwordNotStrong', 'Password must be at least 8 characters and include letters, a number, and a symbol.'),
         variant: "destructive"
       });
       return;
     }
 
-    if (formData.password !== formData.confirmPassword) {
+    if (trimmedPassword !== trimmedConfirm) {
       toast({
         title: "Error",
         description: t('passwordsDoNotMatch', 'Passwords do not match'),
@@ -257,7 +267,7 @@ const Register: React.FC = () => {
         email: formData.email,
         phoneNumber: formData.phoneNumber,
         dateOfBirth: formData.dateOfBirth,
-        password: formData.password,
+        password: trimmedPassword,
         role: 'user'
       });
 
@@ -425,6 +435,7 @@ const Register: React.FC = () => {
                   name="password"
                   type={showPassword ? "text" : "password"}
                   required
+                  minLength={8}
                   autoComplete="new-password"
                   value={formData.password}
                   onChange={handleChange}
@@ -455,8 +466,9 @@ const Register: React.FC = () => {
                 <input
                   id="confirmPassword"
                   name="confirmPassword"
-                  type={showConfirmPassword ? "text" : "password"}
+                  type={showConfirmPassword ? 'text' : 'password'}
                   required
+                  minLength={8}
                   autoComplete="new-password"
                   value={formData.confirmPassword}
                   onChange={handleChange}
@@ -510,7 +522,7 @@ const Register: React.FC = () => {
                 <>
                   <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a 8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 0 1 4 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
                   {t('registering', 'Registering...')}
                 </>

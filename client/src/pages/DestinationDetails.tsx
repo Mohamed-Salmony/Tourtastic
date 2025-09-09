@@ -259,11 +259,9 @@ const DestinationDetails: React.FC = () => {
           async (position) => {
             try {
               const { latitude, longitude } = position.coords;
-              console.log('User location:', { latitude, longitude });
 
               // Use capital airport instead of nearest airport
               const airport = await findCapitalAirport(latitude, longitude);
-              console.log('Found capital airport:', airport);
               setNearestAirport(airport);
               setLocationError(null);
             } catch (error) {
@@ -299,13 +297,11 @@ const DestinationDetails: React.FC = () => {
     const poll = async () => {
       try {
         const pollResults = await getSearchResults(searchId);
-        console.log('Poll results:', pollResults);
         setResults(pollResults);
 
         // Update flights if we have results
         if (pollResults.result && Array.isArray(pollResults.result)) {
           if (pollResults.result.length > 0) {
-            console.log('Found flights:', JSON.stringify(pollResults.result, null, 2));
             setFlights(pollResults.result);
             hasFoundResults = true;
           }
@@ -345,7 +341,6 @@ const DestinationDetails: React.FC = () => {
 
         // Continue polling
         attempts++;
-        console.log(`Poll attempt ${attempts} of ${maxAttempts}, completion: ${pollResults.complete}%`);
         setTimeout(poll, 2000);
       } catch (error) {
         console.error('Poll error:', error);
@@ -473,9 +468,6 @@ const DestinationDetails: React.FC = () => {
       const formattedStartDate = currentDate.toISOString().split('T')[0];
       const formattedEndDate = lastDayOfMonth.toISOString().split('T')[0];
 
-      console.log('Nearest airport:', nearestAirport);
-      console.log('Destination airport code:', destination.quickInfo.airport);
-      console.log('Destination object:', destination);
 
   // Calculate date based on destination.searchWindowDays (fallback to 30)
   const searchWindowDays = (destination as any)?.searchWindowDays ?? 30;
@@ -483,7 +475,6 @@ const DestinationDetails: React.FC = () => {
   futureDate.setDate(futureDate.getDate() + Number(searchWindowDays));
   const searchDate = format(futureDate, 'yyyy-MM-dd');
 
-      console.log('Searching for flights on:', searchDate); // Debug log
 
       const searchParams: FlightSearchParams = {
         flightSegments: [
@@ -502,9 +493,7 @@ const DestinationDetails: React.FC = () => {
         direct: false // Allow connections for better results
       };
 
-      console.log('Search params:', searchParams);
       const searchResponse = await searchFlights(searchParams);
-      console.log('Search response:', searchResponse);
 
       if (searchResponse.search_id) {
         await pollSearchResults(searchResponse.search_id);

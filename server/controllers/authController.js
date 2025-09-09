@@ -2,6 +2,8 @@ const User = require("../models/User");
 const Notification = require("../models/Notification");
 const asyncHandler = require("../middleware/asyncHandler");
 const jwt = require("jsonwebtoken");
+const bcrypt = require('bcryptjs');
+const { sendMail } = require('../utils/email');
 
 // @desc    Check if email or username exists
 // @route   POST /api/auth/check-exists
@@ -242,4 +244,111 @@ exports.getMe = asyncHandler(async (req, res, next) => {
     success: true,
     data: user,
   });
+});
+
+// Helper to generate a 6-digit numeric code
+function generateNumericCode(length = 6) {
+  const min = Math.pow(10, length - 1);
+  const max = Math.pow(10, length) - 1;
+  return String(Math.floor(Math.random() * (max - min + 1)) + min);
+}
+
+// @desc    Request password reset code (OTP) via email
+// @route   POST /api/auth/password/forgot
+// @access  Public
+exports.requestPasswordReset = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ success: false, message: 'Email is required' });
+  }
+
+  // Always respond with success to avoid email enumeration
+  let user = await User.findOne({ email }).select('+resetPasswordCodeHash');
+  if (user) {
+    const code = generateNumericCode(6);
+    const saltRounds = 10;
+    const hash = await bcrypt.hash(code, saltRounds);
+    user.resetPasswordCodeHash = hash;
+    user.resetPasswordCodeExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    user.resetPasswordVerified = false;
+    await user.save();
+
+    // Send email via SMTP
+    const subject = 'Tourtastic Password Reset Code';
+    const text = `Your Tourtastic password reset code is: ${code}. This code will expire in 10 minutes.`;
+    const html = `<p>Hello${user.name ? ' ' + user.name : ''},</p>
+      <p>Your Tourtastic password reset code is:</p>
+      <h2 style="letter-spacing:3px;">${code}</h2>
+      <p>This code will expire in 10 minutes.</p>
+      <p>If you did not request this, please ignore this email.</p>`;
+
+    try {
+      await sendMail({ to: email, subject, text, html });
+    } catch (err) {
+      console.error('Error sending password reset email:', err.message);
+      // Do not expose email errors to client for security; still respond success
+    }
+  }
+
+  return res.status(200).json({ success: true, message: 'If the email exists, a reset code has been sent.' });
+});
+
+// @desc    Verify password reset code (OTP)
+// @route   POST /api/auth/password/verify
+// @access  Public
+exports.verifyResetCode = asyncHandler(async (req, res) => {
+  const { email, code } = req.body;
+  if (!email || !code) {
+    return res.status(400).json({ success: false, message: 'Email and code are required' });
+  }
+
+  const user = await User.findOne({ email }).select('+resetPasswordCodeHash');
+  if (!user || !user.resetPasswordCodeHash || !user.resetPasswordCodeExpires) {
+    return res.status(400).json({ success: false, message: 'Invalid or expired code' });
+  }
+  if (user.resetPasswordCodeExpires.getTime() < Date.now()) {
+    return res.status(400).json({ success: false, message: 'Code has expired' });
+  }
+
+  const match = await bcrypt.compare(String(code), user.resetPasswordCodeHash);
+  if (!match) {
+    return res.status(400).json({ success: false, message: 'Invalid code' });
+  }
+
+  user.resetPasswordVerified = true;
+  await user.save();
+  return res.status(200).json({ success: true, message: 'Code verified' });
+});
+
+// @desc    Reset password using verified code
+// @route   POST /api/auth/password/reset
+// @access  Public
+exports.resetPassword = asyncHandler(async (req, res) => {
+  const { email, code, newPassword } = req.body;
+  if (!email || !code || !newPassword) {
+    return res.status(400).json({ success: false, message: 'Email, code, and newPassword are required' });
+  }
+
+  const user = await User.findOne({ email }).select('+resetPasswordCodeHash +password');
+  if (!user || !user.resetPasswordCodeHash || !user.resetPasswordCodeExpires) {
+    return res.status(400).json({ success: false, message: 'Invalid or expired code' });
+  }
+  if (user.resetPasswordCodeExpires.getTime() < Date.now()) {
+    return res.status(400).json({ success: false, message: 'Code has expired' });
+  }
+
+  const match = await bcrypt.compare(String(code), user.resetPasswordCodeHash);
+  if (!match) {
+    return res.status(400).json({ success: false, message: 'Invalid code' });
+  }
+
+  // Set new password and clear reset fields
+  user.password = newPassword;
+  user.resetPasswordCodeHash = undefined;
+  user.resetPasswordCodeExpires = undefined;
+  user.resetPasswordVerified = false;
+  await user.save();
+
+  return res.status(200).json({ success: true, message: 'Password has been reset successfully' });
 });

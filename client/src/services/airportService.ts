@@ -52,13 +52,11 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 
 export const findNearestAirport = async (latitude: number, longitude: number): Promise<Airport> => {
   try {
-    console.log('Finding nearest airport for coordinates:', { latitude, longitude });
     
     // Get all airports from the backend
     const response = await api.get('/airports');
     const allAirports = response.data.data;
     
-    console.log('Total airports loaded:', allAirports.length);
     
     // Filter for commercial airports only
     const commercialAirports = allAirports.filter((airport: RawAirportData) => {
@@ -81,7 +79,6 @@ export const findNearestAirport = async (latitude: number, longitude: number): P
       return hasValidIATA && isNotHeliportOrSeaplane && (isCommercialType || hasScheduledService);
     });
     
-    console.log('Filtered commercial airports:', commercialAirports.length);
     
     if (commercialAirports.length === 0) {
       console.warn('No commercial airports found, falling back to JFK');
@@ -125,12 +122,7 @@ export const findNearestAirport = async (latitude: number, longitude: number): P
       }
     }
     
-    console.log('Found nearest commercial airport:', {
-      name: nearestAirport.name,
-      iata: nearestAirport.iata_code,
-      type: nearestAirport.type,
-      distance: shortestDistance.toFixed(2) + ' km'
-    });
+    
     
     // Convert to our Airport interface format
     const result: Airport = {
@@ -164,13 +156,11 @@ export const findNearestAirport = async (latitude: number, longitude: number): P
 // New function to find capital airport
 export const findCapitalAirport = async (latitude: number, longitude: number): Promise<Airport> => {
   try {
-    console.log('Finding capital airport for coordinates:', { latitude, longitude });
     
     // Get capital airport code from coordinates
     const capitalAirportCode = await getCapitalAirportFromCoordinates(latitude, longitude);
     
     if (!capitalAirportCode) {
-      console.log('No capital airport found, falling back to nearest airport');
       return await findNearestAirport(latitude, longitude);
     }
     
@@ -183,7 +173,6 @@ export const findCapitalAirport = async (latitude: number, longitude: number): P
     );
     
     if (capitalAirport) {
-      console.log('Found capital airport:', capitalAirport);
       return {
         code: capitalAirport.iata_code || capitalAirport.code,
         name: capitalAirport.name,
@@ -194,7 +183,6 @@ export const findCapitalAirport = async (latitude: number, longitude: number): P
         iata_code: capitalAirport.iata_code
       };
     } else {
-      console.log('Capital airport not found in database, falling back to nearest airport');
       return await findNearestAirport(latitude, longitude);
     }
   } catch (error) {

@@ -5,6 +5,9 @@ const {
   getMe,
   refreshToken,
   checkExists,
+  requestPasswordReset,
+  verifyResetCode,
+  resetPassword,
 } = require("../controllers/authController");
 const { protect } = require("../middleware/auth");
 
@@ -15,5 +18,9 @@ router.post("/register", register);
 router.post("/login", login);
 router.post("/refresh-token", refreshToken);
 router.get("/me", protect, getMe);
+// Password reset via email OTP
+router.post('/password/forgot', requestPasswordReset);
+router.post('/password/verify', verifyResetCode);
+router.post('/password/reset', resetPassword);
 
 module.exports = router;

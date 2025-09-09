@@ -70,10 +70,6 @@ exports.createDestination = asyncHandler(async (req, res, next) => {
     data.quickInfo.airport = qAirport;
   }
 
-  // Debug: log received multipart parts
-  console.log('createDestination received req.body keys:', Object.keys(req.body));
-  console.log('createDestination req.file present:', !!req.file, 'req.files length:', Array.isArray(req.files) ? req.files.length : 0);
-
   // Helper to find image file in req.file or req.files
   const findImageFile = () => {
     if (req.file && req.file.buffer) return req.file;
@@ -87,10 +83,10 @@ exports.createDestination = asyncHandler(async (req, res, next) => {
   const uploadedFile = findImageFile();
   if (uploadedFile && uploadedFile.buffer) {
     try {
-  const ext = (uploadedFile.originalname && uploadedFile.originalname.split('.').pop()) || 'jpg';
-  const destPath = `destinations/${Date.now()}-${Math.round(Math.random()*1e9)}.${ext}`;
-  const publicUrl = await uploadBuffer(uploadedFile.buffer, destPath, uploadedFile.mimetype || 'image/jpeg');
-  data.image = publicUrl;
+      const ext = (uploadedFile.originalname && uploadedFile.originalname.split('.').pop()) || 'jpg';
+      const destPath = `destinations/${Date.now()}-${Math.round(Math.random()*1e9)}.${ext}`;
+      const publicUrl = await uploadBuffer(uploadedFile.buffer, destPath, uploadedFile.mimetype || 'image/jpeg');
+      data.image = publicUrl;
     } catch (uploadErr) {
       console.error('GCS upload failed in createDestination:', uploadErr);
       return res.status(500).json({ success: false, error: 'Image upload failed', details: String(uploadErr) });
@@ -146,15 +142,6 @@ exports.createDestination = asyncHandler(async (req, res, next) => {
   }
 
   // Basic server-side validation: require image and name/country
-  // Debug: show normalized payload before DB create
-  console.log('createDestination normalized data preview:', {
-    name: data.name,
-    country: data.country,
-    image: !!data.image,
-    quickInfo: data.quickInfo,
-    bestTimeToVisit: data.bestTimeToVisit
-  });
-
   const missingFields = [];
   if (!data.image) missingFields.push('image');
   if (!data.name || !data.name.en) missingFields.push('name.en');

@@ -137,8 +137,7 @@ const Profile: React.FC = () => {
           apiClient.get('/bookings/my')
         ]);
         
-        console.log('Cart response:', cartResponse.data);
-        console.log('Bookings response:', bookingsResponse.data);
+        
 
         // Merge cart items (pending) with confirmed bookings and remove duplicates.
         // Prefer confirmed bookings when a duplicate exists (so confirmed overrides pending cart).
@@ -167,11 +166,9 @@ const Profile: React.FC = () => {
         setBookings(allBookings);
 
         // Fetch user's wishlist
-  const wishlistResponse = await apiClient.get(`/users/${authUser._id}/wishlist`);
-        console.log('Wishlist response:', wishlistResponse.data);
+        const wishlistResponse = await apiClient.get(`/users/${authUser._id}/wishlist`);
         setWishlist(wishlistResponse.data.data);
       } catch (error) {
-        console.error('Error fetching user data:', error);
         toast.error('Failed to load user data');
       } finally {
         setIsLoading(false);
@@ -643,7 +640,6 @@ const Profile: React.FC = () => {
                     {wishlist.length > 0 ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {wishlist.map((item) => {
-                          console.log('Wishlist item:', item);
                           return (
                             <Card key={item._id} className="overflow-hidden">
                               <div className="relative h-36">

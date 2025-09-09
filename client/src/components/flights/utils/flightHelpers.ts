@@ -59,7 +59,8 @@ export const getAirlineLogo = (airlineCode: string) => {
     'BS': '/US-Bangla-Airlines-Logo.png',
     'IX': '/Air-India-Express-Logo.png',
     'J2': '/Azerbaijan-Airlines-Logo.png',
-    'OV': '/Salam_Air_Logo.png'
+    'OV': '/Salam_Air_Logo.png',
+    'VY': '/vueling.png'
   };
 
   // Added mappings for newly introduced IATA codes
@@ -69,9 +70,10 @@ export const getAirlineLogo = (airlineCode: string) => {
   logoMap['LO'] = '/Polish-Airlines-Logo.png';
   logoMap['TO'] = '/Transavia-Logo.png';
   logoMap['TU'] = '/Tunisair-logo.png';
-  
+  // Vueling Airlines (IATA: VY)
+  logoMap['VY'] = '/vueling.png';
+
   const logoPath = logoMap[normalizedCode] || '/placeholder.svg';
-  console.log(`Airline ${normalizedCode}: Found logo path: ${logoPath}`);
   
   return logoPath;
 };
