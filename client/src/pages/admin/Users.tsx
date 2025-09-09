@@ -9,6 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Search, Users, MoreHorizontal, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
+import api from '@/config/api';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -33,8 +34,8 @@ const AdminUsers = () => {
   // normalize selected IDs to strings to avoid type mismatches (mongo _id vs numeric id)
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   
-  // Get auth token from localStorage
-  const getAuthToken = useCallback(() => {
+  // Ensure user is authenticated; actual Authorization header handling is done by the shared api instance
+  const ensureAuthenticated = useCallback(() => {
     const token = localStorage.getItem('token');
     if (!token) {
       navigate('/login');
@@ -42,14 +43,6 @@ const AdminUsers = () => {
     }
     return token;
   }, [navigate]);
-
-  // Configure axios with auth token
-  const configureAxios = useCallback(() => {
-    const token = getAuthToken();
-    if (token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    }
-  }, [getAuthToken]);
   
   // Filter users based on search query
   const filteredUsers = users.filter(user => 
@@ -83,9 +76,9 @@ const AdminUsers = () => {
     // Persist to server and update local state
     (async () => {
       try {
-        configureAxios();
-    await axios.put(`/api/admin/users/${userId}`, { status: newStatus.toLowerCase() });
-  setUsers(prev => prev.map(user => (String(user._id || user.id) === String(userId) ? { ...user, status: newStatus } : user)));
+        ensureAuthenticated();
+        await api.put(`/admin/users/${userId}`, { status: newStatus.toLowerCase() });
+        setUsers(prev => prev.map(user => (String(user._id || user.id) === String(userId) ? { ...user, status: newStatus } : user)));
         toast.success(`User status changed to ${newStatus}`);
       } catch (err) {
         console.error('Error changing status', err);
@@ -98,9 +91,9 @@ const AdminUsers = () => {
   const changeUserRole = (userId: string|number, newRole: string) => {
     (async () => {
       try {
-        configureAxios();
-    await axios.put(`/api/admin/users/${userId}`, { role: newRole.toLowerCase() });
-  setUsers(prev => prev.map(user => (String(user._id || user.id) === String(userId) ? { ...user, role: newRole } : user)));
+        ensureAuthenticated();
+        await api.put(`/admin/users/${userId}`, { role: newRole.toLowerCase() });
+        setUsers(prev => prev.map(user => (String(user._id || user.id) === String(userId) ? { ...user, role: newRole } : user)));
         toast.success(`User role changed to ${newRole}`);
       } catch (err) {
         console.error('Error changing role', err);
@@ -113,11 +106,11 @@ const AdminUsers = () => {
   const bulkActivateUsers = () => {
     (async () => {
       try {
-        configureAxios();
-  await Promise.all(selectedUsers.map(id => axios.put(`/api/admin/users/${id}`, { status: 'active' })));
-  setUsers(prev => prev.map(user => (
-    selectedUsers.some(sel => String(sel) === String(user._id || user.id)) ? { ...user, status: 'Active' } : user
-  )));
+        ensureAuthenticated();
+        await Promise.all(selectedUsers.map(id => api.put(`/admin/users/${id}`, { status: 'active' })));
+        setUsers(prev => prev.map(user => (
+          selectedUsers.some(sel => String(sel) === String(user._id || user.id)) ? { ...user, status: 'Active' } : user
+        )));
         toast.success(`${selectedUsers.length} users activated`);
         setSelectedUsers([]);
       } catch (err) {
@@ -131,11 +124,11 @@ const AdminUsers = () => {
   const bulkDeactivateUsers = () => {
     (async () => {
       try {
-        configureAxios();
-  await Promise.all(selectedUsers.map(id => axios.put(`/api/admin/users/${id}`, { status: 'inactive' })));
-  setUsers(prev => prev.map(user => (
-    selectedUsers.some(sel => String(sel) === String(user._id || user.id)) ? { ...user, status: 'Inactive' } : user
-  )));
+        ensureAuthenticated();
+        await Promise.all(selectedUsers.map(id => api.put(`/admin/users/${id}`, { status: 'inactive' })));
+        setUsers(prev => prev.map(user => (
+          selectedUsers.some(sel => String(sel) === String(user._id || user.id)) ? { ...user, status: 'Inactive' } : user
+        )));
         toast.success(`${selectedUsers.length} users deactivated`);
         setSelectedUsers([]);
       } catch (err) {
@@ -148,8 +141,8 @@ const AdminUsers = () => {
   // Fetch users from API
   const fetchUsers = useCallback(async () => {
     try {
-      configureAxios();
-      const response = await axios.get('/api/admin/users');
+      ensureAuthenticated();
+      const response = await api.get('/admin/users');
       // response.data.data is expected (see admin controller)
       setUsers(response.data.data || []);
       setLoading(false);
@@ -173,7 +166,7 @@ const AdminUsers = () => {
       toast.error('Could not load users');
       setLoading(false);
     }
-  }, [configureAxios, navigate]);
+  }, [ensureAuthenticated, navigate]);
 
   useEffect(() => {
     fetchUsers();
@@ -209,8 +202,8 @@ const AdminUsers = () => {
 
   const viewUserDetails = async (userId: string) => {
     try {
-      configureAxios();
-      const res = await axios.get(`/api/admin/users/${userId}`);
+      ensureAuthenticated();
+      const res = await api.get(`/admin/users/${userId}`);
       const u = res.data.data;
       setModalUser(u);
       setEditForm({
@@ -229,11 +222,11 @@ const AdminUsers = () => {
   const saveUserEdits = async () => {
     if (!modalUser) return;
     try {
-      configureAxios();
+      ensureAuthenticated();
 
-  // Do not allow changing email from this modal; only send name/role/status
-  const payload: Partial<User> = { name: editForm.name, role: editForm.role, status: editForm.status };
-      const res = await axios.put(`/api/admin/users/${modalUser._id || modalUser.id}`, payload);
+      // Do not allow changing email from this modal; only send name/role/status
+      const payload: Partial<User> = { name: editForm.name, role: editForm.role, status: editForm.status };
+      const res = await api.put(`/admin/users/${modalUser._id || modalUser.id}`, payload);
       const updated = res.data.data || res.data;
       setUsers(prev => prev.map(u => (String(u._id || u.id) === String(updated._id || updated.id) ? updated : u)));
       toast.success('User updated');
@@ -261,8 +254,8 @@ const AdminUsers = () => {
   const deleteUser = async (userId: string) => {
     if (!window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) return;
     try {
-      configureAxios();
-      await axios.delete(`/api/admin/users/${userId}`);
+      ensureAuthenticated();
+      await api.delete(`/admin/users/${userId}`);
       setUsers(prev => prev.filter(u => String(u._id || u.id) !== String(userId)));
       // Remove from selection if present
       setSelectedUsers(prev => prev.filter(id => id !== String(userId)));
