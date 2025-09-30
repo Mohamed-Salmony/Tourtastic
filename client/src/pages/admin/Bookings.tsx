@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import api from '@/config/api';
 import { formatSypFromUsd } from '@/utils/currency';
-import { toast } from 'sonner';
+import { toastSuccess, toastError, confirmDialog } from '@/utils/i18nToast';
 import { useTranslation } from 'react-i18next';
 import {
   Dialog,
@@ -466,7 +466,7 @@ const AdminBookings: React.FC = () => {
     try {
       if (navigator && typeof navigator.clipboard !== 'undefined') {
         await navigator.clipboard.writeText(text);
-        toast.success('Copied');
+        toastSuccess('تم النسخ', 'Copied');
       } else {
         const ta = document.createElement('textarea');
         ta.value = text;
@@ -474,10 +474,10 @@ const AdminBookings: React.FC = () => {
         ta.select();
         document.execCommand('copy');
         document.body.removeChild(ta);
-        toast.success('Copied');
+        toastSuccess('تم النسخ', 'Copied');
       }
     } catch (e) {
-      toast.error('Could not copy');
+      toastError('فشل النسخ', 'Could not copy');
     }
   };
 
@@ -517,7 +517,7 @@ const AdminBookings: React.FC = () => {
         }
         setViewOpen(true);
       } catch (err: unknown) {
-        toast.error(getErrorMessage(err));
+        toastError('فشل تحميل بيانات الحجز', 'Failed to load booking details');
         setSelectedBooking(booking);
         setViewOpen(true);
       } finally {
@@ -565,16 +565,16 @@ const AdminBookings: React.FC = () => {
       // Do not set Content-Type header; let the browser/axios set multipart boundary
       const resp = await api.post(`/admin/flight-bookings/${id}/upload-ticket`, form);
       if (resp?.data?.success) {
-        toast.success('Ticket uploaded and booking marked Done');
+        toastSuccess('تم رفع التذكرة بنجاح', 'Ticket uploaded and booking marked Done');
         const updated = resp.data.data;
         setBookings(prev => prev.map(b => ((b._id === updated._id || b.bookingId === updated.bookingId || b.id === updated.id) ? updated : b)));
         closeUpload();
       } else {
-        toast.error('Upload failed');
+        toastError('فشل رفع الملف', 'Upload failed');
       }
     } catch (err: unknown) {
       console.error('Upload error', err);
-      toast.error(getErrorMessage(err));
+      toastError('فشل العملية', 'Operation failed');
     } finally {
       setUploadLoading(false);
     }
@@ -586,31 +586,31 @@ const AdminBookings: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this booking? This action cannot be undone.')) return;
+    if (!confirmDialog('هل أنت متأكد من حذف هذا الحجز؟ لا يمكن التراجع عن هذا الإجراء', 'Delete this booking? This action cannot be undone.')) return;
     try {
   await api.delete(`/admin/flight-bookings/${id}`);
-      toast.success('Booking deleted');
+      toastSuccess('تم حذف الحجز', 'Booking deleted');
       setBookings(prev => prev.filter(b => ((b._id || b.bookingId || b.id || '') !== id)));
     } catch (err: unknown) {
       console.error('Delete booking error', err);
-      toast.error(getErrorMessage(err));
+      toastError('فشل العملية', 'Operation failed');
     }
   };
 
   const handleUpdateStatus = async (id: string, status: 'pending' | 'confirmed' | 'cancelled') => {
     if (!['pending','confirmed','cancelled'].includes(status)) {
-      toast.error('Invalid status');
+      toastError('حالة غير صحيحة', 'Invalid status');
       return;
     }
     try {
   const resp = await api.put(`/admin/flight-bookings/${id}`, { status });
       if (resp?.data?.success) {
-        toast.success('Status updated');
+        toastSuccess('تم تحديث الحالة', 'Status updated');
         setBookings(prev => prev.map(b => ((b._id === id || b.bookingId === id || b.id === id) ? resp.data.data : b)));
       }
     } catch (err: unknown) {
       console.error('Update status error', err);
-      toast.error(getErrorMessage(err));
+      toastError('فشل العملية', 'Operation failed');
     }
   };
   

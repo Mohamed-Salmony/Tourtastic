@@ -8,13 +8,70 @@ const asyncHandler = require("../middleware/asyncHandler");
 const sendEmail = require('../utils/sendEmail'); // Import the email utility
 const path = require('path');
 const fs = require('fs');
-// Google Cloud Storage
-let Storage;
-try {
-  Storage = require('@google-cloud/storage').Storage;
-} catch (e) {
-  // optional - if package not installed, server will log at runtime
-  Storage = null;
+// Supabase storage helper
+const { uploadFile, uploadBuffer, generateSignedUrl } = require('../utils/gcsStorage');
+
+/**
+ * Convert storage path to signed URL for frontend (destinations)
+ */
+async function convertToSignedUrl(destination) {
+  if (!destination) return destination;
+  
+  const dest = destination.toObject ? destination.toObject() : { ...destination };
+  
+  // Convert image to signed URL if it's a supabase:// path
+  if (dest.image && dest.image.startsWith('supabase://')) {
+    try {
+      dest.image = await generateSignedUrl(dest.image, 3600);
+    } catch (err) {
+      console.error('Failed to generate signed URL:', err);
+    }
+  }
+  
+  return dest;
+}
+
+/**
+ * Convert booking ticket paths to signed URLs
+ */
+async function convertBookingUrls(booking) {
+  if (!booking) return booking;
+  
+  const book = booking.toObject ? booking.toObject() : { ...booking };
+  
+  // Check multiple possible locations for ticket path
+  const ticketPath = 
+    (book.ticketDetails && book.ticketDetails.eTicketPath) || 
+    book.ticketUrl || 
+    book.ticketPdfUrl || 
+    (book.ticketInfo && book.ticketInfo.filePath) || 
+    (book.ticketDetails && book.ticketDetails.additionalDocuments && 
+     book.ticketDetails.additionalDocuments[0] && 
+     book.ticketDetails.additionalDocuments[0].path);
+  
+  if (ticketPath && ticketPath.startsWith('supabase://')) {
+    try {
+      const signedUrl = await generateSignedUrl(ticketPath, 86400); // 24 hours
+      
+      // Update all possible locations
+      if (book.ticketDetails && book.ticketDetails.eTicketPath) {
+        book.ticketDetails.eTicketPath = signedUrl;
+      }
+      if (book.ticketUrl) book.ticketUrl = signedUrl;
+      if (book.ticketPdfUrl) book.ticketPdfUrl = signedUrl;
+      if (book.ticketInfo && book.ticketInfo.filePath) {
+        book.ticketInfo.filePath = signedUrl;
+      }
+      if (book.ticketDetails && book.ticketDetails.additionalDocuments && 
+          book.ticketDetails.additionalDocuments[0]) {
+        book.ticketDetails.additionalDocuments[0].path = signedUrl;
+      }
+    } catch (err) {
+      console.error('Failed to generate signed URL for booking ticket:', err);
+    }
+  }
+  
+  return book;
 }
 
 // Helper: map FlightBooking document to a client-friendly shape
@@ -312,7 +369,13 @@ exports.downloadReport = asyncHandler(async (req, res, next) => {
 exports.getAllBookings = asyncHandler(async (req, res, next) => {
   // Add filtering, sorting, pagination later if needed
   const bookings = await Booking.find().populate('userId', 'name email').sort({ createdAt: -1 });
-  res.status(200).json({ success: true, count: bookings.length, data: bookings });
+  
+  // Convert all ticket paths to signed URLs
+  const bookingsWithUrls = await Promise.all(
+    bookings.map(b => convertBookingUrls(b))
+  );
+  
+  res.status(200).json({ success: true, count: bookingsWithUrls.length, data: bookingsWithUrls });
 });
 
 // @desc    Get single booking (Admin)
@@ -323,7 +386,11 @@ exports.getBookingById = asyncHandler(async (req, res, next) => {
   if (!booking) {
     return next(new Error(`Booking not found with id of ${req.params.id}`));
   }
-  res.status(200).json({ success: true, data: booking });
+  
+  // Convert ticket path to signed URL
+  const bookingWithUrl = await convertBookingUrls(booking);
+  
+  res.status(200).json({ success: true, data: bookingWithUrl });
 });
 
 // @desc    Update booking status or details (Admin) - Handles optional PDF upload
@@ -555,16 +622,15 @@ exports.createDestination = asyncHandler(async (req, res, next) => {
 
   const uploaded = findFile();
   if (uploaded && uploaded.path && !uploaded.buffer) {
-    // saved to disk by multer.diskStorage -> upload local file to Google Cloud Storage
+    // saved to disk by multer.diskStorage -> upload local file to Supabase
     try {
-      const { uploadFile } = require('../utils/gcsStorage');
       const ext = require('path').extname(uploaded.path) || '.jpg';
-      const prefix = process.env.GCP_UPLOAD_PREFIX_DESTINATIONS || 'destinations';
+      const prefix = process.env.UPLOAD_PREFIX_DESTINATIONS || 'destinations';
       const destPath = `${prefix}/${Date.now()}-${Math.round(Math.random()*1e9)}${ext}`;
       const publicUrl = await uploadFile(uploaded.path, destPath, uploaded.mimetype || 'image/jpeg');
       data.image = publicUrl;
     } catch (err) {
-      console.error('GCS upload (admin.createDestination local file) failed:', err);
+      console.error('Upload (admin.createDestination local file) failed:', err);
       return res.status(500).json({ success: false, error: 'Image upload failed', details: String(err) });
     }
   }
@@ -572,13 +638,12 @@ exports.createDestination = asyncHandler(async (req, res, next) => {
   // If buffer exists (unlikely with diskStorage) handle buffer upload
   if (uploaded && uploaded.buffer) {
     try {
-      const prefix = process.env.GCP_UPLOAD_PREFIX_DESTINATIONS || 'destinations';
+      const prefix = process.env.UPLOAD_PREFIX_DESTINATIONS || 'destinations';
       const destPath = `${prefix}/${Date.now()}-${Math.round(Math.random()*1e9)}.jpg`;
-      const { uploadBuffer } = require('../utils/gcsStorage');
       const publicUrl = await uploadBuffer(uploaded.buffer, destPath, uploaded.mimetype || 'image/jpeg');
       data.image = publicUrl;
     } catch (err) {
-      console.error('GCS upload (admin.createDestination buffer) failed:', err);
+      console.error('Upload (admin.createDestination buffer) failed:', err);
       return res.status(500).json({ success: false, error: 'Image upload failed', details: String(err) });
     }
   }
@@ -677,7 +742,11 @@ exports.createDestination = asyncHandler(async (req, res, next) => {
   if (missing.length > 0) return res.status(400).json({ success: false, error: 'Missing required fields', missing });
 
   const destination = await Destination.create(data);
-  res.status(201).json({ success: true, data: destination });
+  
+  // Convert to signed URL for response
+  const destinationWithUrl = await convertToSignedUrl(destination);
+  
+  res.status(201).json({ success: true, data: destinationWithUrl });
 });
 
 // @desc    Update destination (Admin) - Handles optional image upload
@@ -704,26 +773,23 @@ exports.updateDestination = asyncHandler(async (req, res, next) => {
 
   if (uploaded && uploaded.path && !uploaded.buffer) {
     try {
-      const { uploadFile } = require('../utils/gcsStorage');
       const ext = require('path').extname(uploaded.path) || '.jpg';
-      const prefix = process.env.GCP_UPLOAD_PREFIX_DESTINATIONS || 'destinations';
+      const prefix = process.env.UPLOAD_PREFIX_DESTINATIONS || 'destinations';
       const destPath = `${prefix}/${Date.now()}-${Math.round(Math.random()*1e9)}${ext}`;
       const publicUrl = await uploadFile(uploaded.path, destPath, uploaded.mimetype || 'image/jpeg');
       updateData.image = publicUrl;
-      // optionally remove old local file reference if existed
     } catch (err) {
-      console.error('GCS upload (admin.updateDestination local file) failed:', err);
+      console.error('Upload (admin.updateDestination local file) failed:', err);
       return res.status(500).json({ success: false, error: 'Image upload failed', details: String(err) });
     }
   } else if (uploaded && uploaded.buffer) {
     try {
-      const { uploadBuffer } = require('../utils/gcsStorage');
-      const prefix = process.env.GCP_UPLOAD_PREFIX_DESTINATIONS || 'destinations';
+      const prefix = process.env.UPLOAD_PREFIX_DESTINATIONS || 'destinations';
       const destPath = `${prefix}/${Date.now()}-${Math.round(Math.random()*1e9)}.jpg`;
       const publicUrl = await uploadBuffer(uploaded.buffer, destPath, uploaded.mimetype || 'image/jpeg');
       updateData.image = publicUrl;
     } catch (err) {
-      console.error('GCS upload (admin.updateDestination buffer) failed:', err);
+      console.error('Upload (admin.updateDestination buffer) failed:', err);
       return res.status(500).json({ success: false, error: 'Image upload failed', details: String(err) });
     }
   }
@@ -803,7 +869,11 @@ exports.updateDestination = asyncHandler(async (req, res, next) => {
     new: true,
     runValidators: true,
   });
-  res.status(200).json({ success: true, data: destination });
+  
+  // Convert to signed URL for response
+  const destinationWithUrl = await convertToSignedUrl(destination);
+  
+  res.status(200).json({ success: true, data: destinationWithUrl });
 });
 
 // @desc    Delete destination (Admin)
@@ -934,11 +1004,16 @@ exports.getAllFlightBookings = asyncHandler(async (req, res, next) => {
 
   const bookings = await FlightBooking.find(query).sort({ createdAt: -1 });
   const mapped = bookings.map(mapFlightBookingForClient);
+  
+  // Convert all ticket paths to signed URLs
+  const mappedWithUrls = await Promise.all(
+    mapped.map(b => convertBookingUrls(b))
+  );
 
   res.status(200).json({
     success: true,
-    count: mapped.length,
-    data: mapped
+    count: mappedWithUrls.length,
+    data: mappedWithUrls
   });
 });
 
@@ -955,9 +1030,14 @@ exports.getFlightBookingById = asyncHandler(async (req, res, next) => {
     });
   }
 
+  const mapped = mapFlightBookingForClient(booking);
+  
+  // Convert ticket path to signed URL
+  const mappedWithUrl = await convertBookingUrls(mapped);
+
   res.status(200).json({
     success: true,
-    data: mapFlightBookingForClient(booking)
+    data: mappedWithUrl
   });
 });
 
@@ -1068,21 +1148,20 @@ exports.uploadFlightTicket = asyncHandler(async (req, res, next) => {
     });
   }
 
-  // Upload file to GCS via centralized util and use returned URL; fallback to local path if it fails
+  // Upload file to Cloudinary via centralized util and use returned URL; fallback to local path if it fails
   let publicUrl = null;
   if (req.file) {
     const localPath = req.file.path;
     const originalName = req.file.originalname || path.basename(localPath);
-    const prefix = process.env.GCP_UPLOAD_PREFIX_BOOKINGS || 'tickets';
+    const prefix = process.env.CLOUDINARY_UPLOAD_PREFIX_BOOKINGS || process.env.GCP_UPLOAD_PREFIX_BOOKINGS || 'tickets';
     const dest = `${prefix}/${booking.bookingId}/${Date.now()}_${originalName}`;
     try {
-      const { uploadFile } = require('../utils/gcsStorage');
       publicUrl = await uploadFile(localPath, dest);
     } catch (err) {
-      console.error('GCS upload failed, falling back to local storage', err);
+      console.error('Cloudinary upload failed, falling back to local storage', err);
       publicUrl = null;
     }
-    // Fallback to local path if GCS not available
+    // Fallback to local path if Cloudinary upload fails
     if (!publicUrl) {
       publicUrl = req.file.path.replace(/^\.\//, '');
     }
@@ -1101,8 +1180,8 @@ exports.uploadFlightTicket = asyncHandler(async (req, res, next) => {
       });
     }
 
-    // remove local temp file if it exists and we uploaded to GCS
-    if (publicUrl && Storage && process.env.GCLOUD_BUCKET) {
+    // remove local temp file if it exists and Cloudinary upload succeeded
+    if (publicUrl && publicUrl.startsWith('http')) {
       fs.unlink(localPath, (err) => { if (err) console.warn('Failed to remove local upload:', err); });
     }
   }

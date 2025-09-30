@@ -3,6 +3,7 @@ import AdminLayout from '@/components/layout/AdminLayout';
 import api from '@/config/api';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import { toastSuccess, toastError, confirmDialog } from '@/utils/i18nToast';
 import { useTranslation } from 'react-i18next';
 
 const AdminSupport: React.FC = () => {
@@ -59,7 +60,7 @@ const AdminSupport: React.FC = () => {
 
   // Mark contact message status (server supports PUT /api/contact/admin/:id)
   const handleDeleteContact = async (id: string) => {
-    if (!window.confirm(t('admin.support.archiveConfirm'))) return;
+    if (!confirmDialog('هل أنت متأكد من أرشفة هذه الرسالة؟', 'Are you sure you want to archive this message?')) return;
     try {
       await api.put(`/contact/admin/${id}`, { status: 'archived' });
       setContacts((s) => s.filter((c) => c._id !== id));

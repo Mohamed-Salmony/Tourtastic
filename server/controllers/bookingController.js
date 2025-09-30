@@ -3,6 +3,7 @@ const User = require("../models/User"); // Needed to get user details
 const asyncHandler = require("../middleware/asyncHandler");
 const fs = require('fs');
 const path = require('path');
+const { generateSignedUrl } = require('../utils/gcsStorage');
 
 // Load airports data to try to resolve IATA codes when missing
 const airportsJsonPath = path.join(__dirname, '../data/airports.json');
@@ -203,16 +204,64 @@ exports.createBooking = asyncHandler(async (req, res, next) => {
   });
 });
 
+/**
+ * Convert booking ticket paths to signed URLs
+ */
+async function convertBookingUrls(booking) {
+  if (!booking) return booking;
+  
+  const book = booking.toObject ? booking.toObject() : { ...booking };
+  
+  // Check multiple possible locations for ticket path
+  const ticketPath = 
+    (book.ticketDetails && book.ticketDetails.eTicketPath) || 
+    book.ticketUrl || 
+    book.ticketPdfUrl || 
+    (book.ticketInfo && book.ticketInfo.filePath) || 
+    (book.ticketDetails && book.ticketDetails.additionalDocuments && 
+     book.ticketDetails.additionalDocuments[0] && 
+     book.ticketDetails.additionalDocuments[0].path);
+  
+  if (ticketPath && ticketPath.startsWith('supabase://')) {
+    try {
+      const signedUrl = await generateSignedUrl(ticketPath, 86400); // 24 hours
+      
+      // Update all possible locations
+      if (book.ticketDetails && book.ticketDetails.eTicketPath) {
+        book.ticketDetails.eTicketPath = signedUrl;
+      }
+      if (book.ticketUrl) book.ticketUrl = signedUrl;
+      if (book.ticketPdfUrl) book.ticketPdfUrl = signedUrl;
+      if (book.ticketInfo && book.ticketInfo.filePath) {
+        book.ticketInfo.filePath = signedUrl;
+      }
+      if (book.ticketDetails && book.ticketDetails.additionalDocuments && 
+          book.ticketDetails.additionalDocuments[0]) {
+        book.ticketDetails.additionalDocuments[0].path = signedUrl;
+      }
+    } catch (err) {
+      console.error('Failed to generate signed URL for booking ticket:', err);
+    }
+  }
+  
+  return book;
+}
+
 // @desc    Get bookings for the logged-in user
 // @route   GET /api/bookings/my
 // @access  Private
 exports.getMyBookings = asyncHandler(async (req, res, next) => {
   const bookings = await FlightBooking.find({ userId: req.user.id }).sort({ createdAt: -1 });
 
+  // Convert all ticket paths to signed URLs
+  const bookingsWithUrls = await Promise.all(
+    bookings.map(b => convertBookingUrls(b))
+  );
+
   res.status(200).json({
     success: true,
-    count: bookings.length,
-    data: bookings,
+    count: bookingsWithUrls.length,
+    data: bookingsWithUrls,
   });
 });
 
@@ -296,6 +345,17 @@ exports.getTicketUrl = asyncHandler(async (req, res, next) => {
     return res.status(200).json({ success: true, url: raw });
   }
 
+  // If it's a Supabase path, generate signed URL
+  if (raw.startsWith('supabase://')) {
+    try {
+      const signedUrl = await generateSignedUrl(raw, 86400); // 24 hours
+      return res.status(200).json({ success: true, url: signedUrl });
+    } catch (err) {
+      console.error('Failed to generate signed URL for ticket:', err);
+      return res.status(500).json({ success: false, message: 'Failed to generate ticket URL' });
+    }
+  }
+
   // If it's a local uploads path (served under /uploads), build absolute URL
   if (raw.startsWith('uploads') || raw.startsWith('/uploads')) {
     const pathPart = raw.startsWith('/') ? raw : `/${raw}`;
@@ -303,29 +363,7 @@ exports.getTicketUrl = asyncHandler(async (req, res, next) => {
     return res.status(200).json({ success: true, url });
   }
 
-  // Otherwise, attempt to generate a signed URL from GCS if configured
-  try {
-    const { bucket, generatePublicUrl } = require('../utils/gcsStorage');
-    if (bucket) {
-      const file = bucket.file(raw);
-      try {
-        const [signedUrl] = await file.getSignedUrl({ action: 'read', expires: Date.now() + 7 * 24 * 60 * 60 * 1000 });
-        return res.status(200).json({ success: true, url: signedUrl });
-      } catch (err) {
-        // fallback to public URL format if signed URL failed
-        try {
-          const publicUrl = generatePublicUrl(raw);
-          return res.status(200).json({ success: true, url: publicUrl });
-        } catch (e) {
-          console.error('GCS public URL generation failed', e);
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('GCS not configured or signed URL generation failed', err?.message || err);
-  }
-
-  // Last resort: return the raw path (client may try to resolve)
+  // Fallback: return as-is
   return res.status(200).json({ success: true, url: raw });
 });
 

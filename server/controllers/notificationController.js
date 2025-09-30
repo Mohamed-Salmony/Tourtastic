@@ -1,11 +1,32 @@
 const Notification = require("../models/Notification");
 const asyncHandler = require("../middleware/asyncHandler");
 const User = require("../models/User");
-const gcsService = require("../services/gcsService");
+const cloudStorageService = require("../services/gcsService");
+const { generateSignedUrl } = require("../utils/gcsStorage");
 const multer = require("multer");
 
-// Use memory storage for multer here so we can stream directly to GCS
+// Use memory storage for multer here so we can stream directly to Supabase
 const memoryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+
+/**
+ * Convert notification pdfUrl to signed URL
+ */
+async function convertNotificationUrl(notification) {
+  if (!notification) return notification;
+  
+  const notif = notification.toObject ? notification.toObject() : { ...notification };
+  
+  // Convert pdfUrl to signed URL if it's a supabase:// path
+  if (notif.pdfUrl && notif.pdfUrl.startsWith('supabase://')) {
+    try {
+      notif.pdfUrl = await generateSignedUrl(notif.pdfUrl, 86400); // 24 hours
+    } catch (err) {
+      console.error('Failed to generate signed URL for notification PDF:', err);
+    }
+  }
+  
+  return notif;
+}
 
 // @desc    Get all notifications for a user
 // @route   GET /api/notifications
@@ -17,7 +38,12 @@ exports.getNotifications = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 })
     .populate('userId', 'name email username');
 
-  res.status(200).json({ success: true, data: notifications });
+  // Convert all pdfUrls to signed URLs
+  const notificationsWithUrls = await Promise.all(
+    notifications.map(n => convertNotificationUrl(n))
+  );
+
+  res.status(200).json({ success: true, data: notificationsWithUrls });
 });
 
 // Get notifications for a specific userId. A user may fetch only their own notifications unless the requester is admin.
@@ -33,7 +59,12 @@ exports.getNotificationsByUserId = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 })
     .populate('userId', 'name email username');
 
-  res.status(200).json({ success: true, data: notifications });
+  // Convert all pdfUrls to signed URLs
+  const notificationsWithUrls = await Promise.all(
+    notifications.map(n => convertNotificationUrl(n))
+  );
+
+  res.status(200).json({ success: true, data: notificationsWithUrls });
 });
 
 // @desc    Mark notification as read
@@ -117,20 +148,14 @@ exports.sendNotification = [
       return res.status(400).json({ success: false, message: 'Title and message must include both English and Arabic versions' });
     }
 
-    // Handle optional PDF upload to GCS. For production behavior we require GCS to be configured.
+    // Handle optional PDF upload to Cloudinary storage.
     let pdfUrl = null;
     if (req.file && req.file.buffer) {
-      // Require bucket env to be set
-      if (!process.env.GCLOUD_BUCKET_NAME && !process.env.GCP_BUCKET_NAME && !process.env.FIREBASE_STORAGE_BUCKET) {
-        console.error('sendNotification -> GCS bucket not configured but PDF was provided; rejecting per config to avoid local storage');
-        return res.status(500).json({ success: false, message: 'Server is not configured to store files. Contact administrator.' });
-      }
-
       try {
-        const uploadResult = await gcsService.uploadBuffer(req.file.originalname, req.file.buffer, req.file.mimetype);
+        const uploadResult = await cloudStorageService.uploadBuffer(req.file.originalname, req.file.buffer, req.file.mimetype);
         pdfUrl = uploadResult.publicUrl;
       } catch (err) {
-        console.error('sendNotification -> GCS upload failed', err);
+        console.error('sendNotification -> Cloudinary upload failed', err);
         return res.status(500).json({ success: false, message: 'Failed to upload PDF to cloud storage' });
       }
     }
@@ -159,7 +184,11 @@ exports.sendNotification = [
       }
 
       const notification = await Notification.create({ userId: user._id, ...payload });
-      return res.status(201).json({ success: true, data: notification });
+      
+      // Convert to signed URL for response
+      const notificationWithUrl = await convertNotificationUrl(notification);
+      
+      return res.status(201).json({ success: true, data: notificationWithUrl });
     }
 
     return res.status(400).json({ success: false, message: 'Invalid recipientType' });

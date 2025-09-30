@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { Destination, getAllDestinations } from '@/services/destinationService';
 import { wishlistService } from '@/services/wishlistService';
 import { useAuth } from '@/hooks/useAuth';
-import { toast } from 'sonner';
+import { toastSuccess, toastError } from '@/utils/i18nToast';
 
 const Destinations = () => {
   const { t, i18n } = useTranslation();
@@ -41,7 +41,7 @@ const Destinations = () => {
           setWishlist(wishlistIds);
         } catch (error) {
           console.error("Error fetching wishlist:", error);
-          toast.error(t('failedToLoadWishlist', 'Failed to load wishlist'));
+          toastError('فشل تحميل المفضلة', 'Failed to load wishlist');
         }
       } else {
         setWishlist([]);
@@ -88,7 +88,7 @@ const Destinations = () => {
     e.stopPropagation(); // Prevent event bubbling
 
     if (!user) {
-      toast.error(t('loginToAddWishlist', 'Please login to add destinations to wishlist'));
+      toastError('الرجاء تسجيل الدخول لإضافة الوجهات إلى المفضلة', 'Please login to add destinations to wishlist');
       return;
     }
 
@@ -99,15 +99,14 @@ const Destinations = () => {
       if (wishlist.includes(destinationIdStr)) {
         await wishlistService.removeFromWishlist(user._id, destinationIdStr);
         setWishlist(prev => prev.filter(id => id !== destinationIdStr));
-        toast.success(t('removedFromWishlist', 'Removed from Wishlist'));
+        toastSuccess('تم إزالة من المفضلة', 'Removed from Wishlist');
       } else {
         await wishlistService.addToWishlist(user._id, destinationIdStr);
         setWishlist(prev => [...prev, destinationIdStr]);
-        toast.success(t('addedToWishlist', 'Added to Wishlist'));
+        toastSuccess('تم الإضافة إلى المفضلة', 'Added to Wishlist');
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : t('failedToUpdateWishlist', 'فشل في تحديث المفضلة');
-      toast.error(errorMessage);
+      toastError('فشل تحديث المفضلة', 'Failed to update wishlist');
     }
   };
 

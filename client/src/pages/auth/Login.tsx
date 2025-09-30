@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from 'react-i18next';
+import i18n from '@/i18n';
 import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import api from '@/config/api';
@@ -13,6 +14,7 @@ const Login: React.FC = () => {
   const location = useLocation();
   const { toast } = useToast();
   const { t } = useTranslation();
+  const lang = i18n.language.split('-')[0];
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -104,8 +106,8 @@ const Login: React.FC = () => {
         }
 
         toast({
-          title: "Success",
-          description: "Successfully logged in",
+          title: lang === 'ar' ? 'نجاح' : 'Success',
+          description: lang === 'ar' ? 'تم تسجيل الدخول بنجاح' : 'Successfully logged in',
         });
 
         // If admin, go straight to admin dashboard
@@ -126,14 +128,14 @@ const Login: React.FC = () => {
       if (axios.isAxiosError(error)) {
         const message = error.response?.data?.message || "Failed to login";
         toast({
-          title: "Error",
+          title: lang === 'ar' ? 'خطأ' : 'Error',
           description: message,
           variant: "destructive"
         });
       } else {
         toast({
-          title: "Error",
-          description: "An unexpected error occurred",
+          title: lang === 'ar' ? 'خطأ' : 'Error',
+          description: lang === 'ar' ? 'حدث خطأ غير متوقع' : 'An unexpected error occurred',
           variant: "destructive"
         });
       }

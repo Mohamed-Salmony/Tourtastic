@@ -20,8 +20,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { toast } from 'sonner';
 import { Star, Plane, Calendar, CreditCard, User, Mail, Phone, Eye, EyeOff } from 'lucide-react';
+import { toastSuccess, toastError, toastInfo } from '@/utils/i18nToast';
 import apiClient from '@/config/api';
 import { formatSypFromUsd } from '@/utils/currency';
 import { useAuth } from '@/hooks/useAuth';
@@ -169,7 +169,7 @@ const Profile: React.FC = () => {
         const wishlistResponse = await apiClient.get(`/users/${authUser._id}/wishlist`);
         setWishlist(wishlistResponse.data.data);
       } catch (error) {
-        toast.error('Failed to load user data');
+        toastError('فشل تحميل بيانات المستخدم', 'Failed to load user data');
       } finally {
         setIsLoading(false);
       }
@@ -207,25 +207,25 @@ const Profile: React.FC = () => {
       }
 
       if (!editFormData?.username || !validateUsername(editFormData.username)) {
-        toast.error('Username must start with a letter and contain only letters, numbers, dots, and underscores (at least 3 characters)');
+        toastError('يجب أن يبدأ اسم المستخدم بحرف ويحتوي فقط على حروف وأرقام ونقاط وشرطات سفلية (3 أحرف على الأقل)', 'Username must start with a letter and contain only letters, numbers, dots, and underscores (at least 3 characters)');
         return;
       }
 
       if (editFormData?.phone && !validatePhone(editFormData.phone)) {
-        toast.error('Please enter a valid phone number in international format (e.g., +1234567890)');
+        toastError('الرجاء إدخال رقم هاتف صحيح بالصيغة الدولية (مثال: +1234567890)', 'Please enter a valid phone number in international format (e.g., +1234567890)');
         return;
       }
 
   const response = await apiClient.put(`/users/${authUser._id}`, editFormData);
       setUser(response.data.data);
       setIsEditing(false);
-      toast.success('Profile updated successfully!');
+      toastSuccess('تم تحديث الملف الشخصي بنجاح!', 'Profile updated successfully!');
     } catch (error) {
       console.error('Error updating profile:', error);
       const errorMessage = error instanceof Error 
         ? error.message 
         : ((error as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to update profile');
-      toast.error(errorMessage);
+      toastError('فشل تحديث الملف الشخصي', 'Failed to update profile');
     }
   };
   
@@ -237,10 +237,10 @@ const Profile: React.FC = () => {
 
   await apiClient.delete(`/users/${authUser._id}/wishlist/${id}`);
       setWishlist(wishlist.filter(item => item._id !== id));
-      toast.success('Item removed from wishlist');
+      toastSuccess('تم إزالة العنصر من المفضلة', 'Item removed from wishlist');
     } catch (error) {
       console.error('Error removing wishlist item:', error);
-      toast.error('Failed to remove item from wishlist');
+      toastError('فشل إزالة العنصر من المفضلة', 'Failed to remove item from wishlist');
     }
   };
   
@@ -296,12 +296,12 @@ const Profile: React.FC = () => {
     e.preventDefault();
     
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      toast.error(t('profile.passwordsDontMatch', 'كلمات المرور غير متطابقة'));
+      toastError('كلمات المرور غير متطابقة', 'Passwords do not match');
       return;
     }
 
     if (passwordData.newPassword.length < 6) {
-      toast.error(t('profile.passwordTooShort', 'يجب أن تكون كلمة المرور ٦ أحرف على الأقل'));
+      toastError('يجب أن تكون كلمة المرور ٦ أحرف على الأقل', 'Password must be at least 6 characters');
       return;
     }
 
@@ -313,7 +313,7 @@ const Profile: React.FC = () => {
       });
 
       if (response.data.success) {
-        toast.success(t('profile.passwordUpdated', 'تم تحديث كلمة المرور بنجاح'));
+        toastSuccess('تم تحديث كلمة المرور بنجاح', 'Password updated successfully');
         setPasswordData({
           currentPassword: '',
           newPassword: '',
@@ -324,7 +324,7 @@ const Profile: React.FC = () => {
       const errorMessage = error instanceof Error 
         ? error.message 
         : (error as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to change password';
-      toast.error(errorMessage);
+      toastError('فشل تغيير كلمة المرور', 'Failed to change password');
     } finally {
       setIsChangingPassword(false);
     }
@@ -759,7 +759,7 @@ const Profile: React.FC = () => {
                       </div>
 
                       <div className="flex justify-center gap-2">
-                        <Button variant="outline" onClick={() => { setEditFormData(user); toast('Reverted changes'); }}>
+                        <Button variant="outline" onClick={() => { setEditFormData(user); toastInfo('تم إلغاء التغييرات', 'Reverted changes'); }}>
                           {t('cancel', 'Cancel')}
                         </Button>
                         <Button onClick={handleSaveProfile}>{t('profile.saveProfile', 'Save Profile')}</Button>

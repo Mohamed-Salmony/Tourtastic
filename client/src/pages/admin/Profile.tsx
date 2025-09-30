@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { toastSuccess, toastError } from '@/utils/i18nToast';
 
 interface AdminProfileData {
   name: string;
@@ -52,11 +53,10 @@ const AdminProfile = () => {
       setSaving(true);
       configureAxios();
       await axios.put('/api/admin/profile', form);
-      // Ideally show a toast here; keeping it simple to avoid coupling.
-      alert(t('admin.profile.saved', { defaultValue: 'Profile saved' }));
+      toastSuccess('تم حفظ الملف الشخصي', 'Profile saved');
     } catch (err) {
       console.error(err);
-      alert(t('admin.profile.saveError', { defaultValue: 'Could not save profile' }));
+      toastError('فشل حفظ الملف الشخصي', 'Could not save profile');
     } finally {
       setSaving(false);
     }

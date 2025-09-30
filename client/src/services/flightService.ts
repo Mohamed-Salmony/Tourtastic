@@ -194,29 +194,29 @@ export const searchFlights = async (params: FlightSearchParams): Promise<FlightS
       return response.data;
     } catch (error) {
       retries--;
+
       if (error.code === 'ECONNABORTED' || error.response?.status === 408) {
         if (retries > 0) {
-          // Wait 1 second before retrying
-          await new Promise(resolve => setTimeout(resolve, 1000));
           continue;
         }
         throw new Error('Flight search timed out. Please try again with fewer search parameters.');
       }
+
       if (error.response?.status === 429) {
         if (retries > 0) {
-          // Wait 2 seconds before retrying rate limited requests
-          await new Promise(resolve => setTimeout(resolve, 2000));
           continue;
         }
         throw new Error('Too many requests. Please wait a moment before trying again.');
       }
+
       if (retries === 0) {
         console.error('Error searching flights:', error);
         throw error;
       }
-      await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
+
+  throw new Error('Flight search failed after multiple attempts.');
 };
 
 // Add simple cache for search results
@@ -232,7 +232,7 @@ export const getSearchResults = async (searchId: string, after?: number): Promis
   }
   
   let retries = 3;
-  let lastError = null;
+  let lastError: unknown = null;
   
   while (retries > 0) {
     try {
@@ -251,8 +251,7 @@ export const getSearchResults = async (searchId: string, after?: number): Promis
       const isStalled = !hasResults && searchProgress >= 50;
       
       if (isStalled && retries > 1) {
-        // If search appears stalled but we have retries left, wait and retry
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // If search appears stalled but we have retries left, retry immediately
         retries--;
         continue;
       }
@@ -278,7 +277,6 @@ export const getSearchResults = async (searchId: string, after?: number): Promis
       
       if (error.code === 'ECONNABORTED' || error.response?.status === 408) {
         if (retries > 0) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
           continue;
         }
         throw new Error('Timeout while fetching search results. Please try again.');
@@ -288,13 +286,8 @@ export const getSearchResults = async (searchId: string, after?: number): Promis
         console.error('Error fetching search results:', error);
         throw lastError;
       }
-      
-      await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
   
   throw lastError;
 };
-
-
-

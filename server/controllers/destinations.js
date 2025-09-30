@@ -1,19 +1,54 @@
 const Destination = require('../models/Destination');
 const asyncHandler = require('../middleware/async');
-const { uploadBuffer, generatePublicUrl } = require('../utils/gcsStorage');
+const { uploadBuffer, generateSignedUrl } = require('../utils/gcsStorage');
 require('dotenv').config();
+
+/**
+ * Convert storage path to signed URL for frontend
+ */
+async function convertToSignedUrl(destination) {
+  if (!destination) return destination;
+  
+  const dest = destination.toObject ? destination.toObject() : { ...destination };
+  
+  // Convert image to signed URL if it's a supabase:// path
+  if (dest.image && dest.image.startsWith('supabase://')) {
+    try {
+      dest.image = await generateSignedUrl(dest.image, 3600);
+    } catch (err) {
+      console.error('Failed to generate signed URL for destination image:', err);
+      // Keep original path if signed URL generation fails
+    }
+  }
+  
+  return dest;
+}
 
 // @desc    Get all destinations
 // @route   GET /api/destinations
 // @access  Public
 exports.getDestinations = asyncHandler(async (req, res, next) => {
-  const destinations = await Destination.find();
-  
-  res.status(200).json({
-    success: true,
-    count: destinations.length,
-    data: destinations
-  });
+  try {
+    const destinations = await Destination.find();
+    
+    // Convert all images to signed URLs
+    const destinationsWithUrls = await Promise.all(
+      destinations.map(d => convertToSignedUrl(d))
+    );
+    
+    res.status(200).json({
+      success: true,
+      count: destinationsWithUrls.length,
+      data: destinationsWithUrls
+    });
+  } catch (error) {
+    console.error('getDestinations error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch destinations',
+      message: error.message
+    });
+  }
 });
 
 // @desc    Get single destination
@@ -29,9 +64,12 @@ exports.getDestination = asyncHandler(async (req, res, next) => {
     });
   }
 
+  // Convert image to signed URL
+  const destinationWithUrl = await convertToSignedUrl(destination);
+
   res.status(200).json({
     success: true,
-    data: destination
+    data: destinationWithUrl
   });
 });
 
@@ -84,11 +122,12 @@ exports.createDestination = asyncHandler(async (req, res, next) => {
   if (uploadedFile && uploadedFile.buffer) {
     try {
       const ext = (uploadedFile.originalname && uploadedFile.originalname.split('.').pop()) || 'jpg';
-      const destPath = `destinations/${Date.now()}-${Math.round(Math.random()*1e9)}.${ext}`;
+      const prefix = process.env.UPLOAD_PREFIX_DESTINATIONS || 'destinations';
+      const destPath = `${prefix}/${Date.now()}-${Math.round(Math.random()*1e9)}.${ext}`;
       const publicUrl = await uploadBuffer(uploadedFile.buffer, destPath, uploadedFile.mimetype || 'image/jpeg');
       data.image = publicUrl;
     } catch (uploadErr) {
-      console.error('GCS upload failed in createDestination:', uploadErr);
+      console.error('Upload failed in createDestination:', uploadErr);
       return res.status(500).json({ success: false, error: 'Image upload failed', details: String(uploadErr) });
     }
   }
@@ -176,16 +215,16 @@ exports.updateDestination = asyncHandler(async (req, res, next) => {
 
   const data = { ...req.body };
 
-  // If new image uploaded, upload buffer to Google Cloud Storage and replace image URL
-  // If new image uploaded, upload buffer to Google Cloud Storage and replace image URL
+  // If new image uploaded, upload buffer to Supabase Storage and replace image URL
   if (req.file && req.file.buffer) {
     try {
       const ext = (req.file.originalname && req.file.originalname.split('.').pop()) || 'jpg';
-      const destPath = `destinations/${Date.now()}-${Math.round(Math.random()*1e9)}.${ext}`;
+      const prefix = process.env.UPLOAD_PREFIX_DESTINATIONS || 'destinations';
+      const destPath = `${prefix}/${Date.now()}-${Math.round(Math.random()*1e9)}.${ext}`;
       const publicUrl = await uploadBuffer(req.file.buffer, destPath, req.file.mimetype || 'image/jpeg');
       data.image = publicUrl;
     } catch (err) {
-      console.error('GCS upload failed in updateDestination:', err);
+      console.error('Upload failed in updateDestination:', err);
       return res.status(500).json({ success: false, error: 'Image upload failed', details: String(err) });
     }
   }

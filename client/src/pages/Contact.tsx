@@ -2,7 +2,7 @@ import React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { toast } from 'sonner';
+import { toastSuccess, toastError } from '@/utils/i18nToast';
 import { Mail, Phone, MapPin, Send } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -57,10 +57,10 @@ const Contact: React.FC = () => {
         throw new Error('Network response was not ok');
       }
 
-      toast.success(t('contactFormSuccess', 'Your message has been sent! We will get back to you soon.'));
+      toastSuccess('تم إرسال رسالتك! سنعود إليك قريباً', 'Your message has been sent! We will get back to you soon.');
       reset();
     } catch (error) {
-      toast.error(t('contactFormError', 'Failed to send message. Please try again later.'));
+      toastError('فشل إرسال الرسالة. الرجاء المحاولة لاحقاً', 'Failed to send message. Please try again later.');
       console.error('Contact form error:', error);
     }
   };

@@ -554,7 +554,6 @@
   "passwordTooShort": "يجب أن تكون كلمة المرور 6 أحرف على الأقل.",
   "passwordMismatch": "كلمتا المرور غير متطابقتين.",
   "resetPassword": "إعادة تعيين كلمة المرور",
-  "saving": "جاري الحفظ...",
   "passwordResetSuccess": "تمت إعادة تعيين كلمة المرور بنجاح.",
   "passwordResetFailed": "فشل في إعادة تعيين كلمة المرور. يرجى المحاولة مرة أخرى.",
   "back": "رجوع",
@@ -805,6 +804,8 @@
   "popularDestination": "وجهة شائعة",
   "update": "تحديث",
   "add": "إضافة",
+  "updating": "جاري التحديث...",
+  "saving": "جاري الحفظ...",
   "passengerDetailsDesc": "يرجى ملء معلومات الركاب المطلوبة لكل مسافر",
   "saveChanges": "حفظ التغييرات"
 }

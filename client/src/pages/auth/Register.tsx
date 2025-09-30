@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import i18n from '@/i18n';
 import { useAuth } from '@/hooks/useAuth';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
@@ -15,6 +16,7 @@ const Register: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { login } = useAuth();
+  const lang = i18n.language.split('-')[0];
   const [formData, setFormData] = useState({
     name: '',
     username: '',
@@ -120,7 +122,7 @@ const Register: React.FC = () => {
     // Validate required fields
     if (!formData.name || !formData.username || !formData.email || !formData.phoneNumber || !formData.dateOfBirth) {
       toast({
-        title: "Error",
+        title: lang === 'ar' ? 'خطأ' : 'Error',
         description: t('fillAllFields', 'Please fill in all required fields'),
         variant: "destructive"
       });
@@ -131,7 +133,7 @@ const Register: React.FC = () => {
     const usernameRegex = /^[A-Za-z0-9][A-Za-z0-9-]{1,}[A-Za-z0-9]$/;
     if (!usernameRegex.test(formData.username)) {
       toast({
-        title: "Error",
+        title: lang === 'ar' ? 'خطأ' : 'Error',
         description: t('invalidUsername', 'Username must start and end with a letter or number, and can only contain letters, numbers, and hyphens'),
         variant: "destructive"
       });
@@ -140,7 +142,7 @@ const Register: React.FC = () => {
 
     if (formData.username.length < 3) {
       toast({
-        title: "Error",
+        title: lang === 'ar' ? 'خطأ' : 'Error',
         description: t('usernameTooShort', 'Username must be at least 3 characters long'),
         variant: "destructive"
       });
@@ -151,7 +153,7 @@ const Register: React.FC = () => {
     const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
     if (!emailRegex.test(formData.email)) {
       toast({
-        title: "Error",
+        title: lang === 'ar' ? 'خطأ' : 'Error',
         description: t('invalidEmail', 'Please enter a valid email address'),
         variant: "destructive"
       });
@@ -170,7 +172,7 @@ const Register: React.FC = () => {
 
     if (age < 18) {
       toast({
-        title: "Error",
+        title: lang === 'ar' ? 'خطأ' : 'Error',
         description: t('mustBe18', 'You must be at least 18 years old to register'),
         variant: "destructive"
       });
@@ -181,7 +183,7 @@ const Register: React.FC = () => {
     const phoneRegex = /^\+?[1-9]\d{1,14}$/;
     if (!phoneRegex.test(formData.phoneNumber)) {
       toast({
-        title: "Error",
+        title: lang === 'ar' ? 'خطأ' : 'Error',
         description: t('invalidPhone', 'Please enter a valid phone number (e.g., +201234567890)'),
         variant: "destructive"
       });
@@ -195,7 +197,7 @@ const Register: React.FC = () => {
     // Validate strong password (min 8 non-whitespace chars, includes letters, number, and symbol)
     if (!strongPasswordRegex.test(trimmedPassword)) {
       toast({
-        title: "Error",
+        title: lang === 'ar' ? 'خطأ' : 'Error',
         description: t('passwordNotStrong', 'Password must be at least 8 characters and include letters, a number, and a symbol.'),
         variant: "destructive"
       });
@@ -204,7 +206,7 @@ const Register: React.FC = () => {
 
     if (trimmedPassword !== trimmedConfirm) {
       toast({
-        title: "Error",
+        title: lang === 'ar' ? 'خطأ' : 'Error',
         description: t('passwordsDoNotMatch', 'Passwords do not match'),
         variant: "destructive"
       });
@@ -213,7 +215,7 @@ const Register: React.FC = () => {
 
     if (!formData.terms) {
       toast({
-        title: "Error",
+        title: lang === 'ar' ? 'خطأ' : 'Error',
         description: t('acceptTerms', 'Please accept the terms and conditions'),
         variant: "destructive"
       });
@@ -225,7 +227,7 @@ const Register: React.FC = () => {
       // Check if there are any existence errors
       if (existenceErrors.email || existenceErrors.username) {
         toast({
-          title: "Error",
+          title: lang === 'ar' ? 'خطأ' : 'Error',
           description: t('existingCredentials', 'Please fix the username/email issues before continuing.'),
           variant: "destructive"
         });
@@ -253,7 +255,7 @@ const Register: React.FC = () => {
           }));
         }
         toast({
-          title: "Error",
+          title: lang === 'ar' ? 'خطأ' : 'Error',
           description: t('existingCredentials', 'Please fix the username/email issues before continuing.'),
           variant: "destructive"
         });
@@ -286,8 +288,8 @@ const Register: React.FC = () => {
         );
         
         toast({
-          title: "Success",
-          description: "Registration successful! Welcome to Tourtastic.",
+          title: lang === 'ar' ? 'نجاح' : 'Success',
+          description: lang === 'ar' ? 'تم التسجيل بنجاح! مرحباً بك في تورتاستيك' : 'Registration successful! Welcome to Tourtastic.',
         });
 
         // Redirect to home page
@@ -301,7 +303,7 @@ const Register: React.FC = () => {
         ? error.message 
         : (error as { response?: { data?: { message?: string } } })?.response?.data?.message || "Registration failed. Please try again.";
       toast({
-        title: "Error",
+        title: lang === 'ar' ? 'خطأ' : 'Error',
         description: errorMessage,
         variant: "destructive"
       });

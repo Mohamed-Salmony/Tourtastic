@@ -1,15 +1,18 @@
-import axios, { type AxiosRequestHeaders } from 'axios';
+import axios, { type AxiosRequestHeaders, type AxiosRequestConfig } from 'axios';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? '/api',
   withCredentials: true,
   timeout: 30000, // 30 seconds timeout by default
   // Add retry logic
-  validateStatus: function (status) {
+  validateStatus(status) {
     // Consider only 5xx responses as errors that should trigger retries
     return status >= 200 && status < 500;
   }
 });
+
+const REFRESH_ENDPOINT = '/api/auth/refresh-token';
+let redirectingToLogin = false;
 
 // Add session ID to requests for anonymous users
 api.interceptors.request.use(async (config) => {
@@ -34,7 +37,7 @@ api.interceptors.request.use(async (config) => {
       // Token looks expired or invalid; attempt refresh if we have a refresh token
       if (refreshToken) {
         try {
-          const refreshResp = await axios.post('/api/auth/refresh-token', { refreshToken });
+          const refreshResp = await axios.post(REFRESH_ENDPOINT, { refreshToken });
           if (refreshResp.data?.success && refreshResp.data.accessToken) {
             localStorage.setItem('token', refreshResp.data.accessToken);
             if (refreshResp.data.refreshToken) {
@@ -63,52 +66,83 @@ api.interceptors.request.use(async (config) => {
   }
 
   if (sessionId) {
-  config.headers = (config.headers ?? {}) as AxiosRequestHeaders;
-  (config.headers as AxiosRequestHeaders)['X-Session-ID'] = sessionId;
+    config.headers = (config.headers ?? {}) as AxiosRequestHeaders;
+    (config.headers as AxiosRequestHeaders)['X-Session-ID'] = sessionId;
   }
 
   return config;
 });
 
+const redirectToLogin = () => {
+  if (redirectingToLogin) return;
+  redirectingToLogin = true;
+  localStorage.removeItem('token');
+  localStorage.removeItem('refreshToken');
+  localStorage.removeItem('user');
+  window.location.href = '/login';
+};
+
+interface RetryableRequestConfig extends AxiosRequestConfig {
+  _retry?: boolean;
+}
+
 // Handle token expiration responses
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config;
-    
+    const originalRequest = error.config as RetryableRequestConfig;
+
     // If error is 401 and we haven't tried refreshing yet
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-      
-      // Try to refresh the token
-      const refreshToken = localStorage.getItem('refreshToken');
-      if (refreshToken) {
-        try {
-          const response = await axios.post('/api/auth/refresh-token', { refreshToken });
-          
-          if (response.data.success) {
-            // Save new tokens
-            localStorage.setItem('token', response.data.accessToken);
-            localStorage.setItem('refreshToken', response.data.refreshToken);
-            
-            // Retry the original request with new token
-            originalRequest.headers.Authorization = `Bearer ${response.data.accessToken}`;
-            return axios(originalRequest);
-          }
-        } catch (refreshError) {
-          // If refresh fails, clear tokens and redirect to login
-          localStorage.removeItem('token');
-          localStorage.removeItem('refreshToken');
-          window.location.href = '/login';
-        }
-      } else {
-        // No refresh token available
-        localStorage.removeItem('token');
-        window.location.href = '/login';
+    if (error.response?.status === 401) {
+      if (!originalRequest) {
+        redirectToLogin();
+        return Promise.reject(error);
       }
+
+      if (originalRequest.url && originalRequest.url.includes(REFRESH_ENDPOINT)) {
+        redirectToLogin();
+        return Promise.reject(error);
+      }
+
+      if (!originalRequest._retry) {
+        originalRequest._retry = true;
+        
+        // Try to refresh the token
+        const refreshToken = localStorage.getItem('refreshToken');
+        if (refreshToken) {
+          try {
+            const response = await axios.post(REFRESH_ENDPOINT, { refreshToken });
+            
+            if (response.data.success) {
+              // Save new tokens
+              localStorage.setItem('token', response.data.accessToken);
+              localStorage.setItem('refreshToken', response.data.refreshToken);
+              
+              // Retry the original request with new token
+              originalRequest.headers = {
+                ...(originalRequest.headers ?? {}),
+                Authorization: `Bearer ${response.data.accessToken}`,
+              };
+              return axios(originalRequest);
+            }
+          } catch (refreshError: any) {
+            if (refreshError?.response?.status === 401) {
+              redirectToLogin();
+              return Promise.reject(refreshError);
+            }
+            // Other errors: fall through to logout and reject
+            redirectToLogin();
+            return Promise.reject(refreshError);
+          }
+        }
+        redirectToLogin();
+        return Promise.reject(error);
+      }
+      redirectToLogin();
+      return Promise.reject(error);
     }
     return Promise.reject(error);
   }
 );
-
+ 
 export default api;

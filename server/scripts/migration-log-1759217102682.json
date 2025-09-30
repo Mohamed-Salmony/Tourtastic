@@ -1,0 +1,106 @@
+{
+  "startTime": "2025-09-30T07:25:02.682Z",
+  "endTime": "2025-09-30T07:25:09.160Z",
+  "isDryRun": true,
+  "batchSize": 10,
+  "models": [
+    "destinations",
+    "notifications"
+  ],
+  "totalFiles": 9,
+  "successCount": 9,
+  "failureCount": 0,
+  "skippedCount": 0,
+  "files": [
+    {
+      "model": "Destination",
+      "documentId": "68d851badf8e40bab5f562cd",
+      "field": "image",
+      "oldUrl": "https://res.cloudinary.com/dyry05xvj/image/upload/v1759007162/destinations/1759007153660-95437838.jpg",
+      "newUrl": "[DRY-RUN]",
+      "status": "success",
+      "error": null,
+      "timestamp": "2025-09-30T07:25:07.885Z"
+    },
+    {
+      "model": "Destination",
+      "documentId": "68d851c3df8e40bab5f562d1",
+      "field": "image",
+      "oldUrl": "https://res.cloudinary.com/dyry05xvj/image/upload/v1759007171/destinations/1759007161101-881807714.jpg",
+      "newUrl": "[DRY-RUN]",
+      "status": "success",
+      "error": null,
+      "timestamp": "2025-09-30T07:25:08.003Z"
+    },
+    {
+      "model": "Destination",
+      "documentId": "68d851c8df8e40bab5f562d4",
+      "field": "image",
+      "oldUrl": "https://res.cloudinary.com/dyry05xvj/image/upload/v1759007176/destinations/1759007157613-112157136.jpg",
+      "newUrl": "[DRY-RUN]",
+      "status": "success",
+      "error": null,
+      "timestamp": "2025-09-30T07:25:08.111Z"
+    },
+    {
+      "model": "Destination",
+      "documentId": "68d851d8df8e40bab5f562d7",
+      "field": "image",
+      "oldUrl": "https://res.cloudinary.com/dyry05xvj/image/upload/v1759007193/destinations/1759007165789-80439237.jpg",
+      "newUrl": "[DRY-RUN]",
+      "status": "success",
+      "error": null,
+      "timestamp": "2025-09-30T07:25:08.224Z"
+    },
+    {
+      "model": "Notification",
+      "documentId": "68d85101df8e40bab5f562c7",
+      "field": "pdfUrl",
+      "oldUrl": "https://res.cloudinary.com/dyry05xvj/raw/upload/v1759006978/notifications/1759006975182-757068634-New%20Microsoft%20Word%20Document.pdf",
+      "newUrl": "[DRY-RUN]",
+      "status": "success",
+      "error": null,
+      "timestamp": "2025-09-30T07:25:08.540Z"
+    },
+    {
+      "model": "Notification",
+      "documentId": "68d85804e6ac9c94155835bf",
+      "field": "pdfUrl",
+      "oldUrl": "https://res.cloudinary.com/dyry05xvj/raw/upload/v1759008773/notifications/1759008770262-476957673-New%20Microsoft%20Word%20Document.pdf",
+      "newUrl": "[DRY-RUN]",
+      "status": "success",
+      "error": null,
+      "timestamp": "2025-09-30T07:25:08.648Z"
+    },
+    {
+      "model": "Notification",
+      "documentId": "68d859c55075fccc76858c35",
+      "field": "pdfUrl",
+      "oldUrl": "https://res.cloudinary.com/dyry05xvj/raw/upload/v1759009223/notifications/1759009219693-168987401-New%20Microsoft%20Word%20Document.pdf",
+      "newUrl": "[DRY-RUN]",
+      "status": "success",
+      "error": null,
+      "timestamp": "2025-09-30T07:25:08.753Z"
+    },
+    {
+      "model": "Notification",
+      "documentId": "68d85c255075fccc76858c7f",
+      "field": "pdfUrl",
+      "oldUrl": "https://res.cloudinary.com/dyry05xvj/raw/upload/v1759009828/notifications/1759009808167-995754165-todo.pdf",
+      "newUrl": "[DRY-RUN]",
+      "status": "success",
+      "error": null,
+      "timestamp": "2025-09-30T07:25:08.883Z"
+    },
+    {
+      "model": "Notification",
+      "documentId": "68d85eab2c7855e87a7fbc11",
+      "field": "pdfUrl",
+      "oldUrl": "https://res.cloudinary.com/dyry05xvj/raw/upload/v1759010476/notifications/1759010471809-78744162-todo.pdf",
+      "newUrl": "[DRY-RUN]",
+      "status": "success",
+      "error": null,
+      "timestamp": "2025-09-30T07:25:09.021Z"
+    }
+  ]
+}

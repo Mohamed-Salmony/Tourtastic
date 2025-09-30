@@ -124,13 +124,11 @@ export function useMultiCitySearch(): MultiCitySearchApi {
       isComplete: false,
     }));
 
-    // Retry helper: tries once, then retries one additional time after a short delay on failure
-    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    const withRetryOnce = async <T>(fn: () => Promise<T>, retryDelayMs = 1500): Promise<T> => {
+    // Retry helper: tries once, then retries one additional time immediately on failure
+    const withRetryOnce = async <T>(fn: () => Promise<T>): Promise<T> => {
       try {
         return await fn();
       } catch (e) {
-        await delay(retryDelayMs);
         return await fn();
       }
     };
@@ -430,13 +428,11 @@ export function useMultiCitySearch(): MultiCitySearchApi {
           hasMore: true,
         }));
         const promise = (async () => {
-          // Retry starting search once if it fails initially
-          const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+          // Retry starting search once if it fails initially, without additional delay
           try {
             const resp = await searchFlights(searchParams);
             return resp.search_id;
           } catch (e) {
-            await delay(1500);
             const resp = await searchFlights(searchParams);
             return resp.search_id;
           }

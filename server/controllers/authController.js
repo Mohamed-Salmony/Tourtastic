@@ -246,6 +246,45 @@ exports.getMe = asyncHandler(async (req, res, next) => {
   });
 });
 
+// @desc    Logout user (invalidate token)
+// @route   POST /api/auth/logout
+// @access  Private
+exports.logout = asyncHandler(async (req, res, next) => {
+  // If using JWT only (stateless), just return success
+  // Client should remove token from localStorage/sessionStorage
+  
+  // If using refresh tokens stored in DB, invalidate them here:
+  if (req.user && req.user.id) {
+    try {
+      // Update user to invalidate refresh token (if you have this field)
+      await User.findByIdAndUpdate(req.user.id, {
+        $unset: { refreshToken: 1 }
+      });
+    } catch (err) {
+      console.error('Error clearing refresh token:', err);
+    }
+  }
+
+  // Clear session if using express-session
+  if (req.session) {
+    req.session.destroy((err) => {
+      if (err) {
+        console.error('Session destroy error:', err);
+      }
+    });
+  }
+
+  // Clear cookies
+  res.clearCookie('token');
+  res.clearCookie('refreshToken');
+  res.clearCookie('connect.sid'); // express-session cookie
+
+  res.status(200).json({
+    success: true,
+    message: 'Logged out successfully'
+  });
+});
+
 // Helper to generate a 6-digit numeric code
 function generateNumericCode(length = 6) {
   const min = Math.pow(10, length - 1);

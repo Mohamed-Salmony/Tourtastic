@@ -7,12 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Search, Users, MoreHorizontal, Check, X } from 'lucide-react';
+import { toastSuccess, toastError, confirmDialog } from '@/utils/i18nToast';
 import { toast } from 'sonner';
 import axios from 'axios';
 import api from '@/config/api';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-
 interface User {
   _id?: string;
   id?: number | string;
@@ -79,10 +79,10 @@ const AdminUsers = () => {
         ensureAuthenticated();
         await api.put(`/admin/users/${userId}`, { status: newStatus.toLowerCase() });
         setUsers(prev => prev.map(user => (String(user._id || user.id) === String(userId) ? { ...user, status: newStatus } : user)));
-        toast.success(`User status changed to ${newStatus}`);
+        toastSuccess(`تم تغيير حالة المستخدم إلى ${newStatus}`, `User status changed to ${newStatus}`);
       } catch (err) {
         console.error('Error changing status', err);
-        toast.error('Could not change user status');
+        toastError('فشل تغيير حالة المستخدم', 'Could not change user status');
       }
     })();
   };
@@ -94,10 +94,10 @@ const AdminUsers = () => {
         ensureAuthenticated();
         await api.put(`/admin/users/${userId}`, { role: newRole.toLowerCase() });
         setUsers(prev => prev.map(user => (String(user._id || user.id) === String(userId) ? { ...user, role: newRole } : user)));
-        toast.success(`User role changed to ${newRole}`);
+        toastSuccess(`تم تغيير دور المستخدم إلى ${newRole}`, `User role changed to ${newRole}`);
       } catch (err) {
         console.error('Error changing role', err);
-        toast.error('Could not change user role');
+        toastError('فشل تغيير دور المستخدم', 'Could not change user role');
       }
     })();
   };
@@ -111,11 +111,11 @@ const AdminUsers = () => {
         setUsers(prev => prev.map(user => (
           selectedUsers.some(sel => String(sel) === String(user._id || user.id)) ? { ...user, status: 'Active' } : user
         )));
-        toast.success(`${selectedUsers.length} users activated`);
+        toastSuccess(`تم تفعيل ${selectedUsers.length} مستخدم`, `${selectedUsers.length} users activated`);
         setSelectedUsers([]);
       } catch (err) {
         console.error('Bulk activate error', err);
-        toast.error('Could not activate selected users');
+        toastError('فشل تفعيل المستخدمين المحددين', 'Could not activate selected users');
       }
     })();
   };
@@ -129,11 +129,11 @@ const AdminUsers = () => {
         setUsers(prev => prev.map(user => (
           selectedUsers.some(sel => String(sel) === String(user._id || user.id)) ? { ...user, status: 'Inactive' } : user
         )));
-        toast.success(`${selectedUsers.length} users deactivated`);
+        toastSuccess(`تم تعطيل ${selectedUsers.length} مستخدم`, `${selectedUsers.length} users deactivated`);
         setSelectedUsers([]);
       } catch (err) {
         console.error('Bulk deactivate error', err);
-        toast.error('Could not deactivate selected users');
+        toastError('فشل تعطيل المستخدمين المحددين', 'Could not deactivate selected users');
       }
     })();
   };
@@ -252,14 +252,14 @@ const AdminUsers = () => {
 
   // Delete a user (admin)
   const deleteUser = async (userId: string) => {
-    if (!window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) return;
+    if (!confirmDialog('هل أنت متأكد من حذف هذا المستخدم؟ لا يمكن التراجع عن هذا الإجراء', 'Are you sure you want to delete this user? This action cannot be undone.')) return;
     try {
       ensureAuthenticated();
       await api.delete(`/admin/users/${userId}`);
       setUsers(prev => prev.filter(u => String(u._id || u.id) !== String(userId)));
       // Remove from selection if present
       setSelectedUsers(prev => prev.filter(id => id !== String(userId)));
-      toast.success('User deleted');
+      toastSuccess('تم حذف المستخدم', 'User deleted');
     } catch (err) {
       console.error('Error deleting user', err);
       if (axios.isAxiosError(err)) {
@@ -269,7 +269,7 @@ const AdminUsers = () => {
           return;
         }
       }
-      toast.error('Could not delete user');
+      toastError('فشل حذف المستخدم', 'Could not delete user');
     }
   };
   

@@ -1,0 +1,106 @@
+{
+  "startTime": "2025-09-30T07:25:21.459Z",
+  "endTime": "2025-09-30T07:25:39.020Z",
+  "isDryRun": false,
+  "batchSize": 10,
+  "models": [
+    "destinations",
+    "notifications"
+  ],
+  "totalFiles": 9,
+  "successCount": 0,
+  "failureCount": 9,
+  "skippedCount": 0,
+  "files": [
+    {
+      "model": "Destination",
+      "documentId": "68d851badf8e40bab5f562cd",
+      "field": "image",
+      "oldUrl": "https://res.cloudinary.com/dyry05xvj/image/upload/v1759007162/destinations/1759007153660-95437838.jpg",
+      "newUrl": null,
+      "status": "failed",
+      "error": "Supabase upload failed: Bucket not found",
+      "timestamp": "2025-09-30T07:25:28.363Z"
+    },
+    {
+      "model": "Destination",
+      "documentId": "68d851c3df8e40bab5f562d1",
+      "field": "image",
+      "oldUrl": "https://res.cloudinary.com/dyry05xvj/image/upload/v1759007171/destinations/1759007161101-881807714.jpg",
+      "newUrl": null,
+      "status": "failed",
+      "error": "Supabase upload failed: Bucket not found",
+      "timestamp": "2025-09-30T07:25:30.982Z"
+    },
+    {
+      "model": "Destination",
+      "documentId": "68d851c8df8e40bab5f562d4",
+      "field": "image",
+      "oldUrl": "https://res.cloudinary.com/dyry05xvj/image/upload/v1759007176/destinations/1759007157613-112157136.jpg",
+      "newUrl": null,
+      "status": "failed",
+      "error": "Supabase upload failed: Bucket not found",
+      "timestamp": "2025-09-30T07:25:34.581Z"
+    },
+    {
+      "model": "Destination",
+      "documentId": "68d851d8df8e40bab5f562d7",
+      "field": "image",
+      "oldUrl": "https://res.cloudinary.com/dyry05xvj/image/upload/v1759007193/destinations/1759007165789-80439237.jpg",
+      "newUrl": null,
+      "status": "failed",
+      "error": "Supabase upload failed: Bucket not found",
+      "timestamp": "2025-09-30T07:25:36.984Z"
+    },
+    {
+      "model": "Notification",
+      "documentId": "68d85101df8e40bab5f562c7",
+      "field": "pdfUrl",
+      "oldUrl": "https://res.cloudinary.com/dyry05xvj/raw/upload/v1759006978/notifications/1759006975182-757068634-New%20Microsoft%20Word%20Document.pdf",
+      "newUrl": null,
+      "status": "failed",
+      "error": "Request failed with status code 401",
+      "timestamp": "2025-09-30T07:25:37.709Z"
+    },
+    {
+      "model": "Notification",
+      "documentId": "68d85804e6ac9c94155835bf",
+      "field": "pdfUrl",
+      "oldUrl": "https://res.cloudinary.com/dyry05xvj/raw/upload/v1759008773/notifications/1759008770262-476957673-New%20Microsoft%20Word%20Document.pdf",
+      "newUrl": null,
+      "status": "failed",
+      "error": "Request failed with status code 401",
+      "timestamp": "2025-09-30T07:25:38.022Z"
+    },
+    {
+      "model": "Notification",
+      "documentId": "68d859c55075fccc76858c35",
+      "field": "pdfUrl",
+      "oldUrl": "https://res.cloudinary.com/dyry05xvj/raw/upload/v1759009223/notifications/1759009219693-168987401-New%20Microsoft%20Word%20Document.pdf",
+      "newUrl": null,
+      "status": "failed",
+      "error": "Request failed with status code 401",
+      "timestamp": "2025-09-30T07:25:38.301Z"
+    },
+    {
+      "model": "Notification",
+      "documentId": "68d85c255075fccc76858c7f",
+      "field": "pdfUrl",
+      "oldUrl": "https://res.cloudinary.com/dyry05xvj/raw/upload/v1759009828/notifications/1759009808167-995754165-todo.pdf",
+      "newUrl": null,
+      "status": "failed",
+      "error": "Request failed with status code 401",
+      "timestamp": "2025-09-30T07:25:38.578Z"
+    },
+    {
+      "model": "Notification",
+      "documentId": "68d85eab2c7855e87a7fbc11",
+      "field": "pdfUrl",
+      "oldUrl": "https://res.cloudinary.com/dyry05xvj/raw/upload/v1759010476/notifications/1759010471809-78744162-todo.pdf",
+      "newUrl": null,
+      "status": "failed",
+      "error": "Request failed with status code 401",
+      "timestamp": "2025-09-30T07:25:38.901Z"
+    }
+  ]
+}

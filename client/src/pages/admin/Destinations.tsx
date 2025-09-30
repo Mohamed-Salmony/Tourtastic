@@ -53,6 +53,7 @@ const AdminDestinations = () => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editDestination, setEditDestination] = useState<Destination | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const form = useForm<DestinationFormValues>({
     resolver: zodResolver(destinationSchema),
     defaultValues: {
@@ -212,7 +213,8 @@ const AdminDestinations = () => {
       setDestinations(data);
     } catch (error) {
       console.error('Error fetching destinations:', error);
-      toast.error('Failed to load destinations');
+      const lang = i18n.language.split('-')[0];
+      toast.error(lang === 'ar' ? 'فشل تحميل الوجهات' : 'Failed to load destinations');
     }
   };
 
@@ -297,35 +299,52 @@ const AdminDestinations = () => {
 
     try {
       await updateDestinationPopular(id, newValue);
-      toast.success(`Destination ${newValue ? 'marked' : 'unmarked'} as popular`);
+      const lang = i18n.language.split('-')[0];
+      const message = newValue 
+        ? (lang === 'ar' ? 'تم وضع علامة شائع' : 'Destination marked as popular')
+        : (lang === 'ar' ? 'تم إزالة علامة شائع' : 'Destination unmarked as popular');
+      toast.success(message);
     } catch (err) {
       // Revert on error
       setDestinations(prev => prev.map(d => d._id === id ? { ...d, popular: original.popular } : d));
       console.error('Failed to toggle popular:', err);
-      toast.error('Failed to update popular status');
+      const lang = i18n.language.split('-')[0];
+      toast.error(lang === 'ar' ? 'فشل تحديث حالة الشعبية' : 'Failed to update popular status');
     }
   };
 
   // Delete a destination with confirmation
   const handleDelete = async (id: string) => {
-    const ok = window.confirm('Are you sure you want to delete this destination? This action cannot be undone.');
+    const lang = i18n.language.split('-')[0];
+    const confirmMsg = lang === 'ar' 
+      ? 'هل أنت متأكد من حذف هذه الوجهة؟ لا يمكن التراجع عن هذا الإجراء.'
+      : 'Are you sure you want to delete this destination? This action cannot be undone.';
+    
+    const ok = window.confirm(confirmMsg);
     if (!ok) return;
+    
     const original = destinations;
     // Optimistic UI: remove immediately
     setDestinations(prev => prev.filter(d => d._id !== id));
     try {
       await deleteDestination(id);
-      toast.success('Destination deleted');
+      toast.success(lang === 'ar' ? 'تم حذف الوجهة بنجاح' : 'Destination deleted successfully');
     } catch (err) {
       // Revert on error
       setDestinations(original);
       console.error('Failed to delete destination:', err);
-      toast.error('Failed to delete destination');
+      toast.error(lang === 'ar' ? 'فشل حذف الوجهة' : 'Failed to delete destination');
     }
   };
 
   // Handle form submission
   const onSubmit = async (data: DestinationFormValues) => {
+    // Prevent double submission
+    if (isSubmitting) return;
+    
+    setIsSubmitting(true);
+    const lang = i18n.language.split('-')[0];
+    
     try {
       if (editDestination) {
         // Build payload matching server model: nested localized fields
@@ -400,7 +419,7 @@ const AdminDestinations = () => {
           await updateDestination(editDestination._id, payload);
         }
         await fetchDestinations();
-        toast.success('Destination updated successfully!');
+        toast.success(lang === 'ar' ? 'تم تحديث الوجهة بنجاح!' : 'Destination updated successfully!');
       }
       else {
         // Create new destination (use FormData because we require an uploaded image)
@@ -422,15 +441,21 @@ const AdminDestinations = () => {
 
         await createDestination(formData);
         await fetchDestinations();
-        toast.success('Destination created successfully!');
+        toast.success(lang === 'ar' ? 'تم إنشاء الوجهة بنجاح!' : 'Destination created successfully!');
       }
       // Reset form and close dialog
       form.reset();
       setIsAddDialogOpen(false);
       setEditDestination(null);
+      setImageFile(null);
     } catch (error) {
-      console.error('Error updating destination:', error);
-      toast.error('Failed to update destination');
+      console.error('Error saving destination:', error);
+      const errorMsg = editDestination
+        ? (lang === 'ar' ? 'فشل تحديث الوجهة' : 'Failed to update destination')
+        : (lang === 'ar' ? 'فشل إنشاء الوجهة' : 'Failed to create destination');
+      toast.error(errorMsg);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -848,11 +873,32 @@ const AdminDestinations = () => {
                  />
 
                  <div className="flex justify-end gap-2">
-                   <Button type="button" variant="outline" onClick={handleDialogClose}>
+                   <Button 
+                     type="button" 
+                     variant="outline" 
+                     onClick={handleDialogClose}
+                     disabled={isSubmitting}
+                   >
                      {t('cancel', { defaultValue: 'Cancel' })}
                    </Button>
-                   <Button type="submit">
-                     {editDestination ? t('update', { defaultValue: 'Update' }) : t('add', { defaultValue: 'Add' })} {t('destination', { defaultValue: 'Destination' })}
+                   <Button 
+                     type="submit"
+                     disabled={isSubmitting}
+                     className="min-w-[120px]"
+                   >
+                     {isSubmitting ? (
+                       <>
+                         <span className="inline-block animate-spin mr-2">⏳</span>
+                         {editDestination 
+                           ? t('updating', { defaultValue: 'Updating...' })
+                           : t('saving', { defaultValue: 'Saving...' })
+                         }
+                       </>
+                     ) : (
+                       <>
+                         {editDestination ? t('update', { defaultValue: 'Update' }) : t('add', { defaultValue: 'Add' })}
+                       </>
+                     )}
                    </Button>
                  </div>
                </form>

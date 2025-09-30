@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import i18n from '@/i18n';
+import { useAuth } from '@/hooks/useAuth';
+import { toastSuccess } from '@/utils/i18nToast';
 import Logo from '@/assets/logo';
 import {
   ChevronLeft,
@@ -29,10 +32,13 @@ interface AdminLayoutProps {
 
 const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { t } = useTranslation();
+  const { logout } = useAuth();
   const { currentLocale, toggleLocale } = useLocale();
   const [collapsed, setCollapsed] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false); // for mobile drawer
+  const lang = i18n.language.split('-')[0];
   
   const navigation = [
     { name: t('bookings'), href: '/admin/bookings', icon: <Ticket className="h-5 w-5" /> },
@@ -44,6 +50,12 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
 
   const isActive = (path: string) => {
     return location.pathname === path;
+  };
+
+  const handleLogout = () => {
+    logout();
+    toastSuccess('تم تسجيل الخروج بنجاح', 'Logged out successfully');
+    navigate('/login');
   };
 
   // Sidebar content as a component for reuse
@@ -98,13 +110,13 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           <>
             <Separator className="my-4" />
             <div className="flex items-center justify-between">
-              <Link 
-                to="/" 
-                className="flex items-center space-x-2 text-sm text-gray-600 hover:text-red-600 transition-colors"
+              <button
+                onClick={handleLogout}
+                className="flex items-center space-x-2 text-sm text-gray-600 hover:text-red-600 transition-colors cursor-pointer"
               >
                 <LogOut className="h-4 w-4 text-current" />
-                <span>{t('logOut')}</span>
-              </Link>
+                <span>{lang === 'ar' ? 'تسجيل الخروج' : 'Logout'}</span>
+              </button>
               {/* Translation toggle placed next to logout for easy access */}
               <Button
                 variant="ghost"

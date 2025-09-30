@@ -2,6 +2,7 @@ import React, { useState, memo, useEffect, useCallback } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { Menu, X, Bell, Globe, ShoppingBasket, User, LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import i18n from '@/i18n';
 import { useLocale } from '@/hooks/useLocale';
 import Logo from '@/assets/logo';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
@@ -28,6 +29,7 @@ const Header: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, logout } = useAuth();
+  const lang = i18n.language.split('-')[0];
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
@@ -36,8 +38,8 @@ const Header: React.FC = () => {
   const handleSignOut = () => {
     logout();
     toast({
-      title: "Success",
-      description: "Successfully signed out",
+      title: lang === 'ar' ? 'نجاح' : 'Success',
+      description: lang === 'ar' ? 'تم تسجيل الخروج بنجاح' : 'Successfully signed out',
     });
     navigate('/');
   };

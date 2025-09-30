@@ -279,7 +279,6 @@ const Flights = () => {
     direct?: boolean;
   } | null>(null);
   const hasRetriedRef = useRef(false);
-  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Keep a ref to the latest searchSections so polling helpers can read it
   const searchSectionsRef = useRef(searchSections);
@@ -288,13 +287,23 @@ const Flights = () => {
   }, [searchSections]);
 
   // Wait for search results to arrive (polls searchSectionsRef). Resolves true if results found, false on timeout.
-  const waitForResults = (timeoutMs = 60000, pollInterval = 1000) => {
+  const waitForResults = (timeoutMs = 60000, pollInterval = 500) => {
     return new Promise<boolean>((resolve) => {
       const start = Date.now();
       const check = () => {
-        if (searchSectionsRef.current && searchSectionsRef.current.length > 0) {
-          resolve(true);
-          return;
+        const sections = searchSectionsRef.current;
+        if (sections && sections.length > 0) {
+          const hasFlights = sections.some(section => section.flights.length > 0);
+          if (hasFlights) {
+            resolve(true);
+            return;
+          }
+
+          const allCompletedWithoutFlights = sections.every(section => section.isComplete && section.flights.length === 0 && !!section.error);
+          if (allCompletedWithoutFlights) {
+            resolve(false);
+            return;
+          }
         }
 
         if (Date.now() - start >= timeoutMs) {
@@ -350,10 +359,6 @@ const Flights = () => {
         direct: data.direct,
       };
       hasRetriedRef.current = false;
-      if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current);
-        retryTimeoutRef.current = null;
-      }
 
       await startMultiSearch(segmentsForHook, {
         adults: data.passengers.adults ?? 1,
@@ -362,32 +367,29 @@ const Flights = () => {
       }, data.cabin, data.direct);
 
       // Wait for the hook to populate results (avoid race where startMultiSearch returns a job id)
-      const gotResults = await waitForResults(60000, 1000);
+      const gotResults = await waitForResults(60000);
       if (gotResults) {
         setHasSearched(true);
       } else {
-        // No results arrived within timeout - inform user and schedule a retry once
+        // Initial search completed without usable results - retry immediately once
         toast({
           title: t('searchErrorTitle', 'Search Error'),
           description: t('noFlightsFoundTimeout', 'No flights found after multiple attempts. Please try different search criteria.'),
           variant: 'destructive',
         });
         if (!hasRetriedRef.current && lastSearchPayloadRef.current) {
-          const delayMs = 15000; // 15 seconds before retry
-          toast({
-            title: t('retryingSearch', 'Retrying Search'),
-            description: t('retryingSearchInSeconds', 'We will retry your search automatically in a few seconds.'),
-          });
           hasRetriedRef.current = true;
-          retryTimeoutRef.current = setTimeout(async () => {
-            const payload = lastSearchPayloadRef.current!;
-            setIsSubmitting(true);
-            try {
-              await startMultiSearch(payload.segments, payload.passengers, payload.cabin, payload.direct);
-            } finally {
-              setIsSubmitting(false);
+          const payload = lastSearchPayloadRef.current;
+          setIsSubmitting(true);
+          try {
+            await startMultiSearch(payload.segments, payload.passengers, payload.cabin, payload.direct);
+            const retryResults = await waitForResults(30000, 500);
+            if (retryResults) {
+              setHasSearched(true);
             }
-          }, delayMs);
+          } finally {
+            setIsSubmitting(false);
+          }
         }
       }
     } catch (error) {
@@ -462,39 +464,32 @@ const Flights = () => {
             direct: undefined,
           };
           hasRetriedRef.current = false;
-          if (retryTimeoutRef.current) {
-            clearTimeout(retryTimeoutRef.current);
-            retryTimeoutRef.current = null;
-          }
 
           await startMultiSearch(segmentsForHook, passengerCounts || { adults: 1, children: 0, infants: 0 }, undefined, undefined);
 
-          const gotResults = await waitForResults(60000, 1000);
+          const gotResults = await waitForResults(60000);
           if (gotResults) {
             setHasSearched(true);
           } else {
-            // No results arrived within timeout - inform user and schedule a retry once
+            // Initial search completed without usable results - retry immediately once
             toast({
               title: t('searchErrorTitle', 'Search Error'),
               description: t('noFlightsFoundTimeout', 'No flights found after multiple attempts. Please try different search criteria.'),
               variant: 'destructive',
             });
             if (!hasRetriedRef.current && lastSearchPayloadRef.current) {
-              const delayMs = 15000; // 15 seconds before retry
-              toast({
-                title: t('retryingSearch', 'Retrying Search'),
-                description: t('retryingSearchInSeconds', 'We will retry your search automatically in a few seconds.'),
-              });
               hasRetriedRef.current = true;
-              retryTimeoutRef.current = setTimeout(async () => {
-                const payload = lastSearchPayloadRef.current!;
-                setIsSubmitting(true);
-                try {
-                  await startMultiSearch(payload.segments, payload.passengers, payload.cabin, payload.direct);
-                } finally {
-                  setIsSubmitting(false);
+              const payload = lastSearchPayloadRef.current;
+              setIsSubmitting(true);
+              try {
+                await startMultiSearch(payload.segments, payload.passengers, payload.cabin, payload.direct);
+                const retryResults = await waitForResults(30000, 500);
+                if (retryResults) {
+                  setHasSearched(true);
                 }
-              }, delayMs);
+              } finally {
+                setIsSubmitting(false);
+              }
             }
           }
         } catch (error) {
@@ -512,7 +507,7 @@ const Flights = () => {
     initializedFromStateRef.current = true;
   }, [location.state, onSubmit, setValue, startMultiSearch, t]);
 
-  // If we have searched and all sections are complete with zero results, schedule a one-time retry
+  // If we have searched and all sections are complete with zero results, trigger a one-time immediate retry
   useEffect(() => {
     if (!hasSearched) return;
     if (!searchSections || searchSections.length === 0) return;
@@ -521,42 +516,22 @@ const Flights = () => {
     const totalFlights = searchSections.reduce((acc, s) => acc + (s.flights?.length || 0), 0);
 
     if (allComplete && totalFlights === 0 && !hasRetriedRef.current && lastSearchPayloadRef.current) {
-      const delayMs = 15000; // 15 seconds
-      toast({
-        title: t('retryingSearch', 'Retrying Search'),
-        description: t('retryingSearchInSeconds', 'We will retry your search automatically in a few seconds.'),
-      });
+      const payload = lastSearchPayloadRef.current;
       hasRetriedRef.current = true;
-      if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
-      retryTimeoutRef.current = setTimeout(async () => {
-        const payload = lastSearchPayloadRef.current!;
+      void (async () => {
         setIsSubmitting(true);
         try {
           await startMultiSearch(payload.segments, payload.passengers, payload.cabin, payload.direct);
+          const retryResults = await waitForResults(30000, 500);
+          if (retryResults) {
+            setHasSearched(true);
+          }
         } finally {
           setIsSubmitting(false);
         }
-      }, delayMs);
+      })();
     }
-
-    // Cleanup on unmount
-    return () => {
-      if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current);
-        retryTimeoutRef.current = null;
-      }
-    };
-  }, [hasSearched, searchSections, startMultiSearch, t]);
-
-  // Global unmount cleanup to ensure no stray retry timers remain
-  useEffect(() => {
-    return () => {
-      if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current);
-        retryTimeoutRef.current = null;
-      }
-    };
-  }, []);
+  }, [hasSearched, searchSections, startMultiSearch, t, waitForResults]);
 
   // Open filters popover automatically on desktop/laptop when results are shown
   useEffect(() => {
