@@ -47,17 +47,27 @@ app.set('trust proxy', 1);
 const allowedOrigins = [
   'http://localhost:8080',
   'http://127.0.0.1:8080',
-  'https://tourtastic.vercel.app'
+  'https://tourtastic.vercel.app',
+  'https://www.tourtastic.net',
+  'https://tourtastic.net'
 ];
 
-// Regex for matching Vercel Preview URLs
+// Regex for matching Vercel Preview URLs and custom domains
 const vercelRegex = /^https:\/\/.*\.vercel\.app$/;
+const customDomainRegex = /^https:\/\/(www\.)?tourtastic\.net$/;
 
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin) || vercelRegex.test(origin)) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    // Check if origin is in allowed list or matches regex patterns
+    if (allowedOrigins.includes(origin) || vercelRegex.test(origin) || customDomainRegex.test(origin)) {
       callback(null, true);
     } else {
+      console.warn(`⚠️  CORS blocked origin: ${origin}`);
       callback(new Error(`CORS error: Not allowed origin - ${origin}`));
     }
   },
@@ -86,8 +96,22 @@ if (process.env.MONGODB_URI) {
 app.use(session(sessionOptions));
 
 // Health check endpoints (support both root and /api for platform routing)
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    mongodb: process.env.MONGODB_URI ? 'connected' : 'not configured'
+  });
+});
+
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    mongodb: process.env.MONGODB_URI ? 'connected' : 'not configured'
+  });
 });
 
 // Mount routers
@@ -131,18 +155,33 @@ app.get("/", (req, res) => res.send("Tourtastic API Running"));
 app.use(errorHandler);
 
 // In Vercel Serverless, export the Express app without binding a port
-// In local/dev environments, start the HTTP server
+// In local/dev environments or Render, start the HTTP server
 let server;
 if (!process.env.VERCEL) {
   const PORT = process.env.PORT || 5000;
-  server = app.listen(PORT, '0.0.0.0', () =>
-    console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`)
-  );
+  const HOST = process.env.HOST || '0.0.0.0';
+  
+  server = app.listen(PORT, HOST, () => {
+    console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode`);
+    console.log(`Listening on ${HOST}:${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  });
 
   // Handle unhandled promise rejections only when a server is running
   process.on("unhandledRejection", (err) => {
     console.error(`Unhandled Rejection: ${err.message}`);
     if (server) server.close(() => process.exit(1));
+  });
+  
+  // Graceful shutdown
+  process.on('SIGTERM', () => {
+    console.log('SIGTERM signal received: closing HTTP server');
+    if (server) {
+      server.close(() => {
+        console.log('HTTP server closed');
+        process.exit(0);
+      });
+    }
   });
 }
 
